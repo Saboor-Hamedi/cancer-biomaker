@@ -251,7 +251,7 @@ class ModelManager:
 
         from sklearn.model_selection import learning_curve as sk_learn_curve
         cv     = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-        n_jobs = 1 if "SVM" in model_name else -1   # SVM: avoid joblib resource_tracker on Windows
+        n_jobs = 1  # Force single process on Windows to avoid resource_tracker leaks
 
         train_sizes, train_scores, test_scores = sk_learn_curve(
             model, X, y, cv=cv, n_jobs=n_jobs,
@@ -280,7 +280,7 @@ class ModelManager:
 
         from sklearn.model_selection import cross_val_score
         cv     = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-        n_jobs = 1 if "SVM" in model_name else -1
+        n_jobs = 1  # Force single process on Windows to avoid resource_tracker leaks
         scores = cross_val_score(model, X, y, cv=cv, n_jobs=n_jobs)
 
         res = {'scores': scores, 'mean': float(np.mean(scores)), 'std': float(np.std(scores))}

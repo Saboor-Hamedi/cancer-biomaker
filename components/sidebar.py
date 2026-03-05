@@ -15,7 +15,7 @@ class Sidebar(ttk.Frame):
     def _create_widgets(self):
         # ── Header ───────────────────────────────────────────────
         ttk.Label(
-            self, text="🧬 AI Engine",
+            self, text="AI Engine",
             style='Sidebar.TLabel'
         ).pack(pady=(28, 18), padx=10)
 
@@ -51,9 +51,9 @@ class Sidebar(ttk.Frame):
         pred_frame = ttk.LabelFrame(self, text="PREDICTIONS", style='Sidebar.TLabelframe')
         pred_frame.pack(fill=tk.X, padx=12, pady=6)
 
-        ttk.Button(pred_frame, text="▶  Single Prediction",
+        ttk.Button(pred_frame, text="Single Prediction",
                    command=self.callbacks.get('predict_single')).pack(fill=tk.X, padx=8, pady=(6, 3))
-        ttk.Button(pred_frame, text="⚡  Batch Prediction",
+        ttk.Button(pred_frame, text="Batch Prediction",
                    command=self.callbacks.get('predict_file')).pack(fill=tk.X, padx=8, pady=(3, 8))
 
         # ── Quick XAI ────────────────────────────────────────────

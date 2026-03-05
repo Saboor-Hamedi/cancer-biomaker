@@ -82,15 +82,15 @@ class CancerDetectionApp:
 
         # ── File ──────────────────────────────────────────
         file_menu = tk.Menu(menubar, tearoff=0)
-        file_menu.add_command(label="📂  Upload Dataset...",      command=self.handle_upload,  accelerator="Ctrl+O")
-        file_menu.add_command(label="📋  Load Sample Batch",       command=self.handle_sample)
+        file_menu.add_command(label="Upload Dataset...",      command=self.handle_upload,  accelerator="Ctrl+O")
+        file_menu.add_command(label="Load Sample Batch",       command=self.handle_sample)
         file_menu.add_separator()
-        file_menu.add_command(label="💾  Export Results to Excel", command=self.handle_export,  accelerator="Ctrl+S")
-        file_menu.add_command(label="📄  Generate Report...",      command=self.handle_report)
+        file_menu.add_command(label="Export Results to Excel", command=self.handle_export,  accelerator="Ctrl+S")
+        file_menu.add_command(label="Generate Report...",      command=self.handle_report)
         file_menu.add_separator()
-        file_menu.add_command(label="🗑  Clear All Data",           command=self.handle_clear_all)
+        file_menu.add_command(label="Clear All Data",           command=self.handle_clear_all)
         file_menu.add_separator()
-        file_menu.add_command(label="✖  Exit",                     command=self.on_close,       accelerator="Alt+F4")
+        file_menu.add_command(label="Exit",                     command=self.on_close,       accelerator="Alt+F4")
         menubar.add_cascade(label="File", menu=file_menu)
 
         # Keyboard shortcuts
@@ -99,8 +99,8 @@ class CancerDetectionApp:
 
         # ── Data ──────────────────────────────────────────
         data_menu = tk.Menu(menubar, tearoff=0)
-        data_menu.add_command(label="🔧  Re-Train All Models",    command=self.handle_train_models)
-        data_menu.add_command(label="⚙  Data Optimization...",   command=self.show_preprocessing)
+        data_menu.add_command(label="Re-Train All Models",    command=self.handle_train_models)
+        data_menu.add_command(label="Data Optimization...",   command=self.show_preprocessing)
         menubar.add_cascade(label="Data", menu=data_menu)
 
         # ── Analytics ─────────────────────────────────────
@@ -118,7 +118,7 @@ class CancerDetectionApp:
 
         # ── Help ──────────────────────────────────────────
         help_menu = tk.Menu(menubar, tearoff=0)
-        help_menu.add_command(label="📖  Help & Documentation",   command=self.show_help,      accelerator="F1")
+        help_menu.add_command(label="Help & Documentation",   command=self.show_help,      accelerator="F1")
         menubar.add_cascade(label="Help", menu=help_menu)
         self.root.bind_all("<F1>", lambda e: self.show_help())
 
@@ -392,10 +392,79 @@ class CancerDetectionApp:
             pred, conf, risk = self.model_manager.predict_single(model_name, inputs)
             res = "POSITIVE" if pred == 1 else "NEGATIVE"
             
+            # 1. Clinical Triage Logic
+            if risk < 0.30: triage = "Surveillance"
+            elif risk < 0.70: triage = "Monitor"
+            else: triage = "URGENT ACTION"
+
+            # 2. Ensemble Consensus Logic
+            all_preds = []
+            models_to_check = ["Random Forest", "Logistic Regression", "SVM"]
+            from logic.model_manager import HAS_XGB
+            if HAS_XGB: models_to_check.append("XGBoost")
+            
+            for m in models_to_check:
+                if self.model_manager.load_model(m):
+                    p, _, _ = self.model_manager.predict_single(m, inputs)
+                    all_preds.append(p)
+            
+            if len(all_preds) >= 2:
+                match_count = all_preds.count(pred)
+                total = len(all_preds)
+                if match_count == total: consensus = f"Strong ({total}/{total})"
+                elif match_count >= total - 1: consensus = f"Moderate ({match_count}/{total})"
+                else: consensus = "Mixed/Low"
+            else:
+                consensus = "Single Model"
+
             # Update Dashboard Metrics (Cards)
-            # Risk is specifically the probability of cancer
-            self.dashboard.update_metrics(risk=risk*100, confidence=conf*100, insight=res)
-            self.dashboard.update_status(f"Result for single: {res} (Reliability: {conf:.1%})", "#EF4444" if pred == 1 else "#10B981")
+            self.dashboard.update_metrics(
+                risk=risk*100, 
+                confidence=conf*100, 
+                insight=res, 
+                triage=triage, 
+                consensus=consensus
+            )
+            
+            # --- Diagnostic Report for Analysis Tab ---
+            from datetime import datetime
+            report = (
+                f"🔬 PATIENT DIAGNOSTIC REPORT: {res}\n"
+                f"Evaluation Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                "======================================================\n\n"
+                f"Active Predictor:   {model_name.upper()}\n"
+                f"Result Insight:     {res}\n"
+                f"Risk Probability:   {risk*100:.2f}%\n"
+                f"Model Confidence:   {conf*100:.2f}%\n\n"
+                "CLINICAL INTERPRETATION & TRIAGE SUMMARY:\n"
+                "------------------------------------------------------\n"
+                f"Triage Priority:    {triage.upper()}\n"
+                f"AI Consensus Status: {consensus}\n\n"
+                "GUIDANCE FOR PRIORITIZATION:\n"
+            )
+            
+            if triage == "Surveillance":
+                report += "- Biomarker signals are low/normal.\n- Routine monitoring (every 6-12 months) recommended.\n"
+            elif triage == "Monitor":
+                report += "- Borderline clinical indicators detected.\n- Secondary laboratory tests advised for verification.\n"
+            else:
+                report += "- CRITICAL: High biomarker signal patterns.\n- Immediate oncology consult and biopsy recommended.\n"
+            
+            report += "\n" + "="*54 + "\n"
+            report += f"Note: Consensus analysis cross-validated against {len(all_preds)} models."
+            
+            self.tab_analysis.text.config(state=tk.NORMAL)
+            self.tab_analysis.text.delete("1.0", tk.END)
+            self.tab_analysis.text.insert(tk.END, report)
+            self.tab_analysis.text.config(state=tk.DISABLED)
+            
+            # Switch to Analysis Tab so user sees the report
+            try:
+                self.dashboard.notebook.select(2)
+            except:
+                pass
+
+            self.dashboard.update_status(f"Analysis Complete: {res} Status", "#EF4444" if pred == 1 else "#10B981")
         except Exception as e:
             return messagebox.showerror("Model Error", str(e))
         
@@ -427,9 +496,45 @@ class CancerDetectionApp:
                     mean_risk = (sum(risks) / len(risks)) * 100
                     mean_conf = (sum(confs) / len(confs)) * 100
                     
-                    self.dashboard.update_metrics(risk=mean_risk, confidence=mean_conf, insight=f"{pos_count} Cases")
+                    self.dashboard.update_metrics(
+                        risk=mean_risk, 
+                        confidence=mean_conf, 
+                        insight=f"{pos_count} Cases",
+                        triage="Multi-Patient",
+                        consensus="Population"
+                    )
+
+                    # --- Batch Analysis Report for Analysis Tab ---
+                    from datetime import datetime
+                    report = (
+                        f"📊 BATCH ANALYSIS SUMMARY: {model_name.upper()}\n"
+                        f"Evaluation Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                        "======================================================\n\n"
+                        f"Samples Processed:   {len(preds)}\n"
+                        f"Positive Detections: {pos_count}\n"
+                        f"Negative Detections: {len(preds) - pos_count}\n"
+                        f"Avg Clinical Risk:   {mean_risk:.2f}%\n"
+                        f"Avg Model Confidence: {mean_conf:.2f}%\n\n"
+                        "POPULATION HEALTH OVERVIEW:\n"
+                        "------------------------------------------------------\n"
+                        f"Detection Rate:      {(pos_count/len(preds))*100:.1f}%\n"
+                        f"Confidence Stability: High" if mean_conf > 85 else "Confidence Stability: Moderate" + "\n\n"
+                        "Note: These results represent the current batch sample only.\n"
+                        "Run individual 'Single Predictions' for detailed triage prioritization."
+                    )
+                    
+                    self.tab_analysis.text.config(state=tk.NORMAL)
+                    self.tab_analysis.text.delete("1.0", tk.END)
+                    self.tab_analysis.text.insert(tk.END, report)
+                    self.tab_analysis.text.config(state=tk.DISABLED)
+
+                    # Switch to Analysis Tab
+                    try: self.dashboard.notebook.select(2)
+                    except: pass
+
                     self.dashboard.update_status(f"Batch completed: {pos_count} positive", "#10B981")
-                    messagebox.showinfo("Batch Result", f"Processed {len(preds)} samples\nFound {pos_count} positive cases\nAverage Population Risk: {mean_risk:.1f}%")
+                    # messagebox.showinfo("Batch Result", 
+                    #     f"Processed {len(preds)} samples\nFound {pos_count} positive cases\nAverage Population Risk: {mean_risk:.1f}%")
                 
                 self.root.after(0, update_ui)
             except Exception as e:
@@ -600,6 +705,10 @@ class CancerDetectionApp:
         def finish(metrics):
             if metrics:
                 self.tab_analysis.display_metrics(metrics, model_name)
+                # Switch to Analysis Tab
+                try: self.dashboard.notebook.select(2)
+                except: pass
+                
                 fig = Visualizer.plot_detailed_metrics(metrics, model_name)
                 Visualizer.show_modal(self.root, f"Clinical Performance: {model_name}", fig)
             else:
@@ -771,7 +880,7 @@ class CancerDetectionApp:
         self._refresh_data_tree()
         self.tab_input.refresh_features([]) # Truly empty features
         self.dashboard.update_data_info(0, 0, 0)
-        self.dashboard.update_metrics(0, 0, "Cleared")
+        self.dashboard.update_metrics(0, 0, "Cleared", triage="Pending", consensus="N/A")
         self.dashboard.update_status("All tables and features cleared", "#64748B")
         
         # Reset analysis tab text
