@@ -1,4 +1,5 @@
 import os
+import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import pandas as pd
@@ -35,6 +36,17 @@ class CancerDetectionApp:
         # Auto-check and train models if missing
         self._check_models_on_startup()
 
+        # Handle proper closing
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def on_close(self):
+        """Clean shutdown of the application"""
+        try:
+            self.root.destroy()
+        except:
+            pass
+        os._exit(0) # Force kill all threads and processes
+
     def _check_models_on_startup(self):
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         data_path = os.path.join(base_dir, 'data', 'cancer_biomarkers.xlsx')
@@ -42,14 +54,19 @@ class CancerDetectionApp:
         def check_task():
             success, msg = self.model_manager.check_and_train_models(data_path, self.dashboard.update_status)
             if success:
-                self.root.after(0, lambda: self.dashboard.update_status("System Ready - Models Verified", "green"))
+                self.root.after(0, lambda: self.tab_input.refresh_features(self.model_manager.feature_names))
+                self.root.after(0, lambda: self.dashboard.update_status("System Ready - Models Verified", "#10B981"))
             else:
-                self.root.after(0, lambda: self.dashboard.update_status(f"Error: {msg}", "red"))
+                self.root.after(0, lambda: self.dashboard.update_status(f"Error: {msg}", "#EF4444"))
 
         threading.Thread(target=check_task, daemon=True).start()
 
     def _setup_layout(self):
         # Create Sidebar (Right side)
+        from logic.model_manager import HAS_XGB
+        model_list = ["Random Forest", "Logistic Regression", "SVM"]
+        if HAS_XGB: model_list.append("XGBoost")
+
         callbacks = {
             'upload': self.handle_upload,
             'sample': self.handle_sample,
@@ -62,9 +79,11 @@ class CancerDetectionApp:
             'viz_cm': self.show_confusion_matrix,
             'viz_pr': self.show_precision_recall,
             'viz_comp': self.show_model_comparison,
+            'viz_heat': self.show_correlation_heatmap,
             'preprocess': self.show_preprocessing,
             'report': self.handle_report,
-            'help': self.show_help
+            'help': self.show_help,
+            'models': model_list
         }
         
         self.sidebar = Sidebar(self.root, callbacks)
@@ -112,11 +131,12 @@ class CancerDetectionApp:
         def task():
             success, msg = self.model_manager.check_and_train_models(data_path, self.dashboard.update_status, force=True)
             if success:
-                self.root.after(0, lambda: messagebox.showinfo("Training Success", "All models trained and saved to 'models/' folder."))
-                self.root.after(0, lambda: self.dashboard.update_status("Models Ready", "green"))
+                self.root.after(0, lambda: self.tab_input.refresh_features(self.model_manager.feature_names))
+                self.root.after(0, lambda: messagebox.showinfo("Training Success", "All models trained and saved to 'views/modal/' folder."))
+                self.root.after(0, lambda: self.dashboard.update_status("Models Ready", "#10B981"))
             else:
                 self.root.after(0, lambda: messagebox.showerror("Training Error", msg))
-                self.root.after(0, lambda: self.dashboard.update_status("Training Failed", "red"))
+                self.root.after(0, lambda: self.dashboard.update_status("Training Failed", "#EF4444"))
 
         threading.Thread(target=task, daemon=True).start()
 
@@ -143,6 +163,7 @@ class CancerDetectionApp:
                 # Randomly pick rows
                 sampled_df = df.sample(n=size).reset_index(drop=True)
                 self.data_manager.uploaded_df = sampled_df
+                self._total_dataset_rows = total_rows # Store the large number
                 self.root.after(0, self.update_ui_after_load)
                 self.root.after(0, lambda: self.dashboard.update_status(f"Imported {size} random samples.", "blue"))
 
@@ -156,17 +177,30 @@ class CancerDetectionApp:
         if issues:
             messagebox.showwarning("Validation", "\n".join(issues))
         
-        # Update New Header Labels (exactly as requested)
-        total_rows = 500 # This is the base dataset size
+        # 1. NEW: Dynamically refresh the input feature list to match the dataset
+        # We exclude metadata/target columns
+        ignored = ['sample_id', 'cancer_risk_class']
+        actual_features = [col for col in df.columns if col not in ignored]
+        
+        # Only refresh if the features have changed or list is the fallback one
+        if len(self.tab_input.tree.get_children()) <= 10 or set(actual_features) != set(self.tab_input.features):
+            self.tab_input.refresh_features(actual_features)
+            # Update ModelManager's feature list as well
+            self.model_manager.feature_names = actual_features
+
+        # Update New Header Labels
+        # If we just loaded a sample, we might not know the absolute total rows of the file
+        # But we can try to guess or use the data manager's state
+        total_rows = getattr(self, '_total_dataset_rows', len(df))
         total_cols = len(df.columns)
         current_samples = len(df)
         self.dashboard.update_data_info(rows=total_rows, cols=total_cols, samples=current_samples)
         
-        self.dashboard.update_status(f"Imported {current_samples} samples", "green")
+        self.dashboard.update_status(f"Imported {current_samples} samples", "#10B981")
         self._refresh_data_tree()
         self._sync_first_row_to_input()
         
-        # Switch to Data View tab (index 1)
+        # Switch to Data View tab
         try:
             self.dashboard.notebook.select(1)
         except:
@@ -176,20 +210,22 @@ class CancerDetectionApp:
         """Take the first row of loaded data and put it into the Input Features tab"""
         df = self.data_manager.uploaded_df
         if df is None or len(df) == 0:
-            print("No data to sync.")
             return
             
         first_row = df.iloc[0]
         tree = self.tab_input.tree
-        
-        # Debug: list available features in the XLS vs what's in the Tree
-        tree_features = [tree.item(item, "values")[0] for item in tree.get_children()]
         found_count = 0
         
+        # Create a mapping for fuzzy column matching (to handle spaces/case)
+        col_map = {str(c).lower().strip(): c for c in first_row.index}
+        
         for item in tree.get_children():
-            feature_name = tree.item(item, "values")[0]
-            if feature_name in first_row.index:
-                val_raw = first_row[feature_name]
+            feature_name = str(tree.item(item, "values")[0])
+            search_key = feature_name.lower().strip()
+            
+            if search_key in col_map:
+                actual_col = col_map[search_key]
+                val_raw = first_row[actual_col]
                 try:
                     val = str(round(float(val_raw), 4))
                 except:
@@ -199,10 +235,9 @@ class CancerDetectionApp:
                 tree.item(item, values=(feature_name, val, desc))
                 found_count += 1
         
-        print(f"Synced {found_count} features from first row.")
-        if found_count == 0:
-            print(f"DEBUG: First row columns: {list(first_row.index[:10])}...")
-            print(f"DEBUG: Tree features: {tree_features[:10]}...")
+        if found_count > 0:
+            msg = f"SUCCESS: Synced {found_count} clinical biomarkers from data."
+            self.dashboard.update_status(msg, "#10B981")
 
     def _refresh_data_tree(self):
         tree = self.tab_data.tree
@@ -217,31 +252,33 @@ class CancerDetectionApp:
         
         for col in columns:
             tree.heading(col, text=col)
-            # Adjust column width based on content if possible, or use default
             tree.column(col, width=120, anchor=tk.CENTER)
             
-        # Add data (first 50 rows)
-        for _, row in df.head(50).iterrows():
-            # Ensure values are strings for treeview display
+        # Add data (Show up to 1000 rows if they exist, but limited to the sampled df)
+        for _, row in df.iterrows():
             vals = [str(x) for x in row.values]
             tree.insert("", tk.END, values=vals)
 
     def handle_predict_single(self):
         model_name = self.sidebar.model_var.get()
         inputs = {}
-        for item in self.tab_input.tree.get_children():
-            v = self.tab_input.tree.item(item, "values")
-            inputs[v[0]] = float(v[1])
+        try:
+            for item in self.tab_input.tree.get_children():
+                v = self.tab_input.tree.item(item, "values")
+                inputs[v[0]] = float(v[1])
+        except ValueError:
+            return messagebox.showerror("Input Error", "Please ensure all biomarker values are valid numbers.")
             
         try:
-            pred, conf = self.model_manager.predict_single(model_name, inputs)
+            pred, conf, risk = self.model_manager.predict_single(model_name, inputs)
             res = "POSITIVE" if pred == 1 else "NEGATIVE"
             
             # Update Dashboard Metrics (Cards)
-            self.dashboard.update_metrics(risk=conf*100 if pred == 1 else (1-conf)*100, confidence=conf*100, insight=res)
-            self.dashboard.update_status(f"Result for single: {res} ({conf:.1%})", "red" if pred == 1 else "green")
+            # Risk is specifically the probability of cancer
+            self.dashboard.update_metrics(risk=risk*100, confidence=conf*100, insight=res)
+            self.dashboard.update_status(f"Result for single: {res} (Reliability: {conf:.1%})", "#EF4444" if pred == 1 else "#10B981")
         except Exception as e:
-            return messagebox.showerror("Model Error", f"Failed to load or use '{model_name}'. Ensure it was trained. Error: {e}")
+            return messagebox.showerror("Model Error", str(e))
         
         # Show Local Explanation Window
         explanation = self.model_manager.get_local_explanation(model_name, inputs)
@@ -258,20 +295,22 @@ class CancerDetectionApp:
         
         def task():
             try:
-                preds, confs = self.model_manager.predict_batch(model_name, self.data_manager.uploaded_df)
+                preds, confs, risks = self.model_manager.predict_batch(model_name, self.data_manager.uploaded_df)
                 
                 results = self.data_manager.uploaded_df.copy()
-                results['Prediction'] = preds
-                results['Confidence'] = confs
+                results['Prediction'] = ["POSITIVE" if p == 1 else "NEGATIVE" for p in preds]
+                results['Confidence'] = [f"{c:.1%}" for c in confs]
+                results['RiskProb'] = risks
                 self.data_manager.prediction_results = results
                 
                 def update_ui():
-                    pos = sum(preds)
-                    avg_risk = (pos / len(preds)) * 100
-                    avg_conf = sum(confs) / len(confs) * 100
-                    self.dashboard.update_metrics(risk=avg_risk, confidence=avg_conf, insight=f"{pos} Positive")
-                    self.dashboard.update_status(f"Batch completed: {pos} positive", "green")
-                    messagebox.showinfo("Batch Result", f"Processed {len(preds)} samples\nFound {pos} positive cases")
+                    pos_count = sum(preds)
+                    mean_risk = (sum(risks) / len(risks)) * 100
+                    mean_conf = (sum(confs) / len(confs)) * 100
+                    
+                    self.dashboard.update_metrics(risk=mean_risk, confidence=mean_conf, insight=f"{pos_count} Cases")
+                    self.dashboard.update_status(f"Batch completed: {pos_count} positive", "#10B981")
+                    messagebox.showinfo("Batch Result", f"Processed {len(preds)} samples\nFound {pos_count} positive cases\nAverage Population Risk: {mean_risk:.1f}%")
                 
                 self.root.after(0, update_ui)
             except Exception as e:
@@ -307,6 +346,17 @@ class CancerDetectionApp:
     def show_model_comparison(self):
         fig = Visualizer.plot_model_comparison()
         Visualizer.show_modal(self.root, "Model Comparison Analysis", fig)
+
+    def show_correlation_heatmap(self):
+        df = self.data_manager.uploaded_df
+        if df is None:
+            return messagebox.showwarning("Warning", "No dataset loaded. Please upload or load a sample first.")
+        
+        fig = Visualizer.plot_correlation_heatmap(df)
+        if fig:
+            Visualizer.show_modal(self.root, "Biomarker Correlation Heatmap", fig)
+        else:
+            messagebox.showerror("Error", "Could not generate heatmap. Ensure the dataset contains numeric clinical data.")
 
     def show_preprocessing(self):
         if self.data_manager.uploaded_df is None:
@@ -408,6 +458,9 @@ class CancerDetectionApp:
         entry.destroy()
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = CancerDetectionApp(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        app = CancerDetectionApp(root)
+        root.mainloop()
+    except KeyboardInterrupt:
+        print("\nApplication closed by user.")

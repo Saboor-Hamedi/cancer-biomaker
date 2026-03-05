@@ -4,8 +4,19 @@ from tkinter import ttk, messagebox
 class PreprocessingDialog:
     def __init__(self, parent, data_status, on_apply):
         self.modal = tk.Toplevel(parent)
+        self.modal.withdraw() # Prevents top-left flicker
         self.modal.title("Preprocessing Options")
-        self.modal.geometry("500x400")
+        
+        # Center the window
+        width, height = 500, 400
+        self.modal.update_idletasks()
+        screen_width = self.modal.winfo_screenwidth()
+        screen_height = self.modal.winfo_screenheight()
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
+        self.modal.geometry(f'{width}x{height}+{x}+{y}')
+        self.modal.deiconify() # Show only when centered
+        
         self.on_apply = on_apply
 
         ttk.Label(self.modal, text="Data Preprocessing", font=('Arial', 12, 'bold')).pack(pady=10)

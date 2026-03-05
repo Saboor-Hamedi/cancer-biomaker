@@ -138,8 +138,12 @@ class ModelManager:
         input_df = pd.DataFrame([full_input])[self.feature_names]
             
         prediction = model.predict(input_df)[0]
-        probability = model.predict_proba(input_df)[0]
-        return prediction, max(probability)
+        probabilities = model.predict_proba(input_df)[0]
+        
+        # Risk is probability of class 1, Confidence is probability of predicted class
+        risk = probabilities[1]
+        conf = probabilities[prediction]
+        return prediction, conf, risk
 
     def predict_batch(self, model_name, df):
         model = self.load_model(model_name)
@@ -159,11 +163,18 @@ class ModelManager:
                 
         predictions = model.predict(X)
         probabilities = model.predict_proba(X)
-        return predictions, [max(prob) for prob in probabilities]
+        
+        # confs: confidence in predicted class
+        # risks: probability of positive class
+        confs = [prob[pred] for pred, prob in zip(predictions, probabilities)]
+        risks = [prob[1] for prob in probabilities]
+        
+        return predictions, confs, risks
 
     def get_local_explanation(self, model_name, inputs):
         """Simple contribution analysis for a single prediction"""
         model = self.load_model(model_name)
+        if model is None: return None
         
         # Contribution proxy logic
         if hasattr(model, 'feature_importances_'):
@@ -182,9 +193,13 @@ class ModelManager:
             
         # Create a sorted list of (feature, contribution)
         explanation = []
+        # Case-insensitive input mapping
+        normalized_inputs = {str(k).lower().strip(): v for k, v in inputs.items()}
+        
         for i, feat in enumerate(self.feature_names):
+            feat_lower = str(feat).lower().strip()
             # Scale by input value - heuristic for local impact
-            val = float(inputs.get(feat, 0.0))
+            val = float(normalized_inputs.get(feat_lower, 0.0))
             score = contrib[i] * (val / 10.0) # Heuristic scaling
             explanation.append((feat, score))
             
