@@ -68,11 +68,11 @@ class Dashboard(ttk.Frame):
         self.notebook.add(self.analysis_tab, text="Performance Analysis")
 
     def _create_metric_card(self, parent, title, value, color):
-        card = ttk.Frame(parent, style='Card.TFrame', padding=20)
-        card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        card = ttk.Frame(parent, style='Card.TFrame', padding=15)
+        card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=4, pady=5)
         
-        ttk.Label(card, text=title.upper(), font=("Inter", 8, "bold"), foreground="#94A3B8", background="#FFFFFF").pack()
-        val_label = ttk.Label(card, text=value, font=("Inter", 18, "bold"), foreground=color, background="#FFFFFF")
+        ttk.Label(card, text=title.upper(), font=("Inter", 9, "bold"), foreground="#94A3B8", background="#FFFFFF").pack()
+        val_label = ttk.Label(card, text=value, font=("Inter", 16, "bold"), foreground=color, background="#FFFFFF")
         val_label.pack(pady=(5, 0))
         return val_label
 

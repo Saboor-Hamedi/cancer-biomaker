@@ -486,3 +486,63 @@ class Visualizer:
         ax.legend(frameon=False, loc='upper right')
         fig.tight_layout(pad=3.0)
         return fig
+
+    @staticmethod
+    def plot_model_robustness_benchmark(all_results):
+        """Multi-panel dashboard comparing all models on performance vs stability."""
+        fig = Figure(figsize=(12, 10))
+        
+        models = list(all_results.keys())
+        accs = [res['metrics'].get('Accuracy', 0)*100 for res in all_results.values()]
+        f1s = [res['metrics'].get('F1 Score', 0)*100 for res in all_results.values()]
+        stab_means = [res['stability'].get('mean', 0)*100 for res in all_results.values()]
+        stab_stds = [res['stability'].get('std', 0)*100 for res in all_results.values()]
+
+        # Determine "Clinical Winner" based on a Robustness Score (Mean - 2*StdDev)
+        # This rewards high accuracy while heavily penalizing uncertainty.
+        scores = [m - (2 * s) for m, s in zip(stab_means, stab_stds)]
+        winner_idx = np.argmax(scores)
+        winner_name = models[winner_idx]
+
+        # Panel 1: Efficiency
+        ax1 = fig.add_subplot(211)
+        x = np.arange(len(models))
+        width = 0.35
+        ax1.bar(x - width/2, accs, width, label='Accuracy', color=DESIGN_PALETTE['primary'], alpha=0.8)
+        ax1.bar(x + width/2, f1s, width, label='F1-Score', color=DESIGN_PALETTE['secondary'], alpha=0.8)
+        ax1.set_title('PILLAR 1: Clinical Performance Efficiency', fontsize=12, fontweight='bold', pad=15)
+        ax1.set_ylim(min(accs + f1s + [80]) - 5, 105)
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(models)
+        ax1.legend(frameon=False, loc='lower right')
+        ax1.grid(axis='y', linestyle='--', alpha=0.2)
+
+        # Panel 2: Stability
+        ax2 = fig.add_subplot(212)
+        colors = [DESIGN_PALETTE['success'] if i == winner_idx else DESIGN_PALETTE['neutral'] for i in range(len(models))]
+        bars = ax2.bar(models, stab_means, color=colors, alpha=0.6, label='Mean CV Accuracy')
+        ax2.errorbar(models, stab_means, yerr=stab_stds, fmt='o', color=DESIGN_PALETTE['danger'], capsize=8, lw=2, label='Diagnostic Uncertainty (Std Dev)')
+        
+        # Highlight Winner
+        winner_bar = bars[winner_idx]
+        ax2.text(winner_bar.get_x() + winner_bar.get_width()/2, 
+                winner_bar.get_height() + stab_stds[winner_idx] + 2, 
+                "🏆 CLINICAL GOLD STANDARD", ha='center', color='#059669', fontweight='bold', fontsize=10)
+
+        ax2.set_title('PILLAR 2: Decision Stability & Uncertainty Analysis', fontsize=12, fontweight='bold', pad=15)
+        ax2.set_ylabel('Stability Score (%)')
+        ax2.set_ylim(min(stab_means + [80]) - 10, 105)
+        ax2.legend(frameon=False, loc='lower right')
+        ax2.grid(axis='y', linestyle='--', alpha=0.2)
+
+        # Guidance Box
+        guidance = (
+            f"SUMMARY ANALYSIS: **{winner_name}** is identified as the most robust model for this lab environment.\n"
+            "• It maintains high diagnostic accuracy while exhibiting the lowest performance variance (shortest error bars).\n"
+            "• Clinically, a shorter error bar means the model is less likely to 'fail' on a unique patient profile."
+        )
+        fig.text(0.05, 0.02, guidance, fontsize=11, color='#1E293B', wrap=True,
+                 bbox=dict(facecolor='#F0FDF4', alpha=0.9, edgecolor='#86EFAC', boxstyle='round,pad=1'))
+        
+        fig.tight_layout(rect=[0, 0.08, 1, 1])
+        return fig

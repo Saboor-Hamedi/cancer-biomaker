@@ -12,7 +12,7 @@ def apply_styles():
     BORDER_LIGHT = '#E2E8F0'
     
     # Base widget configurations
-    style.configure('TButton', font=('Inter', 10, 'bold'), padding=10)
+    style.configure('TButton', font=('Inter', 9), padding=6)
     style.configure('TLabel', font=('Inter', 10), background=BG_MAIN, foreground=TEXT_MAIN)
     style.configure('TFrame', background=BG_MAIN)
     
@@ -27,7 +27,7 @@ def apply_styles():
     style.configure('Sidebar.TLabelframe.Label', background=ACCENT_DARK, foreground='#64748B', font=('Inter', 8, 'bold'))
     
     # Improved Sidebar Button Style
-    style.configure('Sidebar.TButton', font=('Inter', 10), padding=8)
+    style.configure('Sidebar.TButton', font=('Inter', 9), padding=6)
     
     # Notebook (Tabs) customization
     style.configure("TNotebook", background=BG_MAIN, borderwidth=0, tabmargins=[0, 0, 0, 0])

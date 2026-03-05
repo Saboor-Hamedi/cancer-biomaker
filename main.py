@@ -6,6 +6,8 @@ from tkinter import filedialog, messagebox
 import pandas as pd
 from datetime import datetime
 import threading
+import warnings
+warnings.filterwarnings('ignore', message='.*use_label_encoder.*')
 
 # ── Logging: writes to app.log in the script folder ───────────────────────────
 logging.basicConfig(
@@ -155,6 +157,7 @@ class CancerDetectionApp:
             'viz_metrics': self.show_detailed_metrics,
             'viz_dist': self.show_population_distribution,
             'viz_violin': self.show_biomarker_violins,
+            'viz_robust': self.show_robustness_benchmark,
             'preprocess': self.show_preprocessing,
             'report': self.handle_report,
             'help': self.show_help,
@@ -831,6 +834,33 @@ class CancerDetectionApp:
             Visualizer.show_modal(self.root, "Biomarker Range Separation", fig)
 
         self._run_async_task("Biomarker Range Analysis", task, on_finish=finish)
+
+    def show_robustness_benchmark(self):
+        """Analyze all models and show a side-by-side robustness dashboard."""
+        if not self._require_data("Robustness Benchmark"): return
+        
+        from logic.model_manager import HAS_XGB
+        models_to_bench = ["Random Forest", "Logistic Regression", "SVM"]
+        if HAS_XGB: models_to_bench.append("XGBoost")
+
+        def task():
+            all_results = {}
+            for m in models_to_bench:
+                self.model_manager.load_model(m) # Ensure loaded
+                metrics = self.model_manager.get_detailed_metrics(m, self.data_path)
+                stability = self.model_manager.get_model_stability(m, self.data_path)
+                if metrics and stability:
+                    all_results[m] = {'metrics': metrics, 'stability': stability}
+            return all_results
+
+        def finish(all_results):
+            if not all_results:
+                return messagebox.showwarning("Benchmark Failed", "Could not aggregate model data. Ensure models are trained.")
+            
+            fig = Visualizer.plot_model_robustness_benchmark(all_results)
+            Visualizer.show_modal(self.root, "System-Wide Robustness Benchmark", fig)
+
+        self._run_async_task("Cross-Model Robustness Analysis", task, on_finish=finish)
 
     def show_pdp(self):
         if not self._require_data("Partial Dependence"): return

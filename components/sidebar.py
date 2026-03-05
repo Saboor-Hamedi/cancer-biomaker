@@ -68,4 +68,6 @@ class Sidebar(ttk.Frame):
         ttk.Button(xai_frame, text="Population Distribution",
                    command=self.callbacks.get('viz_dist')).pack(fill=tk.X, padx=8, pady=(2, 2))
         ttk.Button(xai_frame, text="Biomarker Range",
-                   command=self.callbacks.get('viz_violin')).pack(fill=tk.X, padx=8, pady=(2, 8))
+                   command=self.callbacks.get('viz_violin')).pack(fill=tk.X, padx=8, pady=(2, 2))
+        ttk.Button(xai_frame, text="Competitive Robustness",
+                   command=self.callbacks.get('viz_robust')).pack(fill=tk.X, padx=8, pady=(2, 8))
