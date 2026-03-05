@@ -36,8 +36,16 @@ class Sidebar(ttk.Frame):
         batch_frame.pack(fill=tk.X, padx=12, pady=6)
 
         ttk.Label(batch_frame, text="Sample Quantity:", style='SidebarCaption.TLabel').pack(anchor=tk.W, padx=8, pady=(6, 2))
+        
+        # Frame to hold spinbox and button side-by-side
+        spin_frame = ttk.Frame(batch_frame)
+        spin_frame.pack(fill=tk.X, padx=8, pady=(0, 8))
+        
         self.sample_qty = tk.IntVar(value=20)
-        tk.Spinbox(batch_frame, from_=1, to=1000, textvariable=self.sample_qty).pack(fill=tk.X, padx=8, pady=(0, 8))
+        tk.Spinbox(spin_frame, from_=1, to=100000, textvariable=self.sample_qty, width=8).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        
+        ttk.Button(spin_frame, text="Load", width=6,
+                   command=self.callbacks.get('sample')).pack(side=tk.RIGHT)
 
         # ── Predictions ──────────────────────────────────────────
         pred_frame = ttk.LabelFrame(self, text="PREDICTIONS", style='Sidebar.TLabelframe')

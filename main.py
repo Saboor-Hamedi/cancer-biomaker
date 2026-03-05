@@ -196,7 +196,9 @@ class CancerDetectionApp:
                     ok, msg = self.model_manager.check_feature_compatibility(df.columns)
                     if not ok:
                         self.root.after(0, lambda m=msg: messagebox.showwarning("Feature Mismatch", m))
-                    self.root.after(0, self.update_ui_after_load)
+                    
+                    # Instead of rendering all rows which causes lag, auto-load a sample
+                    self.root.after(0, self.handle_sample)
             threading.Thread(target=task, daemon=True).start()
 
     def handle_train_models(self):

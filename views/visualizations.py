@@ -65,7 +65,8 @@ class Visualizer:
             ax.set_title(f"XAI Analysis — {model_name}")
             return fig
 
-        indices = np.argsort(importance)[-12:]
+        # 2. Sort features by importance - filter
+        indices = np.argsort(importance)[-10:]
         sorted_feats = [feature_names[i] for i in indices]
         sorted_vals  = [importance[i] for i in indices]
 
@@ -136,8 +137,14 @@ class Visualizer:
         x = np.arange(len(models))
         width = 0.35
         
-        ax.bar(x - width/2, accuracy, width, label='Accuracy', color=DESIGN_PALETTE['primary'], alpha=0.8)
-        ax.bar(x + width/2, f1_scores, width, label='F1-Score', color=DESIGN_PALETTE['secondary'], alpha=0.8)
+        bars1 = ax.bar(x - width/2, accuracy, width, label='Accuracy', color=DESIGN_PALETTE['primary'], alpha=0.8)
+        bars2 = ax.bar(x + width/2, f1_scores, width, label='F1-Score', color=DESIGN_PALETTE['secondary'], alpha=0.8)
+        
+        # Add values on top of bars
+        for bars in [bars1, bars2]:
+            for bar in bars:
+                h = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., h + 0.5, f'{h:.1f}%', ha='center', va='bottom', fontweight='bold', fontsize=9)
         
         ax.set_ylabel('Performance (%)', fontsize=STYLE_CONFIG['label_size'])
         ax.set_title('Cross-Model Clinical Comparison', fontsize=STYLE_CONFIG['title_size'], fontweight='bold', pad=20)
@@ -152,14 +159,43 @@ class Visualizer:
 
     @staticmethod
     def plot_correlation_heatmap(df):
+        # 1. Select numeric columns
         numeric_df = df.select_dtypes(include=[np.number]).drop(['sample_id', 'cancer_risk_class'], axis=1, errors='ignore')
-        if numeric_df.empty: return None
+        if numeric_df.empty: 
+            return None
         
-        fig = Figure(figsize=(10, 8))
-        ax = fig.add_subplot(111)
+        # 2. Calculate correlation
         corr = numeric_df.corr()
-        sns.heatmap(corr, annot=True, fmt='.2f', cmap='RdYlGn', ax=ax, center=0)
-        ax.set_title('Biomarker Correlation Map', fontsize=STYLE_CONFIG['title_size'], fontweight='bold', pad=20)
+        n_features = len(corr.columns)
+        
+        # 3. Adjust size and annotation
+        figsize = (min(24, max(10, n_features * 0.5)), min(20, max(8, n_features * 0.4)))
+        show_annot = n_features <= 15
+        
+        fig = Figure(figsize=figsize)
+        ax = fig.add_subplot(111)
+        
+        # 4. Plot Heatmap with fixes for blank gaps
+        sns.heatmap(corr, 
+                    annot=show_annot, 
+                    fmt='.2f', 
+                    cmap='RdYlGn', 
+                    ax=ax, 
+                    center=0, 
+                    cbar_kws={'shrink': .8},
+                    linewidths=0,      # <--- REMOVES LINES/GAPS BETWEEN CELLS
+                    square=True,       # <--- ENSURES CELLS ARE PERFECTLY SQUARE
+                    rasterized=True    # <--- OPTIONAL: Prevents white lines when saving to PDF/SVG
+                    )
+        
+        ax.set_title('Biomarker Correlation Map', fontsize=STYLE_CONFIG['title_size'] + 2, fontweight='bold', pad=20)
+        
+        # Rotate labels
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=45, horizontalalignment='right', 
+                        fontsize=min(STYLE_CONFIG['label_size'], max(6, 150/n_features)))
+        ax.set_yticklabels(ax.get_yticklabels(), rotation=0, 
+                        fontsize=min(STYLE_CONFIG['label_size'], max(6, 150/n_features)))
+        
         fig.tight_layout(pad=3.0)
         return fig
 
@@ -222,6 +258,7 @@ class Visualizer:
         fig = Figure(figsize=(10, 6))
         ax = fig.add_subplot(111)
         feats, vals = zip(*data)
+        
         ax.barh(feats, vals, color=DESIGN_PALETTE['secondary'], alpha=0.8)
         ax.set_xlabel('Mean Impact (SHAP)', fontsize=STYLE_CONFIG['label_size'])
         ax.set_title(f'Global Influence — {model_name}', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
@@ -285,6 +322,7 @@ class Visualizer:
         fig = Figure(figsize=(10, 6))
         ax = fig.add_subplot(111)
         feats, scores = zip(*explanation)
+        
         colors = [DESIGN_PALETTE['danger'] if s > 0 else DESIGN_PALETTE['success'] for s in scores]
         ax.barh(feats, scores, color=colors, alpha=0.8)
         ax.set_title(f'Local XAI Diagnosis — {model_name}', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
