@@ -88,7 +88,7 @@ class AnalysisTab(ttk.Frame):
         header_frame.pack(fill=tk.X)
         ttk.Label(header_frame, text="GLOBAL PERFORMANCE METRICS", font=('Inter', 11, 'bold'), foreground="#1E293B").pack(side=tk.LEFT)
 
-        self.text = tk.Text(self, font=('Inter', 10), padx=20, pady=20, relief='flat', background="#F8FAFC", foreground="#334155")
+        self.text = tk.Text(self, font=('Consolas', 10), padx=20, pady=20, relief='flat', background="#F8FAFC", foreground="#334155")
         scroll = ttk.Scrollbar(self, command=self.text.yview)
         self.text.configure(yscrollcommand=scroll.set)
         

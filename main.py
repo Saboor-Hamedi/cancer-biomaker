@@ -284,6 +284,34 @@ class CancerDetectionApp:
         self._refresh_data_tree()
         self._sync_first_row_to_input()
         
+        # Update Analysis Tab with DataFrame Summary
+        summary = (
+            "DATASET SUMMARY & DESCRIPTIVE STATISTICS\n"
+            "------------------------------------------------------\n\n"
+            f"Total Loaded Samples: {current_samples}\n"
+            f"Total Features Evaluated: {total_cols}\n\n"
+            "Features Summary (Mean, Std, Min, Max):\n"
+        )
+        try:
+            # Transpose so features are rows, making it much more readable for many columns
+            desc = df.describe().T
+            formatted_desc = desc.to_string(float_format="{:.3f}".format, justify='right')
+            summary += formatted_desc
+            
+            # Print to terminal/console as a structured table as well
+            print("\n" + "="*80)
+            print("DATASET DESCRIPTIVE STATISTICS OVERVIEW")
+            print("="*80)
+            print(formatted_desc)
+            print("="*80 + "\n")
+        except Exception as e:
+            summary += f"Could not compute descriptive statistics: {e}"
+            
+        self.tab_analysis.text.config(state=tk.NORMAL)
+        self.tab_analysis.text.delete("1.0", tk.END)
+        self.tab_analysis.text.insert(tk.END, summary)
+        self.tab_analysis.text.config(state=tk.DISABLED)
+        
         # Switch to Data View tab
         try:
             self.dashboard.notebook.select(1)
