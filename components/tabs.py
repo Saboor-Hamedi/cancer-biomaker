@@ -98,31 +98,36 @@ class AnalysisTab(ttk.Frame):
         self.update_metrics_default()
 
     def update_metrics_default(self):
+        self.text.config(state=tk.NORMAL)
+        self.text.delete("1.0", tk.END)
         content = (
-            "MODEL PERFORMANCE ANALYSIS (Cross-Validation Results)\n"
+            "MODEL PERFORMANCE ANALYSIS (Actual Validation Results)\n"
             "------------------------------------------------------\n\n"
-            "1. RANDOM FOREST CLASSIFIER\n"
-            "   • Accuracy:  99.2%\n"
-            "   • Precision: 99.1%\n"
-            "   • Recall:    99.3%\n"
-            "   • F1-Score:  99.2%\n\n"
-            "2. LOGISTIC REGRESSION (L2)\n"
-            "   • Accuracy:  98.8%\n"
-            "   • Precision: 98.7%\n"
-            "   • Recall:    98.9%\n"
-            "   • F1-Score:  98.8%\n\n"
-            "3. SUPPORT VECTOR MACHINE (RBF)\n"
-            "   • Accuracy:  97.5%\n"
-            "   • Precision: 97.4%\n"
-            "   • Recall:    97.6%\n"
-            "   • F1-Score:  97.5%\n\n"
-            "4. XGBOOST ENSEMBLE\n"
-            "   • Accuracy:  99.5%\n"
-            "   • Precision: 99.5%\n"
-            "   • Recall:    99.5%\n"
-            "   • F1-Score:  99.5%\n\n"
-            "Note: Performance metrics are based on internal validation checks.\n"
-            "Actual clinical outcomes may vary."
+            "Waiting for model metrics...\n"
+            "Select a model in the sidebar and run analytics to see detailed performance."
         )
         self.text.insert(tk.END, content)
+        self.text.config(state=tk.DISABLED)
+
+    def display_metrics(self, metrics, model_name):
+        """Displays formatted clinical metrics in the text area"""
+        from datetime import datetime
+        self.text.config(state=tk.NORMAL)
+        self.text.delete("1.0", tk.END)
+        
+        header = f"CLINICAL PERFORMANCE REPORT: {model_name.upper()}\n"
+        header += f"Evaluation Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        header += "-" * 54 + "\n\n"
+        
+        self.text.insert(tk.END, header)
+        
+        for k, v in metrics.items():
+            if isinstance(v, float) and v <= 1.0:
+                line = f"{k:.<40} {v*100:>10.2f}%\n"
+            else:
+                line = f"{k:.<40} {v:>10}\n"
+            self.text.insert(tk.END, line)
+            
+        self.text.insert(tk.END, "\n" + "-" * 54 + "\n")
+        self.text.insert(tk.END, "Note: These results are based on the current validation split.")
         self.text.config(state=tk.DISABLED)

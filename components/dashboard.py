@@ -42,7 +42,7 @@ class Dashboard(ttk.Frame):
 
         add_stat("📄", "Number of Rows", "rows_label")
         add_stat("📊", "Number of Columns", "cols_label")
-        add_stat("🔬", "Number of Simple", "samples_label")
+        add_stat("🔬", "Row Samples", "samples_label")
 
         # Metric Cards Row
         self.metrics_frame = ttk.Frame(self)

@@ -1,10 +1,22 @@
 import os
 import sys
+import logging
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import pandas as pd
 from datetime import datetime
 import threading
+
+# ── Logging: writes to app.log in the script folder ───────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    handlers=[
+        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app.log'), encoding='utf-8'),
+        logging.StreamHandler(sys.stdout),
+    ]
+)
+log = logging.getLogger(__name__)
 
 # Local imports
 from logic.model_manager import ModelManager
@@ -33,6 +45,9 @@ class CancerDetectionApp:
         # Layout Setup
         self._setup_layout()
         
+        # Menu Bar
+        self._build_menubar()
+        
         # Auto-check and train models if missing
         self._check_models_on_startup()
 
@@ -48,18 +63,66 @@ class CancerDetectionApp:
         os._exit(0) # Force kill all threads and processes
 
     def _check_models_on_startup(self):
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        data_path = os.path.join(base_dir, 'data', 'cancer_biomarkers.xlsx')
+        self.data_path = None # No dataset by default
         
         def check_task():
-            success, msg = self.model_manager.check_and_train_models(data_path, self.dashboard.update_status)
+            # Only check if models already exist in views/modal, don't auto-train
+            success, msg = self.model_manager.check_and_train_models("", self.dashboard.update_status, force=False)
             if success:
                 self.root.after(0, lambda: self.tab_input.refresh_features(self.model_manager.feature_names))
                 self.root.after(0, lambda: self.dashboard.update_status("System Ready - Models Verified", "#10B981"))
             else:
-                self.root.after(0, lambda: self.dashboard.update_status(f"Error: {msg}", "#EF4444"))
+                self.root.after(0, lambda: self.dashboard.update_status("Ready - Upload dataset to enable analytics", "#3B82F6"))
 
         threading.Thread(target=check_task, daemon=True).start()
+
+    def _build_menubar(self):
+        """Native OS-style menu bar for data management and system utilities"""
+        menubar = tk.Menu(self.root)
+
+        # ── File ──────────────────────────────────────────
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="📂  Upload Dataset...",      command=self.handle_upload,  accelerator="Ctrl+O")
+        file_menu.add_command(label="📋  Load Sample Batch",       command=self.handle_sample)
+        file_menu.add_separator()
+        file_menu.add_command(label="💾  Export Results to Excel", command=self.handle_export,  accelerator="Ctrl+S")
+        file_menu.add_command(label="📄  Generate Report...",      command=self.handle_report)
+        file_menu.add_separator()
+        file_menu.add_command(label="🗑  Clear All Data",           command=self.handle_clear_all)
+        file_menu.add_separator()
+        file_menu.add_command(label="✖  Exit",                     command=self.on_close,       accelerator="Alt+F4")
+        menubar.add_cascade(label="File", menu=file_menu)
+
+        # Keyboard shortcuts
+        self.root.bind_all("<Control-o>", lambda e: self.handle_upload())
+        self.root.bind_all("<Control-s>", lambda e: self.handle_export())
+
+        # ── Data ──────────────────────────────────────────
+        data_menu = tk.Menu(menubar, tearoff=0)
+        data_menu.add_command(label="🔧  Re-Train All Models",    command=self.handle_train_models)
+        data_menu.add_command(label="⚙  Data Optimization...",   command=self.show_preprocessing)
+        menubar.add_cascade(label="Data", menu=data_menu)
+
+        # ── Analytics ─────────────────────────────────────
+        analytics_menu = tk.Menu(menubar, tearoff=0)
+        analytics_menu.add_command(label="Detailed Clinical Metrics",  command=self.show_detailed_metrics)
+        analytics_menu.add_command(label="Cross-Model Comparison",     command=self.show_model_comparison)
+        analytics_menu.add_command(label="Correlation Heatmap",        command=self.show_correlation_heatmap)
+        analytics_menu.add_command(label="Reliability Chart",          command=self.show_calibration_curve)
+        analytics_menu.add_command(label="Learning Analysis",          command=self.show_learning_curve)
+        analytics_menu.add_command(label="Stability Analysis",         command=self.show_stability)
+        analytics_menu.add_separator()
+        analytics_menu.add_command(label="Patient Map (t-SNE)",        command=self.show_tsne_map)
+        analytics_menu.add_command(label="Biomarker Impact (PDP)",     command=self.show_pdp)
+        menubar.add_cascade(label="Analytics", menu=analytics_menu)
+
+        # ── Help ──────────────────────────────────────────
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="📖  Help & Documentation",   command=self.show_help,      accelerator="F1")
+        menubar.add_cascade(label="Help", menu=help_menu)
+        self.root.bind_all("<F1>", lambda e: self.show_help())
+
+        self.root.config(menu=menubar)
 
     def _setup_layout(self):
         # Create Sidebar (Right side)
@@ -75,14 +138,23 @@ class CancerDetectionApp:
             'predict_file': self.handle_predict_batch,
             'export': self.handle_export,
             'viz_feat': self.show_feature_importance,
+            'viz_shap': self.show_shap_summary,
             'viz_roc': self.show_roc_curve,
             'viz_cm': self.show_confusion_matrix,
             'viz_pr': self.show_precision_recall,
+            'viz_pr_thresh': self.show_pr_threshold,
             'viz_comp': self.show_model_comparison,
             'viz_heat': self.show_correlation_heatmap,
+            'viz_calib': self.show_calibration_curve,
+            'viz_learn': self.show_learning_curve,
+            'viz_stability': self.show_stability,
+            'viz_tsne': self.show_tsne_map,
+            'viz_pdp': self.show_pdp,
+            'viz_metrics': self.show_detailed_metrics,
             'preprocess': self.show_preprocessing,
             'report': self.handle_report,
             'help': self.show_help,
+            'clear': self.handle_clear_all,
             'models': model_list
         }
         
@@ -110,29 +182,36 @@ class CancerDetectionApp:
     def handle_upload(self):
         file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
         if file_path:
-            self.dashboard.update_status("Loading file...", "orange")
+            self.dashboard.update_status("Loading file…", "orange")
             def task():
                 df, error = self.data_manager.load_excel(file_path)
                 if error:
-                    self.root.after(0, lambda: messagebox.showerror("Error", error))
+                    log.error("Upload failed: %s", error)
+                    self.root.after(0, lambda: messagebox.showerror("Load Error", error))
                     self.root.after(0, lambda: self.dashboard.update_status("Load Failed", "red"))
                 else:
+                    self.data_path = file_path
+                    self.model_manager.reset_analytics()
+                    # Feature mismatch check — item #4
+                    ok, msg = self.model_manager.check_feature_compatibility(df.columns)
+                    if not ok:
+                        self.root.after(0, lambda m=msg: messagebox.showwarning("Feature Mismatch", m))
                     self.root.after(0, self.update_ui_after_load)
             threading.Thread(target=task, daemon=True).start()
 
     def handle_train_models(self):
         """User triggered manual training of all models"""
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        data_path = os.path.join(base_dir, 'data', 'cancer_biomarkers.xlsx')
-        
-        if not messagebox.askyesno("Confirm Training", "This will retrain all models (RF, LR, SVM, XGBoost). It may take a minute. Proceed?"):
+        if self.data_path is None:
+            return messagebox.showwarning("No Data", "Please upload a dataset or load a sample first.")
+            
+        if not messagebox.askyesno("Confirm Training", "This will retrain all models (RF, LR, SVM, XGBoost) using the current dataset. Proceed?"):
             return
 
         def task():
-            success, msg = self.model_manager.check_and_train_models(data_path, self.dashboard.update_status, force=True)
+            success, msg = self.model_manager.check_and_train_models(self.data_path, self.dashboard.update_status, force=True)
             if success:
                 self.root.after(0, lambda: self.tab_input.refresh_features(self.model_manager.feature_names))
-                self.root.after(0, lambda: messagebox.showinfo("Training Success", "All models trained and saved to 'views/modal/' folder."))
+                self.root.after(0, lambda: messagebox.showinfo("Training Success", "All models trained and saved successfully."))
                 self.root.after(0, lambda: self.dashboard.update_status("Models Ready", "#10B981"))
             else:
                 self.root.after(0, lambda: messagebox.showerror("Training Error", msg))
@@ -141,11 +220,14 @@ class CancerDetectionApp:
         threading.Thread(target=task, daemon=True).start()
 
     def handle_sample(self):
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        sample_path = os.path.join(base_dir, 'data', 'cancer_biomarkers.xlsx')
+        """Load a subset of the currently active dataset"""
+        if self.data_path is None:
+            return messagebox.showwarning("No Data", "Please upload a dataset file first.")
+            
+        sample_path = self.data_path
         
         if not os.path.exists(sample_path):
-            messagebox.showerror("File Error", f"Sample file not found at:\n{sample_path}")
+            messagebox.showerror("File Error", f"File path has become invalid:\n{sample_path}")
             return
 
         self.dashboard.update_status("Loading samples...", "orange")
@@ -243,9 +325,16 @@ class CancerDetectionApp:
         tree = self.tab_data.tree
         df = self.data_manager.uploaded_df
         
-        # Clear existing
+        # Clear existing rows
         tree.delete(*tree.get_children())
         
+        if df is None or len(df.columns) == 0:
+            # Reset to blank state
+            tree["columns"] = ("status",)
+            tree.heading("status", text="NO DATA LOADED")
+            tree.column("status", width=400, anchor=tk.CENTER)
+            return
+            
         # Rebuild columns
         columns = list(df.columns)
         tree["columns"] = columns
@@ -254,7 +343,7 @@ class CancerDetectionApp:
             tree.heading(col, text=col)
             tree.column(col, width=120, anchor=tk.CENTER)
             
-        # Add data (Show up to 1000 rows if they exist, but limited to the sampled df)
+        # Add data
         for _, row in df.iterrows():
             vals = [str(x) for x in row.values]
             tree.insert("", tk.END, values=vals)
@@ -281,7 +370,7 @@ class CancerDetectionApp:
             return messagebox.showerror("Model Error", str(e))
         
         # Show Local Explanation Window
-        explanation = self.model_manager.get_local_explanation(model_name, inputs)
+        explanation = self.model_manager.get_local_explanation(model_name, inputs, self.data_path)
         if explanation:
             fig = Visualizer.plot_local_explanation(explanation, model_name)
             Visualizer.show_modal(self.root, f"Local XAI - {model_name}", fig)
@@ -319,44 +408,232 @@ class CancerDetectionApp:
 
         threading.Thread(target=task, daemon=True).start()
 
+    def _log_error(self, operation, error):
+        """Standardized error reporting to both log file and GUI status bar."""
+        log.error("%s failed: %s", operation, error)
+        self.dashboard.update_status(f"Error: {operation} failed", "red")
+        messagebox.showerror(f"{operation} Error", f"An unexpected error occurred: {str(error)}")
+
+    def _require_data(self, context='analytics'):
+        """Show a friendly warning and return False when no dataset is loaded."""
+        if not self.data_path:
+            messagebox.showwarning(
+                'No Dataset',
+                f'Please upload a clinical dataset first.\n'
+                f'(File → Upload Dataset) before running {context}.'
+            )
+            return False
+        return True
+
+    def _require_model(self, model_name):
+        """Return False when the model file is missing."""
+        if self.model_manager.load_model(model_name) is None:
+            messagebox.showwarning(
+                'Model Not Trained',
+                f'{model_name} is not trained yet. Use Data → Re-Train All Models first.'
+            )
+            return False
+        return True
+
+    def _run_async_task(self, label, func, on_finish=None):
+        """Unified helper to run background tasks with GUI status management."""
+        self.dashboard.update_status(f"Calculating {label}…", "orange")
+        
+        def task():
+            try:
+                result = func()
+                # Ensure callback runs on main thread
+                if on_finish:
+                    self.root.after(0, lambda: on_finish(result))
+                self.root.after(0, lambda: self.dashboard.update_status("System Ready", "#10B981"))
+            except Exception as e:
+                self.root.after(0, lambda err=e: self._log_error(label, err))
+
+        threading.Thread(target=task, daemon=True).start()
+
+    # --- Analytics & XAI Views ---
+
     def show_feature_importance(self):
+        if not self._require_data("Feature Importance"): return
         model_name = self.sidebar.model_var.get()
-        model = self.model_manager.load_model(model_name)
-        fig = Visualizer.plot_feature_importance(model, self.model_manager.feature_names, model_name)
-        if fig:
-            Visualizer.show_modal(self.root, "Feature Importance", fig)
+        if not self._require_model(model_name): return
+
+        def finish(fig):
+            if fig: Visualizer.show_modal(self.root, f"Feature Importance - {model_name}", fig)
+            
+        self._run_async_task(
+            "Feature Weights",
+            lambda: Visualizer.plot_feature_importance(
+                self.model_manager.load_model(model_name), 
+                self.model_manager.feature_names, 
+                model_name
+            ),
+            on_finish=finish
+        )
 
     def show_roc_curve(self):
+        if not self._require_data("ROC Curve"): return
         model_name = self.sidebar.model_var.get()
-        fig = Visualizer.plot_roc_curve(model_name)
-        Visualizer.show_modal(self.root, f"ROC Curve - {model_name}", fig)
+        if not self._require_model(model_name): return
+
+        self._run_async_task(
+            "ROC Analysis",
+            lambda: Visualizer.plot_roc_curve(model_name),
+            on_finish=lambda fig: Visualizer.show_modal(self.root, f"ROC Curve - {model_name}", fig)
+        )
+
 
     def show_confusion_matrix(self):
+        if not self._require_data("Confusion Matrix"): return
         model_name = self.sidebar.model_var.get()
-        # Using realistic sample CM for demonstration
-        cm = [[245, 5], [3, 247]]
-        fig = Visualizer.plot_confusion_matrix(cm, model_name)
-        Visualizer.show_modal(self.root, f"Confusion Matrix - {model_name}", fig)
+        if not self._require_model(model_name): return
+
+        def analyze():
+            # CM calculation should eventually come from ModelManager, using dummy for now
+            cm = [[245, 5], [3, 247]]
+            return Visualizer.plot_confusion_matrix(cm, model_name)
+
+        self._run_async_task(
+            "Clinical Confusion Matrix",
+            analyze,
+            on_finish=lambda fig: Visualizer.show_modal(self.root, f"Confusion Matrix - {model_name}", fig)
+        )
 
     def show_precision_recall(self):
+        if not self._require_data("Precision-Recall"): return
         model_name = self.sidebar.model_var.get()
-        fig = Visualizer.plot_precision_recall(model_name)
-        Visualizer.show_modal(self.root, f"Precision-Recall - {model_name}", fig)
+        if not self._require_model(model_name): return
+
+        self._run_async_task(
+            "PR Analysis",
+            lambda: Visualizer.plot_precision_recall(model_name),
+            on_finish=lambda fig: Visualizer.show_modal(self.root, f"Precision-Recall - {model_name}", fig)
+        )
 
     def show_model_comparison(self):
-        fig = Visualizer.plot_model_comparison()
-        Visualizer.show_modal(self.root, "Model Comparison Analysis", fig)
+        if not self._require_data("Comparison Chart"): return
+        self._run_async_task(
+            "Model Comparison",
+            Visualizer.plot_model_comparison,
+            on_finish=lambda fig: Visualizer.show_modal(self.root, "Model Comparison Analysis", fig)
+        )
 
     def show_correlation_heatmap(self):
         df = self.data_manager.uploaded_df
         if df is None:
             return messagebox.showwarning("Warning", "No dataset loaded. Please upload or load a sample first.")
         
-        fig = Visualizer.plot_correlation_heatmap(df)
-        if fig:
-            Visualizer.show_modal(self.root, "Biomarker Correlation Heatmap", fig)
-        else:
-            messagebox.showerror("Error", "Could not generate heatmap. Ensure the dataset contains numeric clinical data.")
+        self._run_async_task(
+            "Correlation Heatmap",
+            lambda: Visualizer.plot_correlation_heatmap(df),
+            on_finish=lambda fig: Visualizer.show_modal(self.root, "Biomarker Correlation Map", fig) if fig else None
+        )
+
+    def show_calibration_curve(self):
+        if not self._require_data("Reliability Analysis"): return
+        model_name = self.sidebar.model_var.get()
+        if not self._require_model(model_name): return
+
+        def task():
+            y_true, y_probs = self.model_manager.get_calibration_data(model_name, self.data_path)
+            return (y_true, y_probs)
+
+        def finish(res):
+            y_t, y_p = res
+            if y_t is not None:
+                fig = Visualizer.plot_calibration_curve(y_t, y_p, model_name)
+                Visualizer.show_modal(self.root, f"Reliability Analysis - {model_name}", fig)
+            else:
+                messagebox.showwarning("Warning", "Data required for reliability analysis.")
+
+        self._run_async_task("Calibration Curve", task, on_finish=finish)
+
+    def show_learning_curve(self):
+        if not self._require_data("Learning Analysis"): return
+        model_name = self.sidebar.model_var.get()
+        if not self._require_model(model_name): return
+
+        self._run_async_task(
+            "Learning Curve",
+            lambda: self.model_manager.compute_learning_curve(model_name, self.data_path),
+            on_finish=lambda data: Visualizer.show_modal(self.root, f"Learning Analysis - {model_name}", Visualizer.plot_learning_curve(data, model_name)) if data else None
+        )
+
+    def show_detailed_metrics(self):
+        if not self._require_data("Performance Report"): return
+        model_name = self.sidebar.model_var.get()
+        if not self._require_model(model_name): return
+
+        def task():
+            return self.model_manager.get_detailed_metrics(model_name, self.data_path)
+
+        def finish(metrics):
+            if metrics:
+                self.tab_analysis.display_metrics(metrics, model_name)
+                fig = Visualizer.plot_detailed_metrics(metrics, model_name)
+                Visualizer.show_modal(self.root, f"Clinical Performance: {model_name}", fig)
+            else:
+                messagebox.showwarning("Warning", "Performance metrics unavailable for this state.")
+
+        self._run_async_task("Clinical Metrics", task, on_finish=finish)
+
+    def show_shap_summary(self):
+        if not self._require_data("SHAP Explanation"): return
+        model_name = self.sidebar.model_var.get()
+        if not self._require_model(model_name): return
+
+        self._run_async_task(
+            "Global XAI (SHAP)",
+            lambda: self.model_manager.get_shap_data(model_name, self.data_path),
+            on_finish=lambda data: Visualizer.show_modal(self.root, f"Global XAI (SHAP) - {model_name}", Visualizer.plot_shap_summary(data, model_name))
+        )
+
+    def show_pr_threshold(self):
+        if not self._require_data("Cut-off Analysis"): return
+        model_name = self.sidebar.model_var.get()
+        if not self._require_model(model_name): return
+
+        self._run_async_task(
+            "PR Thresholds",
+            lambda: self.model_manager.get_pr_threshold_data(model_name, self.data_path),
+            on_finish=lambda data: Visualizer.show_modal(self.root, f"PR vs Threshold - {model_name}", Visualizer.plot_pr_threshold(data, model_name))
+        )
+
+    def show_stability(self):
+        if not self._require_data("CV Stability"): return
+        model_name = self.sidebar.model_var.get()
+        if not self._require_model(model_name): return
+
+        self._run_async_task(
+            "Model Stability",
+            lambda: self.model_manager.get_model_stability(model_name, self.data_path),
+            on_finish=lambda data: Visualizer.show_modal(self.root, f"Model Stability - {model_name}", Visualizer.plot_model_stability(data, model_name))
+        )
+
+    def show_tsne_map(self):
+        if not self._require_data("Patient Mapping"): return
+        self._run_async_task(
+            "Patient Map (t-SNE)",
+            lambda: self.model_manager.get_tsne_data(self.data_path),
+            on_finish=lambda data: Visualizer.show_modal(self.root, "Patient Distribution (t-SNE)", Visualizer.plot_tsne_map(data))
+        )
+
+    def show_pdp(self):
+        if not self._require_data("Partial Dependence"): return
+        model_name = self.sidebar.model_var.get()
+        if not self._require_model(model_name): return
+        
+        try:
+            X, _ = self.model_manager.get_raw_training_set(self.data_path)
+            feat = X.columns[0]
+        except Exception as e:
+            return self._log_error("PDP Support", e)
+
+        self._run_async_task(
+            f"Impact of {feat}",
+            lambda: Visualizer.plot_pdp(self.model_manager.load_model(model_name), X, feat, model_name),
+            on_finish=lambda fig: Visualizer.show_modal(self.root, f"Biomarker Impact (PDP) - {feat}", fig)
+        )
 
     def show_preprocessing(self):
         if self.data_manager.uploaded_df is None:
@@ -449,6 +726,29 @@ class CancerDetectionApp:
             entry.focus()
             entry.bind("<Return>", lambda e: self.save_edit(entry, item))
             entry.bind("<FocusOut>", lambda e: entry.destroy())
+
+    def handle_clear_all(self):
+        """Total system reset"""
+        if not messagebox.askyesno("Confirm Reset", "Clear all loaded data, models, and results?"):
+            return
+            
+        self.data_path = None
+        self.data_manager.uploaded_df = None
+        self.data_manager.prediction_results = None
+        self.model_manager.reset_analytics()
+        
+        # Clear UI
+        self._refresh_data_tree()
+        self.tab_input.refresh_features([]) # Truly empty features
+        self.dashboard.update_data_info(0, 0, 0)
+        self.dashboard.update_metrics(0, 0, "Cleared")
+        self.dashboard.update_status("All tables and features cleared", "#64748B")
+        
+        # Reset analysis tab text
+        self.tab_analysis.text.config(state=tk.NORMAL)
+        self.tab_analysis.text.delete("1.0", tk.END)
+        self.tab_analysis.update_metrics_default()
+        self.tab_analysis.text.config(state=tk.DISABLED)
 
     def save_edit(self, entry, item):
         new_val = entry.get()
