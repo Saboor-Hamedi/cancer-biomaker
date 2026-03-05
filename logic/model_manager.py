@@ -483,3 +483,14 @@ class ModelManager:
 
         explanation.sort(key=lambda x: abs(x[1]), reverse=True)
         return explanation[:10]
+
+    def get_biomarker_separation_stats(self, data_path):
+        """Calculate mean values for Healthy vs Detected patients for each biomarker."""
+        X, y = self.get_raw_training_set(data_path)
+        stats = {}
+        for feat in self.feature_names:
+            if feat in X.columns:
+                h_mean = X[y == 0][feat].mean()
+                d_mean = X[y == 1][feat].mean()
+                stats[feat] = (h_mean, d_mean)
+        return stats

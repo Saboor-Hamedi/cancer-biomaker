@@ -38,6 +38,7 @@ class CancerDetectionApp:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.model_manager = ModelManager(script_dir)
         self.data_manager = DataManager()
+        self.current_prediction_data = None
         
         # Apply Styles
         apply_styles()
@@ -135,6 +136,7 @@ class CancerDetectionApp:
             'sample': self.handle_sample,
             'train_models': self.handle_train_models,
             'predict_single': self.handle_predict_single,
+            'predict_silent': lambda: self.handle_predict_single(silent=True),
             'predict_file': self.handle_predict_batch,
             'export': self.handle_export,
             'viz_feat': self.show_feature_importance,
@@ -151,6 +153,8 @@ class CancerDetectionApp:
             'viz_tsne': self.show_tsne_map,
             'viz_pdp': self.show_pdp,
             'viz_metrics': self.show_detailed_metrics,
+            'viz_dist': self.show_population_distribution,
+            'viz_violin': self.show_biomarker_violins,
             'preprocess': self.show_preprocessing,
             'report': self.handle_report,
             'help': self.show_help,
@@ -378,7 +382,7 @@ class CancerDetectionApp:
             vals = [str(x) for x in row.values]
             tree.insert("", tk.END, values=vals)
 
-    def handle_predict_single(self):
+    def handle_predict_single(self, silent=False):
         model_name = self.sidebar.model_var.get()
         inputs = {}
         try:
@@ -386,7 +390,9 @@ class CancerDetectionApp:
                 v = self.tab_input.tree.item(item, "values")
                 inputs[v[0]] = float(v[1])
         except ValueError:
-            return messagebox.showerror("Input Error", "Please ensure all biomarker values are valid numbers.")
+            if not silent:
+                return messagebox.showerror("Input Error", "Please ensure all biomarker values are valid numbers.")
+            return
             
         try:
             pred, conf, risk = self.model_manager.predict_single(model_name, inputs)
@@ -458,15 +464,32 @@ class CancerDetectionApp:
             self.tab_analysis.text.insert(tk.END, report)
             self.tab_analysis.text.config(state=tk.DISABLED)
             
-            # Switch to Analysis Tab so user sees the report
-            try:
-                self.dashboard.notebook.select(2)
-            except:
-                pass
+            # Switch to Analysis Tab so user sees the report (skip if silent)
+            if not silent:
+                try:
+                    self.dashboard.notebook.select(2)
+                except:
+                    pass
 
             self.dashboard.update_status(f"Analysis Complete: {res} Status", "#EF4444" if pred == 1 else "#10B981")
+            
+            # Save for Professional Report generation
+            explanation = self.model_manager.get_local_explanation(model_name, inputs, self.data_path)
+            self.current_prediction_data = {
+                'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'model': model_name,
+                'result': res,
+                'risk': risk * 100,
+                'conf': conf * 100,
+                'triage': triage,
+                'consensus': consensus,
+                'inputs': inputs,
+                'explanation': explanation
+            }
         except Exception as e:
-            return messagebox.showerror("Model Error", str(e))
+            if not silent:
+                return messagebox.showerror("Model Error", str(e))
+            return
         
         # Show Local Explanation Window
         explanation = self.model_manager.get_local_explanation(model_name, inputs, self.data_path)
@@ -515,6 +538,11 @@ class CancerDetectionApp:
                         f"Negative Detections: {len(preds) - pos_count}\n"
                         f"Avg Clinical Risk:   {mean_risk:.2f}%\n"
                         f"Avg Model Confidence: {mean_conf:.2f}%\n\n"
+                        "POPULATION RISK EXPOSURE:\n"
+                        "------------------------------------------------------\n"
+                        f"Min Risk Score:      {min(risks)*100:.2f}%\n"
+                        f"Max Risk Score:      {max(risks)*100:.2f}%\n"
+                        f"Spread (Max-Min):    {(max(risks)-min(risks))*100:.2f}%\n\n"
                         "POPULATION HEALTH OVERVIEW:\n"
                         "------------------------------------------------------\n"
                         f"Detection Rate:      {(pos_count/len(preds))*100:.1f}%\n"
@@ -700,11 +728,27 @@ class CancerDetectionApp:
         if not self._require_model(model_name): return
 
         def task():
-            return self.model_manager.get_detailed_metrics(model_name, self.data_path)
+            metrics = self.model_manager.get_detailed_metrics(model_name, self.data_path)
+            sep_stats = self.model_manager.get_biomarker_separation_stats(self.data_path)
+            return metrics, sep_stats
 
-        def finish(metrics):
+        def finish(res):
+            metrics, sep_stats = res
             if metrics:
                 self.tab_analysis.display_metrics(metrics, model_name)
+                
+                # Append Biomarker Range Separation stats to the text area
+                self.tab_analysis.text.config(state=tk.NORMAL)
+                self.tab_analysis.text.insert(tk.END, "\nBIOMARKER RANGE SEPARATION (Clinical Baselines)\n")
+                self.tab_analysis.text.insert(tk.END, "-" * 54 + "\n")
+                self.tab_analysis.text.insert(tk.END, f"{'Biomarker':<30} | {'Healthy':>10} | {'Detected':>10}\n")
+                
+                for feat, (h_val, d_val) in sep_stats.items():
+                    self.tab_analysis.text.insert(tk.END, f"{feat[:30]:<30} | {h_val:10.4f} | {d_val:10.4f}\n")
+                
+                self.tab_analysis.text.insert(tk.END, "\n" + "-" * 54 + "\n")
+                self.tab_analysis.text.config(state=tk.DISABLED)
+
                 # Switch to Analysis Tab
                 try: self.dashboard.notebook.select(2)
                 except: pass
@@ -756,6 +800,37 @@ class CancerDetectionApp:
             lambda: self.model_manager.get_tsne_data(self.data_path),
             on_finish=lambda data: Visualizer.show_modal(self.root, "Patient Distribution (t-SNE)", Visualizer.plot_tsne_map(data))
         )
+
+    def show_population_distribution(self):
+        if self.data_manager.prediction_results is None:
+            return messagebox.showwarning("Warning", "Please run Batch Prediction first to generate population risk data.")
+        
+        risks = self.data_manager.prediction_results['RiskProb'] * 100
+        fig = Visualizer.plot_population_risk_distribution(risks)
+        Visualizer.show_modal(self.root, "Population Risk Distribution", fig)
+
+    def show_biomarker_violins(self):
+        if not self._require_data("Biomarker Analysis"): return
+        model_name = self.sidebar.model_var.get()
+        if not self._require_model(model_name): return
+
+        def task():
+            df, _ = self.model_manager.get_raw_training_set(self.data_path)
+            # Use top weighted features from SHAP
+            shap_data = self.model_manager.get_shap_data(model_name, self.data_path)
+            top_feats = [f[0] for f in shap_data[:4]] if shap_data else df.columns[:4].tolist()
+            
+            # Re-read with labels
+            X, y = self.model_manager.get_raw_training_set(self.data_path)
+            X['cancer_risk_class'] = y
+            return X, top_feats
+
+        def finish(res):
+            X, top_feats = res
+            fig = Visualizer.plot_biomarker_violins(X, top_feats)
+            Visualizer.show_modal(self.root, "Biomarker Range Separation", fig)
+
+        self._run_async_task("Biomarker Range Analysis", task, on_finish=finish)
 
     def show_pdp(self):
         if not self._require_data("Partial Dependence"): return
@@ -815,23 +890,41 @@ class CancerDetectionApp:
                 messagebox.showerror("Export Error", f"Failed to export: {e}")
 
     def handle_report(self):
-        if self.data_manager.prediction_results is None:
-            return messagebox.showwarning("Warning", "No results to report. Run batch prediction first.")
-            
-        report_path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files", "*.txt")])
-        if report_path:
-            with open(report_path, 'w') as f:
-                f.write("--- Cancer Detection AI Report ---\n")
-                f.write(f"Model used: {self.sidebar.model_var.get()}\n")
-                f.write(f"Total samples: {len(self.data_manager.prediction_results)}\n")
-                pos_count = sum(self.data_manager.prediction_results['Prediction'])
-                f.write(f"Positive cases found: {pos_count}\n")
-                f.write(f"Average confidence: {self.data_manager.prediction_results['Confidence'].mean():.2%}\n")
-                f.write("\nTop Risk Samples (Sample ID):\n")
-                top_risk = self.data_manager.prediction_results.sort_values(by='Confidence', ascending=False)
-                for _, row in top_risk.head(10).iterrows():
-                    f.write(f"ID: {row.get('sample_id', 'N/A')} | Conf: {row['Confidence']:.2%}\n")
-            messagebox.showinfo("Success", f"Report generated: {os.path.basename(report_path)}")
+        """Generates a professional clinical diagnostic report (Branded PDF/PNG)."""
+        if self.current_prediction_data:
+            # High-Quality Branded Report for single patient
+            path = filedialog.asksaveasfilename(
+                defaultextension=".png",
+                filetypes=[("PNG Image", "*.png"), ("PDF Document", "*.pdf"), ("All Files", "*.*")],
+                title="Save Professional Diagnostic Report"
+            )
+            if path:
+                try:
+                    self.dashboard.update_status("Generating high-fidelity report...", "orange")
+                    fig = Visualizer.generate_diagnostic_report(self.current_prediction_data)
+                    fig.savefig(path, bbox_inches='tight', dpi=150)
+                    messagebox.showinfo("Success", f"Professional report saved to:\n{os.path.basename(path)}")
+                    self.dashboard.update_status("Report Generated", "#10B981")
+                except Exception as e:
+                    self.dashboard.update_status("Report Failed", "red")
+                    messagebox.showerror("Report Error", f"Failed to generate professional report: {e}")
+        elif self.data_manager.prediction_results is not None:
+            # Fallback for batch prediction (Text Report)
+            report_path = filedialog.asksaveasfilename(
+                defaultextension=".txt", 
+                filetypes=[("Text files", "*.txt")],
+                title="Save Batch Summary Report"
+            )
+            if report_path:
+                with open(report_path, 'w') as f:
+                    f.write("--- Cancer Detection AI Batch Summary ---\n")
+                    f.write(f"Model: {self.sidebar.model_var.get()}\n")
+                    f.write(f"Total processed: {len(self.data_manager.prediction_results)}\n")
+                    pos_count = len(self.data_manager.prediction_results[self.data_manager.prediction_results['Prediction'] == "POSITIVE"])
+                    f.write(f"Positive cases detected: {pos_count}\n")
+                messagebox.showinfo("Success", f"Batch summary generated: {os.path.basename(report_path)}")
+        else:
+            messagebox.showwarning("Warning", "No diagnostic results available to generate a report.")
 
     def show_help(self):
         help_text = """
@@ -895,6 +988,10 @@ class CancerDetectionApp:
         vals[1] = new_val
         self.tab_input.tree.item(item, values=vals)
         entry.destroy()
+        
+        # --- What-If Clinical Simulator ---
+        # Automatically update metrics in the background when a value is changed
+        self.handle_predict_single(silent=True)
 
 if __name__ == "__main__":
     try:
