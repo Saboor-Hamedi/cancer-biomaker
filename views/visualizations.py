@@ -319,16 +319,109 @@ class Visualizer:
 
     @staticmethod
     def plot_local_explanation(explanation, model_name):
-        fig = Figure(figsize=(10, 6))
-        ax = fig.add_subplot(111)
-        feats, scores = zip(*explanation)
+        """
+        Two-Panel Impact Dashboard:
+        Separates factors that INCREASE risk from those that DECREASE risk.
+        Uses a 'Lollipop' design for cleaner clinical aesthetics.
+        """
+        fig = Figure(figsize=(12, 8))
         
-        colors = [DESIGN_PALETTE['danger'] if s > 0 else DESIGN_PALETTE['success'] for s in scores]
-        ax.barh(feats, scores, color=colors, alpha=0.8)
-        ax.set_title(f'Local XAI Diagnosis — {model_name}', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
-        ax.invert_yaxis()
-        ax.grid(axis='x', linestyle='--', alpha=0.3)
-        fig.tight_layout(pad=3.0)
+        if not explanation:
+            ax = fig.add_subplot(111)
+            ax.text(0.5, 0.5, "Diagnostic weights not available.", ha='center')
+            return fig
+
+        # Split into Risk vs Protective
+        risk_factors = sorted([x for x in explanation if x[1] > 0], key=lambda x: x[1], reverse=True)[:5]
+        prot_factors = sorted([x for x in explanation if x[1] < 0], key=lambda x: x[1])[:5] # Most negative first
+
+        # Panel 1: Risk Factors (Increases Probability)
+        ax1 = fig.add_subplot(211)
+        if risk_factors:
+            feats, scores = zip(*risk_factors)
+            y_pos = np.arange(len(feats))
+            ax1.hlines(y_pos, 0, scores, color=DESIGN_PALETTE['danger'], lw=2, alpha=0.6)
+            ax1.scatter(scores, y_pos, color=DESIGN_PALETTE['danger'], s=100, edgecolors='white', zorder=3)
+            ax1.set_yticks(y_pos)
+            ax1.set_yticklabels(feats, fontsize=10, fontweight='bold')
+            ax1.set_title('🔴 BIOMARKERS INCREASING RISK (Pathogenic Contribution)', loc='left', 
+                         fontsize=11, fontweight='bold', color=DESIGN_PALETTE['danger'])
+        else:
+            ax1.text(0.5, 0.5, "No significant risk-up markers detected.", ha='center', va='center')
+        
+        ax1.set_xlim(left=0)
+        ax1.grid(axis='x', linestyle='--', alpha=0.3)
+
+        # Panel 2: Protective Factors (Reduces Probability)
+        ax2 = fig.add_subplot(212)
+        if prot_factors:
+            feats, scores = zip(*prot_factors)
+            scores = [abs(s) for s in scores] # Show absolute impact for clarity
+            y_pos = np.arange(len(feats))
+            ax2.hlines(y_pos, 0, scores, color=DESIGN_PALETTE['success'], lw=2, alpha=0.6)
+            ax2.scatter(scores, y_pos, color=DESIGN_PALETTE['success'], s=100, edgecolors='white', zorder=3)
+            ax2.set_yticks(y_pos)
+            ax2.set_yticklabels(feats, fontsize=10, fontweight='bold')
+            ax2.set_title('🟢 BIOMARKERS REDUCING RISK (Protective Contribution)', loc='left', 
+                         fontsize=11, fontweight='bold', color=DESIGN_PALETTE['success'])
+        else:
+            ax2.text(0.5, 0.5, "No significant protective markers detected.", ha='center', va='center')
+
+        ax2.set_xlim(left=0)
+        ax2.invert_yaxis()
+        ax2.set_xlabel('Clinical Impact Strength', fontsize=10)
+        ax2.grid(axis='x', linestyle='--', alpha=0.3)
+
+        explanation_note = (
+            "HOW TO READ: Red bars show markers that 'pushed' the AI toward a Positive diagnosis. "
+            "Green bars show markers currently keeping the risk score lower.\n"
+            "Longer bars indicate a stronger clinical influence on today's specific prediction."
+        )
+        fig.text(0.05, 0.02, explanation_note, fontsize=9, style='italic', color='#475569', wrap=True,
+                 bbox=dict(facecolor='#F8FAFC', alpha=0.5, edgecolor='#E2E8F0', boxstyle='round,pad=1'))
+
+        fig.tight_layout(rect=[0, 0.08, 1, 1], h_pad=4.0)
+        return fig
+
+    @staticmethod
+    def plot_patient_radar(inputs, model_name):
+        """
+        Radar Plot (Spider Chart) showing the patient's biomarker profile.
+        This provides a 'Different Shape' for clinical visualization.
+        """
+        # Select top 6-8 biomarkers to avoid clutter
+        items = list(inputs.items())[:8]
+        labels = [i[0] for i in items]
+        values = [float(i[1]) for i in items]
+        
+        # Normalize values to 0-1 for radar (assuming 0-10 scale usually)
+        # In a real app we'd use min-max from training set
+        v_max = max(values + [10])
+        v_norm = [v / v_max for v in values]
+        
+        num_vars = len(labels)
+        angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
+        v_norm += v_norm[:1]
+        angles += angles[:1]
+        
+        fig = Figure(figsize=(8, 8))
+        ax = fig.add_subplot(111, polar=True)
+        
+        # Background color
+        ax.fill(angles, v_norm, color=DESIGN_PALETTE['primary'], alpha=0.25)
+        ax.plot(angles, v_norm, color=DESIGN_PALETTE['primary'], linewidth=2, marker='o')
+        
+        ax.set_theta_offset(np.pi / 2)
+        ax.set_theta_direction(-1)
+        
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(labels, fontweight='bold')
+        
+        ax.set_rlabel_position(0)
+        ax.set_yticklabels([]) # Hide radial ticks for cleaner look
+        
+        ax.set_title(f'Patient Biomarker Profile — {model_name}', fontsize=12, fontweight='bold', pad=30)
+        fig.tight_layout()
         return fig
 
     @staticmethod

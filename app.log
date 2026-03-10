@@ -1,1 +1,5 @@
 2026-03-05 17:04:52,376 [ERROR] __main__: Correlation Heatmap failed: Number of columns must be a positive integer, not 0
+2026-03-10 07:59:24,184 [INFO] logic.model_manager: Trained and saved: Random Forest
+2026-03-10 07:59:24,292 [INFO] logic.model_manager: Trained and saved: Logistic Regression
+2026-03-10 07:59:24,326 [INFO] logic.model_manager: Trained and saved: SVM
+2026-03-10 07:59:26,913 [INFO] logic.model_manager: Trained and saved: XGBoost

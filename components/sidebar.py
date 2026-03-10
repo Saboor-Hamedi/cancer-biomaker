@@ -61,8 +61,12 @@ class Sidebar(ttk.Frame):
         xai_frame = ttk.LabelFrame(self, text="QUICK XAI", style='Sidebar.TLabelframe')
         xai_frame.pack(fill=tk.X, padx=12, pady=6)
 
-        ttk.Button(xai_frame, text="Local Explainability",
-                   command=self.callbacks.get('viz_feat')).pack(fill=tk.X, padx=8, pady=(6, 2))
+        ttk.Button(xai_frame, text="Local Patient Diagnosis",
+                   command=self.callbacks.get('viz_local')).pack(fill=tk.X, padx=8, pady=(6, 2))
+        ttk.Button(xai_frame, text="Patient Radar Map",
+                   command=self.callbacks.get('viz_radar')).pack(fill=tk.X, padx=8, pady=(2, 2))
+        ttk.Button(xai_frame, text="Global Feature Weights",
+                   command=self.callbacks.get('viz_feat')).pack(fill=tk.X, padx=8, pady=(2, 2))
         ttk.Button(xai_frame, text="Global SHAP",
                    command=self.callbacks.get('viz_shap')).pack(fill=tk.X, padx=8, pady=(2, 2))
         ttk.Button(xai_frame, text="Population Distribution",

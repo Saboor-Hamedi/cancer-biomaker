@@ -108,6 +108,8 @@ class CancerDetectionApp:
 
         # ── Analytics ─────────────────────────────────────
         analytics_menu = tk.Menu(menubar, tearoff=0)
+        analytics_menu.add_command(label="Local Patient Diagnosis",    command=self.show_local_explanation)
+        analytics_menu.add_command(label="Patient Radar Profile",       command=self.show_patient_radar)
         analytics_menu.add_command(label="Detailed Clinical Metrics",  command=self.show_detailed_metrics)
         analytics_menu.add_command(label="Cross-Model Comparison",     command=self.show_model_comparison)
         analytics_menu.add_command(label="Correlation Heatmap",        command=self.show_correlation_heatmap)
@@ -141,6 +143,8 @@ class CancerDetectionApp:
             'predict_silent': lambda: self.handle_predict_single(silent=True),
             'predict_file': self.handle_predict_batch,
             'export': self.handle_export,
+            'viz_local': self.show_local_explanation,
+            'viz_radar': self.show_patient_radar,
             'viz_feat': self.show_feature_importance,
             'viz_shap': self.show_shap_summary,
             'viz_roc': self.show_roc_curve,
@@ -476,7 +480,7 @@ class CancerDetectionApp:
 
             self.dashboard.update_status(f"Analysis Complete: {res} Status", "#EF4444" if pred == 1 else "#10B981")
             
-            # Save for Professional Report generation
+            # Save for Professional Report generation and Local XAI
             explanation = self.model_manager.get_local_explanation(model_name, inputs, self.data_path)
             self.current_prediction_data = {
                 'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -493,12 +497,6 @@ class CancerDetectionApp:
             if not silent:
                 return messagebox.showerror("Model Error", str(e))
             return
-        
-        # Show Local Explanation Window
-        explanation = self.model_manager.get_local_explanation(model_name, inputs, self.data_path)
-        if explanation:
-            fig = Visualizer.plot_local_explanation(explanation, model_name)
-            Visualizer.show_modal(self.root, f"Local XAI - {model_name}", fig)
             
     def handle_predict_batch(self):
         if self.data_manager.uploaded_df is None:
@@ -636,6 +634,31 @@ class CancerDetectionApp:
             ),
             on_finish=finish
         )
+
+    def show_local_explanation(self):
+        """Displays the Local XAI Diagnosis for the most recently predicted patient."""
+        if not self.current_prediction_data:
+            return messagebox.showwarning("No Data", "Please run a 'Single Prediction' first to generate patient-specific XAI data.")
+        
+        model_name = self.current_prediction_data.get('model', 'Active Model')
+        explanation = self.current_prediction_data.get('explanation', [])
+        
+        if not explanation:
+            return messagebox.showwarning("XAI Missing", "No explanation data found for the last prediction.")
+
+        fig = Visualizer.plot_local_explanation(explanation, model_name)
+        Visualizer.show_modal(self.root, f"Clinical Impact Profile — {model_name}", fig)
+
+    def show_patient_radar(self):
+        """Displays a Radar (Spider) chart of the patient's biomarker profile."""
+        if not self.current_prediction_data:
+            return messagebox.showwarning("No Data", "Please run a 'Single Prediction' first to view patient profile.")
+        
+        model_name = self.current_prediction_data.get('model', 'Active Model')
+        inputs = self.current_prediction_data.get('inputs', {})
+        
+        fig = Visualizer.plot_patient_radar(inputs, model_name)
+        Visualizer.show_modal(self.root, f"Patient Biomarker Radar — {model_name}", fig)
 
     def show_roc_curve(self):
         if not self._require_data("ROC Curve"): return
