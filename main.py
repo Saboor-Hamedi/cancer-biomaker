@@ -1,12 +1,24 @@
+import logging
 import os
 import sys
-import logging
-import tkinter as tk
-from tkinter import filedialog, messagebox
-import pandas as pd
-from datetime import datetime
 import threading
+import tkinter as tk
 import warnings
+from datetime import datetime
+from tkinter import filedialog, messagebox
+
+import pandas as pd
+
+# Local imports
+from components.dashboard import Dashboard
+from components.sidebar import Sidebar
+from components.tabs import AnalysisTab, DataTab, InputTab
+from logic.data_manager import DataManager
+from logic.model_manager import ModelManager
+from styles import apply_styles
+from views.dialogs import PreprocessingDialog
+from views.visualizations import Visualizer
+
 warnings.filterwarnings('ignore', message='.*use_label_encoder.*')
 
 # ── Logging: writes to app.log in the script folder ───────────────────────────
@@ -20,37 +32,28 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# Local imports
-from logic.model_manager import ModelManager
-from logic.data_manager import DataManager
-from styles import apply_styles
-from components.sidebar import Sidebar
-from components.dashboard import Dashboard
-from components.tabs import InputTab, DataTab, AnalysisTab
-from views.visualizations import Visualizer
-from views.dialogs import PreprocessingDialog
 
 class CancerDetectionApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Cancer Detection XAI Dashboard v3.0")
         self.root.geometry("1400x900")
-        
+
         # Initialize Managers
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.model_manager = ModelManager(script_dir)
         self.data_manager = DataManager()
         self.current_prediction_data = None
-        
+
         # Apply Styles
         apply_styles()
-        
+
         # Layout Setup
         self._setup_layout()
-        
+
         # Menu Bar
         self._build_menubar()
-        
+
         # Auto-check and train models if missing
         self._check_models_on_startup()
 
@@ -67,7 +70,7 @@ class CancerDetectionApp:
 
     def _check_models_on_startup(self):
         self.data_path = None # No dataset by default
-        
+
         def check_task():
             # Only check if models already exist in views/modal, don't auto-train
             success, msg = self.model_manager.check_and_train_models("", self.dashboard.update_status, force=False)
@@ -168,21 +171,21 @@ class CancerDetectionApp:
             'clear': self.handle_clear_all,
             'models': model_list
         }
-        
+
         self.sidebar = Sidebar(self.root, callbacks)
         self.sidebar.pack(side=tk.RIGHT, fill=tk.Y)
-        
+
         # Create Dashboard (Main area left)
         self.dashboard = Dashboard(self.root)
         self.dashboard.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
+
         # Populate Tabs
         self.tab_input = InputTab(self.dashboard.input_tab, features=self.model_manager.feature_names)
         self.tab_input.pack(fill=tk.BOTH, expand=True)
-        
+
         self.tab_data = DataTab(self.dashboard.data_tab)
         self.tab_data.pack(fill=tk.BOTH, expand=True)
-        
+
         self.tab_analysis = AnalysisTab(self.dashboard.analysis_tab)
         self.tab_analysis.pack(fill=tk.BOTH, expand=True)
 
@@ -207,7 +210,7 @@ class CancerDetectionApp:
                     ok, msg = self.model_manager.check_feature_compatibility(df.columns)
                     if not ok:
                         self.root.after(0, lambda m=msg: messagebox.showwarning("Feature Mismatch", m))
-                    
+
                     # Instead of rendering all rows which causes lag, auto-load a sample
                     self.root.after(0, self.handle_sample)
             threading.Thread(target=task, daemon=True).start()
@@ -216,7 +219,7 @@ class CancerDetectionApp:
         """User triggered manual training of all models"""
         if self.data_path is None:
             return messagebox.showwarning("No Data", "Please upload a dataset or load a sample first.")
-            
+
         if not messagebox.askyesno("Confirm Training", "This will retrain all models (RF, LR, SVM, XGBoost) using the current dataset. Proceed?"):
             return
 
@@ -236,9 +239,9 @@ class CancerDetectionApp:
         """Load a subset of the currently active dataset"""
         if self.data_path is None:
             return messagebox.showwarning("No Data", "Please upload a dataset file first.")
-            
+
         sample_path = self.data_path
-        
+
         if not os.path.exists(sample_path):
             messagebox.showerror("File Error", f"File path has become invalid:\n{sample_path}")
             return
@@ -254,7 +257,7 @@ class CancerDetectionApp:
                 size = self.sidebar.sample_qty.get()
                 total_rows = len(df)
                 size = min(max(1, size), total_rows)
-                
+
                 # Randomly pick rows
                 sampled_df = df.sample(n=size).reset_index(drop=True)
                 self.data_manager.uploaded_df = sampled_df
@@ -267,16 +270,16 @@ class CancerDetectionApp:
     def update_ui_after_load(self):
         df = self.data_manager.uploaded_df
         if df is None: return
-        
+
         issues = self.data_manager.validate_data(df)
         if issues:
             messagebox.showwarning("Validation", "\n".join(issues))
-        
+
         # 1. NEW: Dynamically refresh the input feature list to match the dataset
         # We exclude metadata/target columns
         ignored = ['sample_id', 'cancer_risk_class']
         actual_features = [col for col in df.columns if col not in ignored]
-        
+
         # Only refresh if the features have changed or list is the fallback one
         if len(self.tab_input.tree.get_children()) <= 10 or set(actual_features) != set(self.tab_input.features):
             self.tab_input.refresh_features(actual_features)
@@ -290,11 +293,11 @@ class CancerDetectionApp:
         total_cols = len(df.columns)
         current_samples = len(df)
         self.dashboard.update_data_info(rows=total_rows, cols=total_cols, samples=current_samples)
-        
+
         self.dashboard.update_status(f"Imported {current_samples} samples", "#10B981")
         self._refresh_data_tree()
         self._sync_first_row_to_input()
-        
+
         # Update Analysis Tab with DataFrame Summary
         summary = (
             "DATASET SUMMARY & DESCRIPTIVE STATISTICS\n"
@@ -308,7 +311,7 @@ class CancerDetectionApp:
             desc = df.describe().T
             formatted_desc = desc.to_string(float_format="{:.3f}".format, justify='right')
             summary += formatted_desc
-            
+
             # Print to terminal/console as a structured table as well
             print("\n" + "="*80)
             print("DATASET DESCRIPTIVE STATISTICS OVERVIEW")
@@ -317,12 +320,12 @@ class CancerDetectionApp:
             print("="*80 + "\n")
         except Exception as e:
             summary += f"Could not compute descriptive statistics: {e}"
-            
+
         self.tab_analysis.text.config(state=tk.NORMAL)
         self.tab_analysis.text.delete("1.0", tk.END)
         self.tab_analysis.text.insert(tk.END, summary)
         self.tab_analysis.text.config(state=tk.DISABLED)
-        
+
         # Switch to Data View tab
         try:
             self.dashboard.notebook.select(1)
@@ -334,18 +337,18 @@ class CancerDetectionApp:
         df = self.data_manager.uploaded_df
         if df is None or len(df) == 0:
             return
-            
+
         first_row = df.iloc[0]
         tree = self.tab_input.tree
         found_count = 0
-        
+
         # Create a mapping for fuzzy column matching (to handle spaces/case)
         col_map = {str(c).lower().strip(): c for c in first_row.index}
-        
+
         for item in tree.get_children():
             feature_name = str(tree.item(item, "values")[0])
             search_key = feature_name.lower().strip()
-            
+
             if search_key in col_map:
                 actual_col = col_map[search_key]
                 val_raw = first_row[actual_col]
@@ -353,11 +356,11 @@ class CancerDetectionApp:
                     val = str(round(float(val_raw), 4))
                 except:
                     val = str(val_raw)
-                
+
                 desc = tree.item(item, "values")[2]
                 tree.item(item, values=(feature_name, val, desc))
                 found_count += 1
-        
+
         if found_count > 0:
             msg = f"SUCCESS: Synced {found_count} clinical biomarkers from data."
             self.dashboard.update_status(msg, "#10B981")
@@ -365,25 +368,25 @@ class CancerDetectionApp:
     def _refresh_data_tree(self):
         tree = self.tab_data.tree
         df = self.data_manager.uploaded_df
-        
+
         # Clear existing rows
         tree.delete(*tree.get_children())
-        
+
         if df is None or len(df.columns) == 0:
             # Reset to blank state
             tree["columns"] = ("status",)
             tree.heading("status", text="NO DATA LOADED")
             tree.column("status", width=400, anchor=tk.CENTER)
             return
-            
+
         # Rebuild columns
         columns = list(df.columns)
         tree["columns"] = columns
-        
+
         for col in columns:
             tree.heading(col, text=col)
             tree.column(col, width=120, anchor=tk.CENTER)
-            
+
         # Add data
         for _, row in df.iterrows():
             vals = [str(x) for x in row.values]
@@ -400,11 +403,11 @@ class CancerDetectionApp:
             if not silent:
                 return messagebox.showerror("Input Error", "Please ensure all biomarker values are valid numbers.")
             return
-            
+
         try:
             pred, conf, risk = self.model_manager.predict_single(model_name, inputs)
             res = "POSITIVE" if pred == 1 else "NEGATIVE"
-            
+
             # 1. Clinical Triage Logic
             if risk < 0.30: triage = "Surveillance"
             elif risk < 0.70: triage = "Monitor"
@@ -415,12 +418,12 @@ class CancerDetectionApp:
             models_to_check = ["Random Forest", "Logistic Regression", "SVM"]
             from logic.model_manager import HAS_XGB
             if HAS_XGB: models_to_check.append("XGBoost")
-            
+
             for m in models_to_check:
                 if self.model_manager.load_model(m):
                     p, _, _ = self.model_manager.predict_single(m, inputs)
                     all_preds.append(p)
-            
+
             if len(all_preds) >= 2:
                 match_count = all_preds.count(pred)
                 total = len(all_preds)
@@ -432,13 +435,13 @@ class CancerDetectionApp:
 
             # Update Dashboard Metrics (Cards)
             self.dashboard.update_metrics(
-                risk=risk*100, 
-                confidence=conf*100, 
-                insight=res, 
-                triage=triage, 
+                risk=risk*100,
+                confidence=conf*100,
+                insight=res,
+                triage=triage,
                 consensus=consensus
             )
-            
+
             # --- Diagnostic Report for Analysis Tab ---
             from datetime import datetime
             report = (
@@ -455,22 +458,22 @@ class CancerDetectionApp:
                 f"AI Consensus Status: {consensus}\n\n"
                 "GUIDANCE FOR PRIORITIZATION:\n"
             )
-            
+
             if triage == "Surveillance":
                 report += "- Biomarker signals are low/normal.\n- Routine monitoring (every 6-12 months) recommended.\n"
             elif triage == "Monitor":
                 report += "- Borderline clinical indicators detected.\n- Secondary laboratory tests advised for verification.\n"
             else:
                 report += "- CRITICAL: High biomarker signal patterns.\n- Immediate oncology consult and biopsy recommended.\n"
-            
+
             report += "\n" + "="*54 + "\n"
             report += f"Note: Consensus analysis cross-validated against {len(all_preds)} models."
-            
+
             self.tab_analysis.text.config(state=tk.NORMAL)
             self.tab_analysis.text.delete("1.0", tk.END)
             self.tab_analysis.text.insert(tk.END, report)
             self.tab_analysis.text.config(state=tk.DISABLED)
-            
+
             # Switch to Analysis Tab so user sees the report (skip if silent)
             if not silent:
                 try:
@@ -479,7 +482,7 @@ class CancerDetectionApp:
                     pass
 
             self.dashboard.update_status(f"Analysis Complete: {res} Status", "#EF4444" if pred == 1 else "#10B981")
-            
+
             # Save for Professional Report generation and Local XAI
             explanation = self.model_manager.get_local_explanation(model_name, inputs, self.data_path)
             self.current_prediction_data = {
@@ -497,32 +500,32 @@ class CancerDetectionApp:
             if not silent:
                 return messagebox.showerror("Model Error", str(e))
             return
-            
+
     def handle_predict_batch(self):
         if self.data_manager.uploaded_df is None:
             return messagebox.showwarning("Warning", "Load data first")
-            
+
         model_name = self.sidebar.model_var.get()
         self.dashboard.update_status(f"Predicting with {model_name}...", "orange")
-        
+
         def task():
             try:
                 preds, confs, risks = self.model_manager.predict_batch(model_name, self.data_manager.uploaded_df)
-                
+
                 results = self.data_manager.uploaded_df.copy()
                 results['Prediction'] = ["POSITIVE" if p == 1 else "NEGATIVE" for p in preds]
                 results['Confidence'] = [f"{c:.1%}" for c in confs]
                 results['RiskProb'] = risks
                 self.data_manager.prediction_results = results
-                
+
                 def update_ui():
                     pos_count = sum(preds)
                     mean_risk = (sum(risks) / len(risks)) * 100
                     mean_conf = (sum(confs) / len(confs)) * 100
-                    
+
                     self.dashboard.update_metrics(
-                        risk=mean_risk, 
-                        confidence=mean_conf, 
+                        risk=mean_risk,
+                        confidence=mean_conf,
                         insight=f"{pos_count} Cases",
                         triage="Multi-Patient",
                         consensus="Population"
@@ -551,7 +554,7 @@ class CancerDetectionApp:
                         "Note: These results represent the current batch sample only.\n"
                         "Run individual 'Single Predictions' for detailed triage prioritization."
                     )
-                    
+
                     self.tab_analysis.text.config(state=tk.NORMAL)
                     self.tab_analysis.text.delete("1.0", tk.END)
                     self.tab_analysis.text.insert(tk.END, report)
@@ -562,9 +565,9 @@ class CancerDetectionApp:
                     except: pass
 
                     self.dashboard.update_status(f"Batch completed: {pos_count} positive", "#10B981")
-                    # messagebox.showinfo("Batch Result", 
+                    # messagebox.showinfo("Batch Result",
                     #     f"Processed {len(preds)} samples\nFound {pos_count} positive cases\nAverage Population Risk: {mean_risk:.1f}%")
-                
+
                 self.root.after(0, update_ui)
             except Exception as e:
                 self.root.after(0, lambda: messagebox.showerror("Prediction Error", str(e)))
@@ -602,7 +605,7 @@ class CancerDetectionApp:
     def _run_async_task(self, label, func, on_finish=None):
         """Unified helper to run background tasks with GUI status management."""
         self.dashboard.update_status(f"Calculating {label}…", "orange")
-        
+
         def task():
             try:
                 result = func()
@@ -624,12 +627,12 @@ class CancerDetectionApp:
 
         def finish(fig):
             if fig: Visualizer.show_modal(self.root, f"Feature Importance - {model_name}", fig)
-            
+
         self._run_async_task(
             "Feature Weights",
             lambda: Visualizer.plot_feature_importance(
-                self.model_manager.load_model(model_name), 
-                self.model_manager.feature_names, 
+                self.model_manager.load_model(model_name),
+                self.model_manager.feature_names,
                 model_name
             ),
             on_finish=finish
@@ -639,10 +642,10 @@ class CancerDetectionApp:
         """Displays the Local XAI Diagnosis for the most recently predicted patient."""
         if not self.current_prediction_data:
             return messagebox.showwarning("No Data", "Please run a 'Single Prediction' first to generate patient-specific XAI data.")
-        
+
         model_name = self.current_prediction_data.get('model', 'Active Model')
         explanation = self.current_prediction_data.get('explanation', [])
-        
+
         if not explanation:
             return messagebox.showwarning("XAI Missing", "No explanation data found for the last prediction.")
 
@@ -653,10 +656,10 @@ class CancerDetectionApp:
         """Displays a Radar (Spider) chart of the patient's biomarker profile."""
         if not self.current_prediction_data:
             return messagebox.showwarning("No Data", "Please run a 'Single Prediction' first to view patient profile.")
-        
+
         model_name = self.current_prediction_data.get('model', 'Active Model')
         inputs = self.current_prediction_data.get('inputs', {})
-        
+
         fig = Visualizer.plot_patient_radar(inputs, model_name)
         Visualizer.show_modal(self.root, f"Patient Biomarker Radar — {model_name}", fig)
 
@@ -711,7 +714,7 @@ class CancerDetectionApp:
         df = self.data_manager.uploaded_df
         if df is None:
             return messagebox.showwarning("Warning", "No dataset loaded. Please upload or load a sample first.")
-        
+
         self._run_async_task(
             "Correlation Heatmap",
             lambda: Visualizer.plot_correlation_heatmap(df),
@@ -762,23 +765,23 @@ class CancerDetectionApp:
             metrics, sep_stats = res
             if metrics:
                 self.tab_analysis.display_metrics(metrics, model_name)
-                
+
                 # Append Biomarker Range Separation stats to the text area
                 self.tab_analysis.text.config(state=tk.NORMAL)
                 self.tab_analysis.text.insert(tk.END, "\nBIOMARKER RANGE SEPARATION (Clinical Baselines)\n")
                 self.tab_analysis.text.insert(tk.END, "-" * 54 + "\n")
                 self.tab_analysis.text.insert(tk.END, f"{'Biomarker':<30} | {'Healthy':>10} | {'Detected':>10}\n")
-                
+
                 for feat, (h_val, d_val) in sep_stats.items():
                     self.tab_analysis.text.insert(tk.END, f"{feat[:30]:<30} | {h_val:10.4f} | {d_val:10.4f}\n")
-                
+
                 self.tab_analysis.text.insert(tk.END, "\n" + "-" * 54 + "\n")
                 self.tab_analysis.text.config(state=tk.DISABLED)
 
                 # Switch to Analysis Tab
                 try: self.dashboard.notebook.select(2)
                 except: pass
-                
+
                 fig = Visualizer.plot_detailed_metrics(metrics, model_name)
                 Visualizer.show_modal(self.root, f"Clinical Performance: {model_name}", fig)
             else:
@@ -830,7 +833,7 @@ class CancerDetectionApp:
     def show_population_distribution(self):
         if self.data_manager.prediction_results is None:
             return messagebox.showwarning("Warning", "Please run Batch Prediction first to generate population risk data.")
-        
+
         risks = self.data_manager.prediction_results['RiskProb'] * 100
         fig = Visualizer.plot_population_risk_distribution(risks)
         Visualizer.show_modal(self.root, "Population Risk Distribution", fig)
@@ -845,7 +848,7 @@ class CancerDetectionApp:
             # Use top weighted features from SHAP
             shap_data = self.model_manager.get_shap_data(model_name, self.data_path)
             top_feats = [f[0] for f in shap_data[:4]] if shap_data else df.columns[:4].tolist()
-            
+
             # Re-read with labels
             X, y = self.model_manager.get_raw_training_set(self.data_path)
             X['cancer_risk_class'] = y
@@ -861,7 +864,7 @@ class CancerDetectionApp:
     def show_robustness_benchmark(self):
         """Analyze all models and show a side-by-side robustness dashboard."""
         if not self._require_data("Robustness Benchmark"): return
-        
+
         from logic.model_manager import HAS_XGB
         models_to_bench = ["Random Forest", "Logistic Regression", "SVM"]
         if HAS_XGB: models_to_bench.append("XGBoost")
@@ -879,7 +882,7 @@ class CancerDetectionApp:
         def finish(all_results):
             if not all_results:
                 return messagebox.showwarning("Benchmark Failed", "Could not aggregate model data. Ensure models are trained.")
-            
+
             fig = Visualizer.plot_model_robustness_benchmark(all_results)
             Visualizer.show_modal(self.root, "System-Wide Robustness Benchmark", fig)
 
@@ -889,7 +892,7 @@ class CancerDetectionApp:
         if not self._require_data("Partial Dependence"): return
         model_name = self.sidebar.model_var.get()
         if not self._require_model(model_name): return
-        
+
         try:
             X, _ = self.model_manager.get_raw_training_set(self.data_path)
             feat = X.columns[0]
@@ -905,7 +908,7 @@ class CancerDetectionApp:
     def show_preprocessing(self):
         if self.data_manager.uploaded_df is None:
             return messagebox.showwarning("Warning", "No data")
-            
+
         status = {
             'rows': len(self.data_manager.uploaded_df),
             'cols': len(self.data_manager.uploaded_df.columns),
@@ -916,14 +919,14 @@ class CancerDetectionApp:
     def apply_preprocessing(self, options):
         df = self.data_manager.uploaded_df
         if df is None: return
-        
+
         if options['normalize']:
             df = self.data_manager.apply_scaling(df, 'normalize')
         if options.get('scale'):
             df = self.data_manager.apply_scaling(df, 'standard')
         if options.get('outlier'):
             df = self.data_manager.remove_outliers(df)
-        
+
         self.data_manager.uploaded_df = df
         self._refresh_data_tree()
         self.dashboard.update_status(f"Preprocessing applied. {len(df)} rows remain.", "green")
@@ -964,7 +967,7 @@ class CancerDetectionApp:
         elif self.data_manager.prediction_results is not None:
             # Fallback for batch prediction (Text Report)
             report_path = filedialog.asksaveasfilename(
-                defaultextension=".txt", 
+                defaultextension=".txt",
                 filetypes=[("Text files", "*.txt")],
                 title="Save Batch Summary Report"
             )
@@ -982,7 +985,7 @@ class CancerDetectionApp:
     def show_help(self):
         help_text = """
         How to use the Cancer Detection Dashboard:
-        
+
         1. Model Selection: Choose between Random Forest, Logistic Reg., SVM, or XGBoost.
         2. Data Input:
            - Manual: Double-click values in 'Input Features' tab to edit.
@@ -1016,19 +1019,19 @@ class CancerDetectionApp:
         """Total system reset"""
         if not messagebox.askyesno("Confirm Reset", "Clear all loaded data, models, and results?"):
             return
-            
+
         self.data_path = None
         self.data_manager.uploaded_df = None
         self.data_manager.prediction_results = None
         self.model_manager.reset_analytics()
-        
+
         # Clear UI
         self._refresh_data_tree()
         self.tab_input.refresh_features([]) # Truly empty features
         self.dashboard.update_data_info(0, 0, 0)
         self.dashboard.update_metrics(0, 0, "Cleared", triage="Pending", consensus="N/A")
         self.dashboard.update_status("All tables and features cleared", "#64748B")
-        
+
         # Reset analysis tab text
         self.tab_analysis.text.config(state=tk.NORMAL)
         self.tab_analysis.text.delete("1.0", tk.END)
@@ -1041,7 +1044,7 @@ class CancerDetectionApp:
         vals[1] = new_val
         self.tab_input.tree.item(item, values=vals)
         entry.destroy()
-        
+
         # --- What-If Clinical Simulator ---
         # Automatically update metrics in the background when a value is changed
         self.handle_predict_single(silent=True)

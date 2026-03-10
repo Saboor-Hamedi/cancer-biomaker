@@ -1,14 +1,15 @@
-import os
 import logging
+import os
+
 import joblib
-import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, StratifiedKFold
+import pandas as pd
+from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
+from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.svm import SVC
-from sklearn.cluster import KMeans
-from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
 
 try:
     from xgboost import XGBClassifier
@@ -26,13 +27,14 @@ _SHAP_MAX_ROWS  = 100
 
 class ModelManager:
     def __init__(self, script_dir):
-        self.script_dir = os.path.join(script_dir, 'views', 'modal')
+        # Models are now saved in src/models folder (sibling to tkinter_ui)
+        self.script_dir = os.path.join(os.path.dirname(script_dir), 'src', 'models')
         os.makedirs(self.script_dir, exist_ok=True)
 
         self.rf_model  = None
         self.lr_model  = None
         self.svm_model = None
-        self.xgb_model = None
+        self.mlp_model = None
 
         self.feature_names   = self._load_feature_names()
         self._feature_hash   = self._hash_features(self.feature_names)
@@ -102,8 +104,8 @@ class ModelManager:
             return False, "Dataset file not found. Please upload a dataset to train models."
 
         models_data = [
-            ('rf_model.pkl',  'Random Forest',       RandomForestClassifier(n_estimators=100, random_state=42)),
-            ('lr_model.pkl',  'Logistic Regression',  LogisticRegression(random_state=42, max_iter=1000)),
+            ('random_forest_model.pkl',  'Random Forest',       RandomForestClassifier(n_estimators=100, random_state=42)),
+            ('logistic_regression_model.pkl',  'Logistic Regression',  LogisticRegression(random_state=42, max_iter=1000)),
             ('svm_model.pkl', 'SVM',                  SVC(probability=True, random_state=42)),
         ]
         if HAS_XGB:
@@ -374,10 +376,10 @@ class ModelManager:
     def load_model(self, model_name):
         """Load a model by name, using in-memory cache to avoid repeated disk reads."""
         _map = {
-            "Random Forest":       ('rf_model',  'rf_model.pkl'),
-            "Logistic Regression": ('lr_model',  'lr_model.pkl'),
+            "Random Forest":       ('rf_model',  'random_forest_model.pkl'),
+            "Logistic Regression": ('lr_model',  'logistic_regression_model.pkl'),
             "SVM":                 ('svm_model', 'svm_model.pkl'),
-            "XGBoost":             ('xgb_model', 'xgboost_model.pkl'),
+            "MLP":                 ('mlp_model', 'mlp_model.pkl'),
         }
         if model_name not in _map:
             return None

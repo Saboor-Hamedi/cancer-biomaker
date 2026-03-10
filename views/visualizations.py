@@ -601,10 +601,17 @@ class Visualizer:
         ax1 = fig.add_subplot(211)
         x = np.arange(len(models))
         width = 0.35
-        ax1.bar(x - width/2, accs, width, label='Accuracy', color=DESIGN_PALETTE['primary'], alpha=0.8)
-        ax1.bar(x + width/2, f1s, width, label='F1-Score', color=DESIGN_PALETTE['secondary'], alpha=0.8)
+        bars1 = ax1.bar(x - width/2, accs, width, label='Accuracy', color=DESIGN_PALETTE['primary'], alpha=0.8)
+        bars2 = ax1.bar(x + width/2, f1s, width, label='F1-Score', color=DESIGN_PALETTE['secondary'], alpha=0.8)
+        
+        for bars in [bars1, bars2]:
+            for bar in bars:
+                h = bar.get_height()
+                ax1.text(bar.get_x() + bar.get_width()/2., h + 0.5, f'{h:.1f}%', 
+                        ha='center', va='bottom', fontweight='bold', fontsize=9)
+
         ax1.set_title('PILLAR 1: Clinical Performance Efficiency', fontsize=12, fontweight='bold', pad=15)
-        ax1.set_ylim(min(accs + f1s + [80]) - 5, 105)
+        ax1.set_ylim(min(accs + f1s + [80]) - 5, 110)
         ax1.set_xticks(x)
         ax1.set_xticklabels(models)
         ax1.legend(frameon=False, loc='lower right')
@@ -614,6 +621,12 @@ class Visualizer:
         ax2 = fig.add_subplot(212)
         colors = [DESIGN_PALETTE['success'] if i == winner_idx else DESIGN_PALETTE['neutral'] for i in range(len(models))]
         bars = ax2.bar(models, stab_means, color=colors, alpha=0.6, label='Mean CV Accuracy')
+        
+        for bar in bars:
+            h = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., h + 0.5, f'{h:.1f}%', 
+                    ha='center', va='bottom', fontweight='bold', fontsize=9)
+
         ax2.errorbar(models, stab_means, yerr=stab_stds, fmt='o', color=DESIGN_PALETTE['danger'], capsize=8, lw=2, label='Diagnostic Uncertainty (Std Dev)')
         
         # Highlight Winner
@@ -624,7 +637,7 @@ class Visualizer:
 
         ax2.set_title('PILLAR 2: Decision Stability & Uncertainty Analysis', fontsize=12, fontweight='bold', pad=15)
         ax2.set_ylabel('Stability Score (%)')
-        ax2.set_ylim(min(stab_means + [80]) - 10, 105)
+        ax2.set_ylim(min(stab_means + [80]) - 10, 115)
         ax2.legend(frameon=False, loc='lower right')
         ax2.grid(axis='y', linestyle='--', alpha=0.2)
 
