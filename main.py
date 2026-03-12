@@ -119,6 +119,8 @@ class CancerDetectionApp:
         analytics_menu.add_command(label="Reliability Chart",          command=self.show_calibration_curve)
         analytics_menu.add_command(label="Learning Analysis",          command=self.show_learning_curve)
         analytics_menu.add_command(label="Stability Analysis",         command=self.show_stability)
+        analytics_menu.add_command(label="Performance Analysis",       command=self.show_performance_analysis)
+        analytics_menu.add_command(label="Multi-Model Learning Curves", command=self.show_multi_learning_curves)
         analytics_menu.add_separator()
         analytics_menu.add_command(label="Patient Map (t-SNE)",        command=self.show_tsne_map)
         analytics_menu.add_command(label="Biomarker Impact (PDP)",     command=self.show_pdp)
@@ -704,11 +706,37 @@ class CancerDetectionApp:
 
     def show_model_comparison(self):
         if not self._require_data("Comparison Chart"): return
-        self._run_async_task(
-            "Model Comparison",
-            Visualizer.plot_model_comparison,
-            on_finish=lambda fig: Visualizer.show_modal(self.root, "Model Comparison Analysis", fig)
-        )
+
+        from logic.model_manager import HAS_XGB
+        models_to_compare = ["Random Forest", "Logistic Regression", "SVM"]
+        if HAS_XGB: models_to_compare.append("XGBoost")
+
+        def task():
+            results = []
+            for model_name in models_to_compare:
+                if not self.model_manager.load_model(model_name):
+                    continue
+                metrics = self.model_manager.get_detailed_metrics(model_name, self.data_path)
+                if metrics:
+                    results.append({
+                        "Model": model_name,
+                        "Accuracy": metrics.get("Accuracy", 0),
+                        "Precision": metrics.get("Precision", 0),
+                        "Recall": metrics.get("Recall", 0),
+                        "F1 Score": metrics.get("F1 Score", 0),
+                        "AUC": metrics.get("AUC", 0),
+                    })
+            results_df = pd.DataFrame(results)
+            return results_df
+
+        def finish(results_df):
+            if results_df.empty:
+                messagebox.showwarning("Warning", "No model metrics available.")
+                return
+            fig = Visualizer.plot_model_comparison(results_df)
+            Visualizer.show_modal(self.root, "Model Performance Heatmap", fig)
+
+        self._run_async_task("Model Comparison", task, on_finish=finish)
 
     def show_correlation_heatmap(self):
         df = self.data_manager.uploaded_df
@@ -821,6 +849,66 @@ class CancerDetectionApp:
             lambda: self.model_manager.get_model_stability(model_name, self.data_path),
             on_finish=lambda data: Visualizer.show_modal(self.root, f"Model Stability - {model_name}", Visualizer.plot_model_stability(data, model_name))
         )
+
+    def show_performance_analysis(self):
+        if not self._require_data("Performance Analysis"): return
+
+        from logic.model_manager import HAS_XGB
+        models_to_analyze = ["Random Forest", "Logistic Regression", "SVM"]
+        if HAS_XGB: models_to_analyze.append("XGBoost")
+
+        def task():
+            # Load all models
+            models = {}
+            for model_name in models_to_analyze:
+                model = self.model_manager.load_model(model_name)
+                if model is None:
+                    continue
+                models[model_name] = model
+
+            # Get training data
+            X, y = self.model_manager.get_raw_training_set(self.data_path)
+            return models, X, y
+
+        def finish(res):
+            models, X, y = res
+            if not models:
+                messagebox.showwarning("Warning", "No models available for performance analysis.")
+                return
+            fig = Visualizer.plot_performance_analysis(models, X, y)
+            Visualizer.show_modal(self.root, "Model Performance Analysis: Time and Memory", fig)
+
+        self._run_async_task("Performance Analysis", task, on_finish=finish)
+
+    def show_multi_learning_curves(self):
+        if not self._require_data("Multi-Model Learning Curves"): return
+
+        from logic.model_manager import HAS_XGB
+        models_to_analyze = ["Random Forest", "Logistic Regression", "SVM"]
+        if HAS_XGB: models_to_analyze.append("XGBoost")
+
+        def task():
+            # Load all models
+            models = {}
+            for model_name in models_to_analyze:
+                model = self.model_manager.load_model(model_name)
+                if model is None:
+                    continue
+                models[model_name] = model
+
+            # Get training data
+            X, y = self.model_manager.get_raw_training_set(self.data_path)
+            return models, X, y
+
+        def finish(res):
+            models, X, y = res
+            if not models:
+                messagebox.showwarning("Warning", "No models available for learning curves analysis.")
+                return
+            fig = Visualizer.plot_multi_learning_curves(models, X, y, None)  # scaler=None, will create inside
+            Visualizer.show_modal(self.root, "Multi-Model Learning Curves", fig)
+
+        self._run_async_task("Multi-Model Learning Curves", task, on_finish=finish)
 
     def show_tsne_map(self):
         if not self._require_data("Patient Mapping"): return

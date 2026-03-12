@@ -7,3 +7,10 @@
 2026-03-10 11:51:05,113 [INFO] logic.model_manager: Trained and saved: Logistic Regression
 2026-03-10 11:51:05,143 [INFO] logic.model_manager: Trained and saved: SVM
 2026-03-10 11:51:07,377 [INFO] logic.model_manager: Trained and saved: XGBoost
+2026-03-10 19:59:35,100 [ERROR] logic.model_manager: Error loading model 'XGBoost': 'ModelManager' object has no attribute 'xgb_model'
+2026-03-10 19:59:37,947 [ERROR] logic.model_manager: Error loading model 'XGBoost': 'ModelManager' object has no attribute 'xgb_model'
+2026-03-10 20:00:13,115 [INFO] logic.model_manager: Trained and saved: Random Forest
+2026-03-10 20:00:13,190 [INFO] logic.model_manager: Trained and saved: Logistic Regression
+2026-03-10 20:00:13,204 [INFO] logic.model_manager: Trained and saved: SVM
+2026-03-10 20:00:13,448 [INFO] logic.model_manager: Trained and saved: XGBoost
+2026-03-10 20:01:36,281 [ERROR] logic.model_manager: Error loading model 'XGBoost': 'ModelManager' object has no attribute 'xgb_model'

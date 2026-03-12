@@ -35,6 +35,7 @@ class ModelManager:
         self.lr_model  = None
         self.svm_model = None
         self.mlp_model = None
+        self.xgb_model = None
 
         self.feature_names   = self._load_feature_names()
         self._feature_hash   = self._hash_features(self.feature_names)
@@ -379,6 +380,7 @@ class ModelManager:
             "Random Forest":       ('rf_model',  'random_forest_model.pkl'),
             "Logistic Regression": ('lr_model',  'logistic_regression_model.pkl'),
             "SVM":                 ('svm_model', 'svm_model.pkl'),
+            "XGBoost":             ('xgb_model', 'xgboost_model.pkl'),
             "MLP":                 ('mlp_model', 'mlp_model.pkl'),
         }
         if model_name not in _map:
