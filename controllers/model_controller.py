@@ -41,7 +41,9 @@ class ModelController:
             )
             if success:
                 self.layout_manager.root.after(0, lambda: self.layout_manager.refresh_input_features(self.model_manager.feature_names))
-                self.layout_manager.root.after(0, lambda: self.layout_manager.update_status("Training completed successfully", "#10B981"))
+                status_msg = "All clinical models re-trained successfully"
+                self.layout_manager.root.after(0, lambda: self.layout_manager.update_status(status_msg, "#10B981"))
+                self.layout_manager.root.after(0, lambda: self.error_handler.notify(status_msg, type='success'))
             else:
                 self.layout_manager.root.after(0, lambda: self.layout_manager.update_status(f"Training failed: {msg}", "red"))
 
@@ -63,15 +65,30 @@ class ModelController:
             return
 
         try:
-            # Use ModelManager for robust prediction
+            # 1. Primary Model Prediction
             prediction, conf, risk = self.model_manager.predict_single(model_name, feature_values)
+
+            # 2. Calculate Consensus among all available models
+            models_list = self.layout_manager.callbacks.get('models', ["Random Forest", "Logistic Regression", "SVM"])
+            votes = []
+            for m_name in models_list:
+                try:
+                    p, _, _ = self.model_manager.predict_single(m_name, feature_values)
+                    votes.append(p)
+                except:
+                    continue
+            
+            total_models = len(votes)
+            agree_count = votes.count(prediction)
+            consensus_str = f"{agree_count}/{total_models} Models"
 
             result = {
                 'prediction': prediction,
                 'confidence': conf,
                 'risk': risk,
                 'model': model_name,
-                'inputs': feature_values
+                'inputs': feature_values,
+                'consensus': consensus_str
             }
 
             self.current_prediction_data = result
@@ -95,7 +112,7 @@ class ModelController:
         # Update dashboard
         status = "POSITIVE" if prediction == 1 else "NEGATIVE"
         triage = "High Risk" if risk > 0.7 else "Medium Risk" if risk > 0.3 else "Low Risk"
-        consensus = f"{model_name}: {status}"
+        consensus = result.get('consensus', "N/A")
 
         self.layout_manager.update_metrics(
             accuracy=confidence,
@@ -128,32 +145,57 @@ class ModelController:
 
             df = self.data_manager.uploaded_df.copy()
             
-            # Use ModelManager for robust prediction
+            # 1. Primary Model Prediction
             predictions, confidences, risks = self.model_manager.predict_batch(model_name, df)
+
+            # 2. Consensus Calculation
+            models_list = self.layout_manager.callbacks.get('models', ["Random Forest", "Logistic Regression", "SVM"])
+            batch_votes = [] # List of prediction arrays
+            for m_name in models_list:
+                try:
+                    p, _, _ = self.model_manager.predict_batch(m_name, df)
+                    batch_votes.append(p)
+                except:
+                    continue
+            
+            # Calculate per-sample agreement with primary prediction
+            agreement_counts = np.zeros(len(predictions))
+            for v in batch_votes:
+                agreement_counts += (v == predictions).astype(int)
+            
+            avg_consensus = np.mean(agreement_counts)
+            total_models = len(batch_votes)
+            # Use g format to remove trailing .0 but keep other decimals
+            consensus_str = f"{avg_consensus:g}/{total_models} Models"
 
             # Add results to dataframe
             df['Prediction'] = ['POSITIVE' if p == 1 else 'NEGATIVE' for p in predictions]
             df['Confidence'] = confidences
             df['Risk_Score'] = risks
+            df['Consensus_Count'] = agreement_counts
 
             self.data_manager.prediction_results = df
 
             # Update UI
             pos_count = sum(predictions)
             total_count = len(predictions)
-            self.layout_manager.update_status(
-                f"Batch prediction complete: {pos_count}/{total_count} positive cases detected",
-                "#10B981"
+            
+            # Update Dashboard Metrics
+            avg_risk = np.mean(risks) * 100
+            avg_conf = np.mean(confidences) * 100
+            triage = "Review Required" if avg_risk > 50 else "Stable"
+            
+            self.layout_manager.update_metrics(
+                accuracy=avg_conf, 
+                precision=avg_risk, 
+                status=f"Batch: {pos_count} Positives",
+                triage=triage,
+                consensus=consensus_str
             )
 
-            # Show summary
-            messagebox.showinfo(
-                "Batch Prediction Complete",
-                f"Processed {total_count} samples\n"
-                f"Positive cases: {pos_count}\n"
-                f"Negative cases: {total_count - pos_count}\n\n"
-                f"Results saved to data manager."
-            )
+            status_msg = f"Batch prediction: {pos_count}/{total_count} positive cases"
+            self.layout_manager.update_status(status_msg, "#10B981")
+            self.error_handler.notify(status_msg, type='success')
 
         except Exception as e:
             self.error_handler.log_and_notify("Batch Prediction", e, "Batch Prediction Error")

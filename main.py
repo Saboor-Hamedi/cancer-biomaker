@@ -25,20 +25,23 @@ from logic.model_manager import ModelManager
 from styles import apply_styles
 from ui.display_formatter import DisplayFormatter
 from ui.layout_manager import LayoutManager
+from ui.styles import StyleManager
 from utils.async_runner import AsyncRunner
 from utils.error_handler import ErrorHandler
 from views.dialogs import PreprocessingDialog
 from views.visualizations import Visualizer
 import numpy as np
 warnings.filterwarnings('ignore', message='.*use_label_encoder.*')
+# Suppress terminal noise from background resource trackers and sklearn feature names
+warnings.filterwarnings('ignore', category=UserWarning, module='joblib')
+warnings.filterwarnings('ignore', message='.*X has feature names, but SVC was fitted without feature names.*')
 
 # ── Logging: writes to app.log in the script folder ───────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     handlers=[
-        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app.log'), encoding='utf-8'),
-        logging.StreamHandler()
+        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app.log'), encoding='utf-8')
     ]
 )
 
@@ -48,7 +51,11 @@ class CancerDetectionApp:
         self.root = root
         self.root.title("Cancer Detection XAI Dashboard v3.0")
         self.root.geometry("1280x850")
+        self.root.minsize(1100, 700)
         self.root.configure(bg="#F8FAFC")
+
+        # Apply Global Styles
+        StyleManager.apply_styles(self.root)
 
         # Initialize Core Managers
         self.data_manager = DataManager()
@@ -56,7 +63,7 @@ class CancerDetectionApp:
 
         # Core utilities
         self.async_runner = AsyncRunner(self.root)
-        self.error_handler = ErrorHandler()
+        self.error_handler = ErrorHandler(self.root)
 
         # UI Management (initialized with empty callbacks first)
         self.layout_manager = LayoutManager(self.root, self.model_manager, self.data_manager, {})
@@ -163,6 +170,11 @@ class CancerDetectionApp:
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = CancerDetectionApp(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        app = CancerDetectionApp(root)
+        root.mainloop()
+    except KeyboardInterrupt:
+        # Silent exit on Ctrl+C
+        import os
+        os._exit(0)

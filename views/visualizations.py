@@ -17,24 +17,35 @@ from scipy import stats
 
 # ── Design System ─────────────────────────────────────────────────────────────
 DESIGN_PALETTE = {
-    'primary':   '#3B82F6',  # Clinical Blue
-    'secondary': '#6366F1',  # Indigo
-    'danger':    '#EF4444',  # Red
-    'success':   '#10B981',  # Emerald
-    'warning':   '#F59E0B',  # Amber
-    'neutral':   '#94A3B8',  # Slate
-    'bg':        '#F8FAFC',  # Soft Gray
+    'primary':   '#2563EB',  # Professional Blue
+    'secondary': '#4F46E5',  # Indigo
+    'danger':    '#DC2626',  # Clinical Red
+    'success':   '#059669',  # Medical Green
+    'warning':   '#D97706',  # Alert Amber
+    'neutral':   '#475569',  # Slate Grey
+    'bg':        '#F8FAFC',  # White-ish
+    'text':      '#1E293B',  # Dark Blue-Grey
 }
 
 STYLE_CONFIG = {
     'font_family': 'sans-serif',
-    'title_size':  14,
-    'label_size':  11,
+    'title_size':  16,
+    'label_size':  12,
+    'note_size':   10,
+    'dpi':         100,
 }
 
 class Visualizer:
     # Keep track of open modal windows for cleanup
     _open_modals = []
+
+    @staticmethod
+    def _add_explanatory_note(ax, title, text):
+        """Adds a standardized explanatory note box to any plot."""
+        props = dict(boxstyle='round', facecolor='white', alpha=0.9, edgecolor='#E2E8F0')
+        note_text = f"ANALYSIS INSIGHT: {title}\n{text}"
+        ax.text(0.02, -0.05, note_text, transform=ax.transAxes, fontsize=STYLE_CONFIG['note_size'],
+                verticalalignment='top', style='italic', bbox=props, wrap=True)
 
     @staticmethod
     def center_window(window, width, height):
@@ -105,17 +116,36 @@ class Visualizer:
         sorted_vals  = [importance[i] for i in indices]
 
         ax.barh(sorted_feats, sorted_vals, color=DESIGN_PALETTE['primary'], alpha=0.85)
+        
+        # Add labels on bars
+        max_val = max(sorted_vals) if sorted_vals else 1
+        total_imp = sum(sorted_vals) if sorted_vals else 1
+        for i, v in enumerate(sorted_vals):
+            pct = f"{100 * v / total_imp:.1f}%"
+            ax.text(v + (max_val * 0.01), i, pct, color=DESIGN_PALETTE['neutral'], va='center', fontweight='bold', fontsize=9)
+
         ax.set_title(title, fontsize=STYLE_CONFIG['title_size'], fontweight='bold', pad=20)
         ax.set_xlabel('Relative Impact Score', fontsize=STYLE_CONFIG['label_size'])
         ax.grid(axis='x', linestyle='--', alpha=0.4)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
 
-        fig.tight_layout(pad=3.0)
+        Visualizer._add_explanatory_note(ax, "Feature Hierarchy", 
+            "These biomarkers are the primary drivers of the model's decision-making process. "
+            "Higher impact scores indicate that changing these values causes the largest shift in diagnosis.")
+
+        fig.tight_layout(pad=4.5)
         return fig
 
     @staticmethod
-    def plot_confusion_matrix(cm, model_name):
+    def plot_confusion_matrix(metrics, model_name):
+        # Extract cm from metrics dictionary
+        tn = metrics.get('True Negatives', 0)
+        fp = metrics.get('False Positives', 0)
+        fn = metrics.get('False Negatives', 0)
+        tp = metrics.get('True Positives', 0)
+        cm = [[tn, fp], [fn, tp]]
+
         fig = Figure(figsize=(7, 6))
         ax = fig.add_subplot(111)
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax,
@@ -123,7 +153,12 @@ class Visualizer:
                    yticklabels=['Actual Healthy', 'Actual Detected'],
                    annot_kws={"size": 12, "weight": "bold"})
         ax.set_title(f'Confusion Matrix — {model_name}', fontsize=STYLE_CONFIG['title_size'], fontweight='bold', pad=20)
-        fig.tight_layout(pad=3.0)
+        
+        Visualizer._add_explanatory_note(ax, "Diagnostic Accuracy", 
+            "The diagonal (top-left, bottom-right) shows correct predictions. "
+            "Off-diagonal cells represent clinical errors: False Positives and False Negatives.")
+
+        fig.tight_layout(pad=4.0)
         return fig
 
     @staticmethod
@@ -141,7 +176,12 @@ class Visualizer:
         ax.set_title(f'Receiver Operating Characteristic — {model_name}', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
         ax.legend(frameon=False)
         ax.grid(True, alpha=0.3)
-        fig.tight_layout(pad=3.0)
+        
+        Visualizer._add_explanatory_note(ax, "Classification Capacity", 
+            "The ROC curve measures the model's ability to distinguish between healthy and biopsy-detected cases. "
+            "A curve closer to the top-left corner indicates superior diagnostic accuracy.")
+
+        fig.tight_layout(pad=4.5)
         return fig
 
     @staticmethod
@@ -157,7 +197,12 @@ class Visualizer:
         ax.set_title(f'Precision-Recall Analysis — {model_name}', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
         ax.legend(frameon=False)
         ax.grid(True, alpha=0.3)
-        fig.tight_layout(pad=3.0)
+        
+        Visualizer._add_explanatory_note(ax, "Clinical Precision", 
+            "This curve evaluates the trade-off between identifying all cancer cases (Recall) "
+            "versus minimizing false alarms (Precision). It is critical for screening programs.")
+
+        fig.tight_layout(pad=4.5)
         return fig
 
     @staticmethod
@@ -184,9 +229,14 @@ class Visualizer:
         ax.set_title("Model Performance Heatmap", fontweight="bold", fontsize=20)
         ax.set_xlabel("Models", fontsize=16)
         ax.set_ylabel("Metrics", fontsize=16)
-        plt.xticks(rotation=45, fontsize=14)
-        plt.yticks(fontsize=14)
-        fig.tight_layout(pad=3.0)
+        ax.tick_params(axis='x', rotation=45, labelsize=14)
+        ax.tick_params(axis='y', labelsize=14)
+
+        Visualizer._add_explanatory_note(ax, "Comparative Performance", 
+            "This heatmap provides a cross-model benchmark. Green cells indicate optimized performance metrics, "
+            "allowing researchers to identify the most stable algorithm for this specific dataset.")
+
+        fig.tight_layout(pad=4.5)
 
         # Save the figure like in the notebook
         fig.savefig("model_performance_heatmap.png", dpi=300, bbox_inches="tight")
@@ -215,11 +265,11 @@ class Visualizer:
             height = bar.get_height()
             ax.text(bar.get_x() + bar.get_width()/2., height + 1, f'{acc:.1f}%', ha='center', va='bottom', fontweight='bold', fontsize=12)
 
-        fig.tight_layout(pad=3.0)
+        Visualizer._add_explanatory_note(ax, "Statistical Benchmarking", 
+            "A direct comparison of detection accuracy across all deployed models. "
+            "The goal is to select the model with the highest sensitivity and lowest clinical error rate.")
 
-        # Save the figure like in the notebook
-        fig.savefig("model_accuracy_comparison.png", dpi=300, bbox_inches="tight")
-
+        fig.tight_layout(pad=4.5)
         return fig
 
     @staticmethod
@@ -306,9 +356,13 @@ class Visualizer:
             ax.set_yticklabels([feature_names[i] for i in sorted_idx])
             ax.set_xlabel('Permutation Importance (decrease in accuracy)')
             ax.set_title(f'Permutation Feature Importance — {model_name}', fontsize=STYLE_CONFIG['title_size'] + 2, fontweight='bold')
-            ax.grid(axis='x', linestyle='--', alpha=0.3)
+            ax.grid(True, linestyle='--', alpha=0.3)
 
-        fig.tight_layout(pad=3.0)
+        Visualizer._add_explanatory_note(ax, "Permutation Importance", 
+            "This measures how much the model's accuracy drops when a feature is 'broken' (shuffled). "
+            "Features that cause the biggest drop are the most critical for model predictions.")
+
+        fig.tight_layout(pad=4.5)
         return fig
 
     @staticmethod
@@ -634,7 +688,12 @@ class Visualizer:
         ax.set_title(f'Reliability Analysis — {model_name}', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
         ax.legend(frameon=False)
         ax.grid(True, alpha=0.3)
-        fig.tight_layout(pad=3.0)
+
+        Visualizer._add_explanatory_note(ax, "Probability Calibration", 
+            "Measures how the predicted probability aligns with real-world incidence. "
+            "A model on the dashed line has 'perfect' reliability for clinical decision support.")
+
+        fig.tight_layout(pad=4.5)
         return fig
 
     @staticmethod
@@ -648,7 +707,12 @@ class Visualizer:
         ax.set_title(f'Learning Curve — {model_name}', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
         ax.legend(frameon=False)
         ax.grid(True, alpha=0.3)
-        fig.tight_layout(pad=3.0)
+
+        Visualizer._add_explanatory_note(ax, "Clinical Training Efficiency", 
+            "Monitors the model's hunger for data. If the lines are converging, "
+            "the model has learned enough patterns to generalize to new patients.")
+
+        fig.tight_layout(pad=4.5)
         return fig
 
     @staticmethod
@@ -669,8 +733,12 @@ class Visualizer:
             h = bar.get_height()
             ax.text(bar.get_x() + bar.get_width()/2., h + 2, f'{h:.1f}%', ha='center', fontweight='bold')
 
+        Visualizer._add_explanatory_note(ax, "Clinical Benchmark Metrics", 
+            "Accuracy provides an overview, while Precision and Recall balance the risks of 'False Alarms' "
+            "versus 'Missed Diagnoses'. Higher percentages indicate more reliable clinical outcomes.")
+
         fig.autofmt_xdate()
-        fig.tight_layout(pad=3.0)
+        fig.tight_layout(pad=4.5)
         return fig
 
     @staticmethod
@@ -680,11 +748,24 @@ class Visualizer:
         feats, vals = zip(*data)
 
         ax.barh(feats, vals, color=DESIGN_PALETTE['secondary'], alpha=0.8)
+        
+        # Add total impact labels
+        total_shap = sum(vals) if vals else 1
+        max_shap = max(vals) if vals else 1
+        for i, v in enumerate(vals):
+            pct = f"{100 * v / total_shap:.1f}%"
+            ax.text(v + (max_shap * 0.01), i, pct, color=DESIGN_PALETTE['neutral'], va='center', fontweight='bold', fontsize=9)
+
         ax.set_xlabel('Mean Impact (SHAP)', fontsize=STYLE_CONFIG['label_size'])
         ax.set_title(f'Global Influence — {model_name}', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
         ax.invert_yaxis()
         ax.grid(axis='x', linestyle='--', alpha=0.3)
-        fig.tight_layout(pad=3.0)
+
+        Visualizer._add_explanatory_note(ax, "SHAP Explainability", 
+            "This shows the average absolute contribution of each feature across the legal patient cohort. "
+            "SHAP values provide a game-theoretic proof of biomarker contribution.")
+
+        fig.tight_layout(pad=4.5)
         return fig
 
     @staticmethod
@@ -718,7 +799,12 @@ class Visualizer:
         ax = fig.add_subplot(111)
         ax.scatter(data['x'], data['y'], c=data['labels'], cmap='coolwarm', alpha=0.6, edgecolors='w')
         ax.set_title('Patient similarity Map (t-SNE)', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
-        fig.tight_layout(pad=3.0)
+        
+        Visualizer._add_explanatory_note(ax, "Topological Cluster Map", 
+            "Compresses high-dimensional patient data into a 2D map. "
+            "Clusters of similar colors represent patient groups with shared clinical phenotypes.")
+
+        fig.tight_layout(pad=4.5)
         return fig
 
     @staticmethod
@@ -764,7 +850,7 @@ class Visualizer:
             ax1.scatter(scores, y_pos, color=DESIGN_PALETTE['danger'], s=100, edgecolors='white', zorder=3)
             ax1.set_yticks(y_pos)
             ax1.set_yticklabels(feats, fontsize=10, fontweight='bold')
-            ax1.set_title('🔴 BIOMARKERS INCREASING RISK (Pathogenic Contribution)', loc='left',
+            ax1.set_title('BIOMARKERS INCREASING RISK (Pathogenic Contribution)', loc='left',
                          fontsize=11, fontweight='bold', color=DESIGN_PALETTE['danger'])
         else:
             ax1.text(0.5, 0.5, "No significant risk-up markers detected.", ha='center', va='center')
@@ -782,7 +868,7 @@ class Visualizer:
             ax2.scatter(scores, y_pos, color=DESIGN_PALETTE['success'], s=100, edgecolors='white', zorder=3)
             ax2.set_yticks(y_pos)
             ax2.set_yticklabels(feats, fontsize=10, fontweight='bold')
-            ax2.set_title('🟢 BIOMARKERS REDUCING RISK (Protective Contribution)', loc='left',
+            ax2.set_title('BIOMARKERS REDUCING RISK (Protective Contribution)', loc='left',
                          fontsize=11, fontweight='bold', color=DESIGN_PALETTE['success'])
         else:
             ax2.text(0.5, 0.5, "No significant protective markers detected.", ha='center', va='center')
@@ -1031,13 +1117,13 @@ class Visualizer:
         ax.set_xlabel('Clinical Biomarkers', fontsize=STYLE_CONFIG['label_size'])
         ax.set_ylabel('Concentration / Signal Value', fontsize=STYLE_CONFIG['label_size'])
 
-        # Short Note
-        note = "CLINICAL NOTE: The 'separation' between colors identifies where\nthe biomarker becomes a definitive diagnostic signal."
-        ax.text(0.02, 0.98, note, transform=ax.transAxes, fontsize=9, verticalalignment='top',
-                style='italic', bbox=dict(facecolor='white', alpha=0.8, edgecolor='#E2E8F0'))
-
         ax.legend(frameon=False, loc='upper right')
-        fig.tight_layout(pad=3.0)
+
+        Visualizer._add_explanatory_note(ax, "Biomarker Range Separation", 
+            "The comparison between colors identifies where a biomarker becomes a definitive diagnostic signal. "
+            "Minimal overlap indicates high individual predictive value.")
+
+        fig.tight_layout(pad=4.5)
         return fig
 
     @staticmethod
@@ -1175,8 +1261,9 @@ class Visualizer:
         performance_results = Visualizer.get_performance_data(models, X_train, y_train)
         performance_df = pd.DataFrame(performance_results)
 
-        # Create the plot
-        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+        # Create the plot using Figure
+        fig = Figure(figsize=(18, 6))
+        axes = fig.subplots(1, 3)
         fig.suptitle("Model Performance Analysis: Time and Memory", fontsize=16, fontweight="bold")
 
         # Training time
@@ -1236,7 +1323,12 @@ class Visualizer:
                 fontsize=9,
             )
 
-        plt.tight_layout()
+        # Add a note to the first axis as a representative
+        Visualizer._add_explanatory_note(axes[0], "Computational Efficiency", 
+            "Analyzes the trade-off between algorithmic complexity and speed. "
+            "Essential for selecting models that can run in real-world clinical environments with limited hardware.")
+
+        fig.tight_layout(rect=[0, 0.08, 1, 1])
         return fig
 
     @staticmethod
@@ -1256,7 +1348,8 @@ class Visualizer:
         if scaler is None:
             scaler = StandardScaler().fit(X_train)
 
-        fig, ax = plt.subplots(figsize=(12, 8))
+        fig = Figure(figsize=(12, 8))
+        ax = fig.add_subplot(111)
 
         colors = ['blue', 'red', 'green', 'orange', 'purple', 'brown']
         color_idx = 0
@@ -1304,13 +1397,17 @@ class Visualizer:
         ax.legend(loc="best")
         ax.grid(True, alpha=0.3)
 
-        plt.tight_layout()
+        Visualizer._add_explanatory_note(ax, "Convergence & Fit", 
+            "These curves show how model accuracy improves with more data. "
+            "A small gap between training and validation indicates a well-generalized model (no overfitting).")
+
+        fig.tight_layout(pad=4.5)
         return fig
 
     @staticmethod
     def plot_feature_distribution(df, feature_name):
         """Plot the distribution of a specific feature, split by cancer risk class."""
-        fig = Figure(figsize=(10, 6))
+        fig = Figure(figsize=(10, 7))
         ax = fig.add_subplot(111)
 
         # Create Status column for legend
@@ -1319,14 +1416,29 @@ class Visualizer:
             plot_df['Status'] = plot_df['cancer_risk_class'].map({0: 'Healthy', 1: 'Detected'})
             sns.histplot(data=plot_df, x=feature_name, hue='Status', kde=True, ax=ax, 
                          palette={'Healthy': DESIGN_PALETTE['success'], 'Detected': DESIGN_PALETTE['danger']},
-                         alpha=0.5)
+                         alpha=0.5, multiple="stack")
         else:
             sns.histplot(data=plot_df, x=feature_name, kde=True, ax=ax, color=DESIGN_PALETTE['primary'])
+
+        # Add percentage labels on top of bars
+        total = len(df)
+        for p in ax.patches:
+            height = p.get_height()
+            if height > 0:
+                percentage = f'{100 * height / total:.1f}%'
+                ax.annotate(percentage, (p.get_x() + p.get_width() / 2., height),
+                            ha='center', va='center', fontsize=9, xytext=(0, 7),
+                            textcoords='offset points', fontweight='bold', color=DESIGN_PALETTE['neutral'])
 
         ax.set_title(f'Biomarker Distribution Profile — {feature_name}', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
         ax.set_xlabel('Concentration / Signal Value', fontsize=STYLE_CONFIG['label_size'])
         ax.set_ylabel('Patient Count', fontsize=STYLE_CONFIG['label_size'])
         ax.grid(True, alpha=0.3)
         
-        fig.tight_layout(pad=3.0)
+        # Explanatory Note for Research
+        Visualizer._add_explanatory_note(ax, "Biomarker Distribution", 
+            f"This graph shows how {feature_name} varies across the population. The overlap between categories "
+            "identifies diagnostic ambiguity, while separation indicates high predictive power.")
+
+        fig.tight_layout(pad=4.0)
         return fig

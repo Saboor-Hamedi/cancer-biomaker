@@ -9,24 +9,33 @@ import tkinter.messagebox as messagebox
 class ErrorHandler:
     """Centralized error handling with logging and user notifications."""
 
-    def __init__(self, log_instance=None):
+    def __init__(self, root=None, log_instance=None):
+        self.root = root
         self.log = log_instance or logging.getLogger(__name__)
 
     def log_and_notify(self, operation, error, title="Error", show_dialog=True):
-        """
-        Log an error and optionally show a user dialog.
-
-        Args:
-            operation (str): Description of the operation that failed
-            error (Exception): The exception that occurred
-            title (str): Title for the error dialog
-            show_dialog (bool): Whether to show a messagebox to the user
-        """
         error_msg = f"{operation} failed: {str(error)}"
         self.log.error(error_msg)
 
         if show_dialog:
-            messagebox.showerror(title, error_msg)
+            self.notify(error_msg, type='error')
+
+    def notify(self, message, type='info'):
+        """Show a non-intrusive toast notification."""
+        if self.root:
+            try:
+                from ui.components.toast import show_toast
+                show_toast(self.root, message, type=type)
+            except Exception as e:
+                self.log.error(f"Failed to show toast: {e}")
+                # Fallback to standard messagebox for critical errors if toast fails
+                if type == 'error':
+                    messagebox.showerror("Error", message)
+        else:
+            if type == 'error':
+                messagebox.showerror("Error", message)
+            else:
+                messagebox.showinfo("Information", message)
 
     def require_data(self, context, data_path=None):
         """

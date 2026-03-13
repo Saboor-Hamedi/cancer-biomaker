@@ -82,7 +82,8 @@ class DataController:
 
         # Sample the data
         if len(df) > sample_size:
-            df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
+            # Use a slightly more dynamic sampling (no fixed random_state) to show variety
+            df = df.sample(n=sample_size).reset_index(drop=True)
 
         self.data_manager.uploaded_df = df
         self.data_manager.data_path = self.data_path
@@ -108,8 +109,10 @@ class DataController:
         current_samples = len(df)
         self.layout_manager.update_data_info(total_rows, total_cols, current_samples)
 
-        # Update status
-        self.layout_manager.update_status(f"Imported {current_samples} samples", "#10B981")
+        # Update status and notify
+        status_msg = f"Imported {current_samples} samples"
+        self.layout_manager.update_status(status_msg, "#10B981")
+        self.error_handler.notify(status_msg, type='success')
 
         # Refresh data tree
         self.layout_manager.refresh_data_tree()
@@ -215,7 +218,7 @@ class DataController:
         if path:
             try:
                 self.data_manager.prediction_results.to_excel(path, index=False)
-                messagebox.showinfo("Success", "Exported successfully")
+                self.error_handler.notify("Exported successfully", type='success')
             except Exception as e:
                 self.error_handler.log_and_notify("Export", e, "Export Error")
 
@@ -267,7 +270,7 @@ class DataController:
                     from views.visualizations import Visualizer
                     fig = Visualizer.generate_diagnostic_report(current_prediction)
                     fig.savefig(path, bbox_inches='tight', dpi=150)
-                    messagebox.showinfo("Success", f"Professional report saved to:\n{os.path.basename(path)}")
+                    self.error_handler.notify(f"Professional report saved: {os.path.basename(path)}", type='success')
                     self.layout_manager.update_status("Report Generated", "#10B981")
                 except Exception as e:
                     self.layout_manager.update_status("Report Failed", "red")
@@ -287,7 +290,7 @@ class DataController:
                         f.write(f"Total processed: {len(self.data_manager.prediction_results)}\n")
                         pos_count = len(self.data_manager.prediction_results[self.data_manager.prediction_results['Prediction'] == "POSITIVE"])
                         f.write(f"Positive cases detected: {pos_count}\n")
-                    messagebox.showinfo("Success", f"Batch summary generated: {os.path.basename(report_path)}")
+                    self.error_handler.notify(f"Batch summary generated: {os.path.basename(report_path)}", type='success')
                 except Exception as e:
                     self.error_handler.log_and_notify("Batch Report", e)
         else:

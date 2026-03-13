@@ -16,15 +16,23 @@ class DataManager:
             else:
                 df = pd.read_excel(file_path)
             
+            # --- Robustness Improvements ---
+            # 1. Clean Column Names (Strip whitespace)
+            df.columns = [str(c).strip() for c in df.columns]
+
+            # 2. Drop completely empty rows/cols
+            df.dropna(how='all', inplace=True)
+            df.dropna(axis=1, how='all', inplace=True)
+
             self.uploaded_df = df
             return df, None
         except Exception as e:
             return None, str(e)
 
     def validate_data(self, df):
+        """Standard validation check."""
         issues = []
-        if df is None:
-            return issues
+        if df is None: return issues
 
         # Check for NaN values
         nan_count = df.isnull().sum().sum()
@@ -39,6 +47,20 @@ class DataManager:
             issues.append(f"Non-numeric columns detected: {', '.join(non_numeric_cols)}")
 
         return issues
+
+    def strict_validate(self, df, required_features):
+        """Strict validation for model compatibility."""
+        if df is None: return False, "No data loaded."
+        
+        missing = [f for f in required_features if f not in df.columns]
+        if missing:
+            return False, f"Missing required biomarkers: {', '.join(missing[:5])}..."
+            
+        # Check for sufficient data
+        if len(df) < 5:
+            return False, "Insufficient data samples (min 5 required for analysis)."
+            
+        return True, "Data validated for clinical analysis."
 
     def apply_imputation(self, df, method='mean'):
         if df is None: return None

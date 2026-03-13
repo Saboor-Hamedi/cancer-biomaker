@@ -43,6 +43,33 @@ class VisualizationController:
         model_name = self.layout_manager.sidebar.model_var.get()
         return self._require_model(model_name)
 
+    def _update_analysis_text(self, title, content):
+        """Standardized helper to update the Performance Analysis tab."""
+        from datetime import datetime
+        if not self.layout_manager.tab_analysis:
+            return
+
+        text_widget = self.layout_manager.tab_analysis.text
+        text_widget.config(state=tk.NORMAL)
+        text_widget.delete("1.0", tk.END)
+
+        header = f"{title.upper()}\n"
+        header += f"System Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        header += "="*60 + "\n\n"
+
+        text_widget.insert(tk.END, header)
+        text_widget.insert(tk.END, content)
+        text_widget.insert(tk.END, "\n\n" + "-"*60 + "\n")
+        text_widget.insert(tk.END, "End of analysis profile.")
+        
+        text_widget.config(state=tk.DISABLED)
+        # Switch to the analysis tab
+        try:
+            notebook = self.layout_manager.dashboard.notebook
+            notebook.select(self.layout_manager.tab_analysis)
+        except:
+            pass
+
     def _run_async_task(self, label, func, on_finish=None):
         """Unified helper to run background tasks with GUI status management."""
         self.layout_manager.dashboard.update_status(f"Calculating {label}…", "orange")
@@ -53,8 +80,9 @@ class VisualizationController:
                 if on_finish:
                     self.layout_manager.root.after(0, lambda: on_finish(result))
                 self.layout_manager.root.after(0, lambda: self.layout_manager.dashboard.update_status(f"{label} Complete", "#10B981"))
+                self.layout_manager.root.after(0, lambda: self.error_handler.notify(f"{label} calculated successfully", type='success'))
             except Exception as e:
-                self.error_handler.log_error(f"{label} failed", e)
+                self.error_handler.log_and_notify(f"{label} Task", e)
                 self.layout_manager.root.after(0, lambda: self.layout_manager.dashboard.update_status(f"Error: {label} failed", "red"))
 
         import threading
@@ -105,38 +133,34 @@ class VisualizationController:
             # Show progress
             self.layout_manager.update_status("Calculating clinical explanation...", "orange")
             
-            def calculate_and_show():
-                try:
-                    # Calculate SHAP for this single patient
-                    model = self.model_manager.load_model(model_name)
-                    
-                    # Convert inputs to DF
-                    full_input = {feat: 0.0 for feat in self.model_manager.feature_names}
-                    for k, v in inputs.items():
-                        if k in full_input: full_input[k] = float(v)
-                    input_df = pd.DataFrame([full_input])[self.model_manager.feature_names]
-                    
-                    from logic.model_manager import HAS_TORCH
-                    inputs_dict = input_df.iloc[0].to_dict()
-                    
-                    # Call model_manager's local explanation logic
-                    explanation = self.model_manager.get_local_explanation(
-                        model_name, 
-                        inputs_dict, 
-                        data_path=self.data_manager.data_path
-                    )
-                    
-                    def finish():
-                        fig = Visualizer.plot_local_explanation(explanation, model_name)
-                        Visualizer.show_modal(self.layout_manager.root, f"Clinical Impact Profile — {model_name}", fig)
-                        self.layout_manager.update_status("Explanation generated", "#10B981")
-                    
-                    self.layout_manager.root.after(0, finish)
-                except Exception as e:
-                    self.error_handler.log_and_notify("Explanation Generation", e)
+            def calculate_task():
+                # Calculate SHAP for this single patient
+                model = self.model_manager.load_model(model_name)
+                
+                # Convert inputs to DF
+                full_input = {feat: 0.0 for feat in self.model_manager.feature_names}
+                for k, v in inputs.items():
+                    if k in full_input: full_input[k] = float(v)
+                input_df = pd.DataFrame([full_input])[self.model_manager.feature_names]
+                
+                inputs_dict = input_df.iloc[0].to_dict()
+                
+                # Call model_manager's local explanation logic
+                return self.model_manager.get_local_explanation(
+                    model_name, 
+                    inputs_dict, 
+                    data_path=self.data_manager.data_path
+                )
+                
+            def finish(explanation):
+                if explanation:
+                    fig = Visualizer.plot_local_explanation(explanation, model_name)
+                    Visualizer.show_modal(self.layout_manager.root, f"Clinical Impact Profile — {model_name}", fig)
+                    self.layout_manager.update_status("Explanation generated", "#10B981")
+                else:
+                    self.layout_manager.update_status("Explanation failed", "red")
 
-            import threading
-            threading.Thread(target=calculate_and_show, daemon=True).start()
+            self._run_async_task("SHAP Analysis", calculate_task, on_finish=finish)
             return
 
     def show_patient_radar(self):
@@ -216,6 +240,21 @@ class VisualizationController:
             metrics = self.model_manager.get_detailed_metrics(model_name, self.data_manager.data_path)
             if not metrics:
                 return None
+            
+            # Format matrix for tab
+            tn = metrics.get('True Negatives', 0)
+            fp = metrics.get('False Positives', 0)
+            fn = metrics.get('False Negatives', 0)
+            tp = metrics.get('True Positives', 0)
+            
+            content = f"Clinical Confusion Matrix: {model_name}\n"
+            content += "-"*50 + "\n"
+            content += f"  Actual Healthy:   TN={tn:<5} FP={fp:<5}\n"
+            content += f"  Actual Detected:  FN={fn:<5} TP={tp:<5}\n\n"
+            content += f"Total Samples: {tn+fp+fn+tp}\n"
+            
+            self._update_analysis_text("Diagnostic Matrix Profile", content)
+            
             return Visualizer.plot_confusion_matrix(metrics, model_name)
 
         self._run_async_task(
@@ -279,6 +318,14 @@ class VisualizationController:
                 from tkinter import messagebox
                 messagebox.showwarning("Comparison Failed", "Could not generate comparison data.")
                 return
+
+            # Format for tab
+            content = "Comparative Clinical Model Analysis:\n"
+            content += "-"*50 + "\n"
+            for _, row in df.iterrows():
+                content += f"  • {row['Model']:.<25} Acc: {row['Accuracy']:.2%} | F1: {row['F1 Score']:.2f} | AUC: {row['AUC']:.2f}\n"
+            
+            self._update_analysis_text("Cross-Model Performance Summary", content)
 
             fig = Visualizer.plot_model_comparison(df)
             Visualizer.show_modal(self.layout_manager.root, "Model Performance Comparison", fig)
@@ -401,10 +448,32 @@ class VisualizationController:
 
         model_name = self.layout_manager.sidebar.model_var.get()
 
+        def finish(data):
+            if data and 'feature_names' in data:
+                # Format importance list for tab
+                content = f"XAI Explanation Model: {model_name}\n"
+                content += "Ranked Biomarker Importance (SHAP values):\n"
+                content += "-"*50 + "\n"
+                
+                # Zip and sort by importance
+                importances = np.abs(data['shap_values']).mean(axis=0)
+                sorted_indices = np.argsort(importances)[::-1]
+                
+                for i in sorted_indices[:15]: # Show top 15
+                    feat = data['feature_names'][i]
+                    imp = importances[i]
+                    content += f"  • {feat:.<35} {imp:.6f}\n"
+
+                self._update_analysis_text(f"Global XAI: {model_name}", content)
+                
+                # Show visual modal
+                Visualizer.show_modal(self.layout_manager.root, f"Global XAI (SHAP) - {model_name}", 
+                                   Visualizer.plot_shap_summary(data, model_name))
+
         self._run_async_task(
             "Global XAI (SHAP)",
             lambda: self.model_manager.get_shap_data(model_name, self.data_manager.data_path),
-            on_finish=lambda data: Visualizer.show_modal(self.layout_manager.root, f"Global XAI (SHAP) - {model_name}", Visualizer.plot_shap_summary(data, model_name)) if data else None
+            on_finish=finish
         )
     def show_precision_recall_threshold(self):
         """Show precision-recall threshold analysis."""
@@ -488,19 +557,15 @@ class VisualizationController:
         def finish(metrics):
             if metrics:
                 # Update Analysis Tab
-                from datetime import datetime
-                report = f"CLINICAL PERFORMANCE REPORT: {model_name.upper()}\n"
+                report = f"Model Performance Summary: {model_name.upper()}\n"
                 report += "-"*54 + "\n"
                 for k, v in metrics.items():
                     if isinstance(v, float) and v <= 1.0:
                         report += f"{k:.<40} {v*100:>10.2f}%\n"
                     else:
                         report += f"{k:.<40} {v:>10}\n"
-
-                self.layout_manager.tab_analysis.text.config(state="normal")
-                self.layout_manager.tab_analysis.text.delete("1.0", "end")
-                self.layout_manager.tab_analysis.text.insert("end", report)
-                self.layout_manager.tab_analysis.text.config(state="disabled")
+                
+                self._update_analysis_text(f"Clinical Metrics: {model_name}", report)
 
                 # Show visual modal
                 fig = Visualizer.plot_detailed_metrics(metrics, model_name)
@@ -527,11 +592,27 @@ class VisualizationController:
                     results[m] = {'metrics': metrics, 'stability': stability}
             return results
 
+        def finish(res):
+            if res:
+                # Format for tab
+                content = "Multi-Model Robustness & Stability Audit:\n"
+                content += "-"*50 + "\n"
+                for model, data in res.items():
+                    metrics = data.get('metrics', {})
+                    stability = data.get('stability', {})
+                    acc = metrics.get('Accuracy', 0)
+                    std = stability.get('score_std', 0)
+                    content += f"  • {model:.<25} Accuracy: {acc:.2%} (Stability Std: {std:.4f})\n"
+                
+                self._update_analysis_text("System-Wide Robustness Audit", content)
+
+                Visualizer.show_modal(self.layout_manager.root, "System-Wide Robustness Benchmark",
+                                   Visualizer.plot_model_robustness_benchmark(res))
+
         self._run_async_task(
             "Robustness Audit",
             task,
-            on_finish=lambda res: Visualizer.show_modal(self.layout_manager.root, "System-Wide Robustness Benchmark",
-                                                       Visualizer.plot_model_robustness_benchmark(res)) if res else None
+            on_finish=finish
         )
 
     def show_performance_analysis(self):
@@ -577,11 +658,26 @@ class VisualizationController:
                     results[m] = scores
             return results
 
+        def finish(res):
+            if res:
+                import numpy as np
+                # Format for tab
+                content = "Bayesian Statistical Performance Comparison:\n"
+                content += "-"*50 + "\n"
+                for model, scores in res.items():
+                    mean_score = np.mean(scores)
+                    std_score = np.std(scores)
+                    content += f"  • {model:.<25} Mean CV: {mean_score:.4f} (±{std_score:.4f})\n"
+                
+                self._update_analysis_text("Statistical Model Audit", content)
+
+                Visualizer.show_modal(self.layout_manager.root, "Bayesian-Style Statistical Model Comparison",
+                                   Visualizer.plot_statistical_comparison(res))
+
         self._run_async_task(
             "Statistical Audit",
             task,
-            on_finish=lambda res: Visualizer.show_modal(self.layout_manager.root, "Bayesian-Style Statistical Model Comparison",
-                                                       Visualizer.plot_statistical_comparison(res)) if res else None
+            on_finish=finish
         )
 
     def show_permutation_importance(self):
@@ -655,6 +751,20 @@ class VisualizationController:
             from tkinter import messagebox
             messagebox.showerror("Missing Feature", f"Biomarker '{feature_name}' not found in current dataset.")
             return
+
+        # Calculate statistics for the tab
+        try:
+            val_col = df[feature_name].dropna()
+            stats_content = f"Biomarker: {feature_name}\n"
+            stats_content += f"Data Count: {len(val_col)}\n"
+            stats_content += f"Mean Level: {val_col.mean():.4f}\n"
+            stats_content += f"Median: {val_col.median():.4f}\n"
+            stats_content += f"Std Dev: {val_col.std():.4f}\n"
+            stats_content += f"Range: [{val_col.min():.4f} to {val_col.max():.4f}]\n"
+            
+            self._update_analysis_text(f"Biomarker Audit: {feature_name}", stats_content)
+        except Exception as e:
+            print(f"Error updating feature stats: {e}")
 
         fig = Visualizer.plot_feature_distribution(df, feature_name)
         Visualizer.show_modal(self.layout_manager.root, f"Biomarker Distribution Profile — {feature_name}", fig)

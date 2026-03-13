@@ -63,9 +63,9 @@ class Dashboard(ttk.Frame):
         self.data_tab = ttk.Frame(self.notebook)
         self.analysis_tab = ttk.Frame(self.notebook)
 
-        self.notebook.add(self.input_tab, text="Input Features")
-        self.notebook.add(self.data_tab, text="Data View")
-        self.notebook.add(self.analysis_tab, text="Performance Analysis")
+        self.notebook.add(self.input_tab, text="Input Features", sticky='nsew')
+        self.notebook.add(self.data_tab, text="Data View", sticky='nsew')
+        self.notebook.add(self.analysis_tab, text="Performance Analysis", sticky='nsew')
 
     def _create_metric_card(self, parent, title, value, color):
         card = ttk.Frame(parent, style='Card.TFrame', padding=15)

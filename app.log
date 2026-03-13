@@ -23,3 +23,5 @@
 2026-03-13 21:45:58,279 [INFO] logic.model_manager: Trained and saved: Logistic Regression
 2026-03-13 21:45:58,297 [INFO] logic.model_manager: Trained and saved: SVM
 2026-03-13 21:46:00,527 [INFO] logic.model_manager: Trained and saved: XGBoost
+2026-03-13 21:47:31,994 [INFO] logic.model_manager: Trained and saved: GNN
+2026-03-13 22:11:24,578 [INFO] utils.error_handler: Batch prediction complete. Processed 500 samples.

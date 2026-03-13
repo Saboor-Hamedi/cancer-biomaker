@@ -15,13 +15,16 @@ class InputTab(ttk.Frame):
         ttk.Label(header_frame, text="BIOMARKER INPUT FEATURES", font=('Inter', 11, 'bold'), foreground="#1E293B").pack(side=tk.LEFT)
         ttk.Label(header_frame, text="(Double-click values to edit)", font=('Inter', 9), foreground="#64748B").pack(side=tk.LEFT, padx=10)
 
-        columns = ("Feature", "Value", "Description")
+        columns = ("Feature", "Value", "Unit", "Description")
         self.tree = ttk.Treeview(self, columns=columns, show="headings", height=15)
 
         # Style headings
         for col in columns:
             self.tree.heading(col, text=col.upper())
-            self.tree.column(col, width=150 if col != "Description" else 400)
+            width = 150
+            if col == "Description": width = 350
+            if col == "Unit": width = 100
+            self.tree.column(col, width=width)
 
         scroll = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
@@ -42,53 +45,30 @@ class InputTab(ttk.Frame):
             elif self.data_manager.mean_values is not None:
                 first_row = self.data_manager.mean_values
 
-        key_descriptions = {
-            'mean_current_smooth': 'Average current across measurements',
-            'std_current_smooth': 'Standard deviation of current measurements',
-            'min_current_smooth': 'Minimum current value',
-            'max_current_smooth': 'Maximum current value',
-            'area_under_curve_smooth': 'Total area under current curve',
-            'PSA_smooth_peak_current': 'Actual peak current for PSA',
-            'PSA_smooth_peak_potential': 'Peak potential for PSA detection',
-            'PSA_smooth_peak_area': 'Peak area for PSA signal',
-            'PSA_smooth_fwhm': 'Full width at half maximum for PSA peak',
-            'AFP_smooth_peak_current': 'Peak current for AFP biomarker',
-            'AFP_smooth_peak_potential': 'Peak potential for AFP detection',
-            'AFP_smooth_peak_area': 'Peak area for AFP signal',
-            'AFP_smooth_fwhm': 'Full width at half maximum for AFP peak',
-            'CA125_smooth_peak_current': 'Peak current for CA125 biomarker',
-            'CA125_smooth_peak_potential': 'Peak potential for CA125 detection',
-            'CA125_smooth_peak_area': 'Peak area for CA125 signal',
-            'CA125_smooth_fwhm': 'Full width at half maximum for CA125 peak',
-            'mean_slope_smooth': 'Average slope in current-voltage curve',
-            'max_slope_smooth': 'Maximum slope in current-voltage curve',
-            'min_slope_smooth': 'Minimum slope in current-voltage curve',
-            'current_smooth_-0.46V': 'Current measurement at -0.46V',
-            'current_smooth_0.372V': 'Current measurement at 0.372V',
-            'current_smooth_0.98V': 'Current measurement at 0.98V',
-            'current_smooth_-0.2V': 'Current measurement at -0.2V',
-            'current_smooth_0V': 'Current measurement at 0V',
-            'current_smooth_0.2V': 'Current measurement at 0.2V',
-            'current_smooth_0.5V': 'Current measurement at 0.5V',
-            'current_smooth_0.8V': 'Current measurement at 0.8V',
-            'current_smooth_0.3V': 'Current measurement at 0.3V',
-            'current_smooth_0.6V': 'Current measurement at 0.6V',
-            'current_smooth_-0.5V': 'Current measurement at -0.5V',
-            'current_smooth_-0.3V': 'Current measurement at -0.3V',
-            'avg_snr': 'Average signal-to-noise ratio',
-            'peak_separation_PSA_AFP': 'Peak separation between PSA and AFP',
-            'peak_separation_AFP_CA125': 'Peak separation between AFP and CA125',
-            'peak_separation_PSA_CA125': 'Peak separation between PSA and CA125',
-            'overlap_index_PSA_AFP': 'Overlap index between PSA and AFP peaks',
-            'overlap_index_PSA_CA125': 'Overlap index between PSA and CA125 peaks',
-            'overlap_index_AFP_CA125': 'Overlap index between AFP and CA125 peaks',
-            'PSA_concentration_pg_per_ml': 'PSA concentration in pg/mL',
-            'AFP_concentration_pg_per_ml': 'AFP concentration in pg/mL',
-            'CA125_concentration_U_per_ml': 'CA125 concentration in U/mL'
+        key_metadata = {
+            'mean_current_smooth': {'unit': 'nA', 'desc': 'Avg current across signal'},
+            'std_current_smooth': {'unit': 'nA', 'desc': 'Signal noise/variability'},
+            'area_under_curve_smooth': {'unit': 'nA·V', 'desc': 'Integrated signal energy'},
+            'PSA_smooth_peak_current': {'unit': 'nA', 'desc': 'Primary PSA peak height'},
+            'PSA_smooth_peak_potential': {'unit': 'V', 'desc': 'PSA redox potential'},
+            'PSA_smooth_peak_area': {'unit': 'nA·V', 'desc': 'PSA charge transfer'},
+            'PSA_concentration_pg_per_ml': {'unit': 'pg/mL', 'desc': 'PSA Protein Concentration'},
+            'AFP_concentration_pg_per_ml': {'unit': 'pg/mL', 'desc': 'AFP Protein Concentration'},
+            'CA125_concentration_U_per_ml': {'unit': 'U/mL', 'desc': 'CA125 Protein Concentration'},
+            'mean_slope_smooth': {'unit': 'nA/V', 'desc': 'Avg sensitivity slope'},
+            'avg_snr': {'unit': 'dB', 'desc': 'Signal-to-Noise Ratio'}
         }
 
+        # Shared units for current measurements
+        for i in range(-5, 10):
+            v = i/10.0
+            key_metadata[f'current_smooth_{v}V'] = {'unit': 'nA', 'desc': f'Current at {v}V'}
+
         for f in self.features:
-            desc = key_descriptions.get(f, "Additional biomarker feature")
+            meta = key_metadata.get(f, {'unit': '-', 'desc': 'Clinical biomarker'})
+            unit = meta['unit']
+            desc = meta['desc']
+            
             val = '0.0'
             if first_row is not None and f in first_row.index:
                 val_raw = first_row[f]
@@ -96,7 +76,7 @@ class InputTab(ttk.Frame):
                     val = str(round(float(val_raw), 4))
                 except:
                     val = str(val_raw)
-            self.tree.insert("", tk.END, values=(f, val, desc))
+            self.tree.insert("", tk.END, values=(f, val, unit, desc))
 
     def refresh_display(self):
         """Refresh the display with current features."""
