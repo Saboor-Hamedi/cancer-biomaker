@@ -142,6 +142,24 @@ class CancerDetectionApp:
         stats_menu.add_command(label="Sensitivity Analysis",        command=self.show_sensitivity_analysis)
         menubar.add_cascade(label="Statistics", menu=stats_menu)
 
+        # ── Features ─────────────────────────────────────
+        features_menu = tk.Menu(menubar, tearoff=0)
+        features = [
+            'PSA_peak_height',
+            'min_slope',
+            'PSA_concentration_pg_per_ml',
+            'max_slope',
+            'current_at_-0.46V',
+            'min_current',
+            'PSA_actual_peak_current',
+            'mean_current',
+            'area_under_curve',
+            'peak_height_ratio_PSA_CA125'
+        ]
+        for feature in features:
+            features_menu.add_command(label=feature, command=lambda f=feature: self.show_feature_analysis(f))
+        menubar.add_cascade(label="Features", menu=features_menu)
+
         # ── Help ──────────────────────────────────────────
         help_menu = tk.Menu(menubar, tearoff=0)
         help_menu.add_command(label="Help & Documentation",   command=self.show_help,      accelerator="F1")
@@ -1438,6 +1456,245 @@ class CancerDetectionApp:
             Visualizer.show_modal(self.root, "System-Wide Robustness Benchmark", fig)
 
         self._run_async_task("Cross-Model Robustness Analysis", task, on_finish=finish)
+
+    def show_feature_analysis(self, feature_name):
+        """Display comprehensive statistical analysis of a selected feature in the performance analytics tab"""
+        from datetime import datetime
+
+        import numpy as np
+        import pandas as pd
+
+        # Feature descriptions
+        feature_descriptions = {
+            'PSA_peak_height': 'Peak height of PSA biomarker signal - measures the maximum intensity of prostate-specific antigen detection',
+            'min_slope': 'Minimum slope in current-voltage curve - indicates the steepest negative change in electrochemical response',
+            'PSA_concentration_pg_per_ml': 'PSA concentration in pg/mL - quantitative measure of prostate-specific antigen levels',
+            'max_slope': 'Maximum slope in current-voltage curve - indicates the steepest positive change in electrochemical response',
+            'current_at_-0.46V': 'Current measurement at -0.46V - specific voltage point measurement in the electrochemical curve',
+            'min_current': 'Minimum current value - lowest recorded current in the measurement series',
+            'PSA_actual_peak_current': 'Actual peak current for PSA - the maximum current associated with PSA detection',
+            'mean_current': 'Average current across measurements - mean value of all current readings',
+            'area_under_curve': 'Total area under current curve - integrated current response over the measurement period',
+            'peak_height_ratio_PSA_CA125': 'Ratio of PSA to CA125 peak heights - comparative biomarker intensity measurement'
+        }
+
+        # Feature units and ranges
+        feature_info = {
+            'PSA_peak_height': {'unit': 'arbitrary units', 'normal_range': '0-100', 'clinical_significance': 'Higher values may indicate prostate cancer presence'},
+            'min_slope': {'unit': 'μA/V', 'normal_range': '-50 to 0', 'clinical_significance': 'Steep negative slopes suggest strong binding events'},
+            'PSA_concentration_pg_per_ml': {'unit': 'pg/mL', 'normal_range': '0-4.0', 'clinical_significance': 'Values >4.0 ng/mL are concerning for prostate cancer'},
+            'max_slope': {'unit': 'μA/V', 'normal_range': '0-50', 'clinical_significance': 'Positive slopes indicate electrochemical activity'},
+            'current_at_-0.46V': {'unit': 'μA', 'normal_range': '-10 to 10', 'clinical_significance': 'Voltage-specific measurement for biomarker detection'},
+            'min_current': {'unit': 'μA', 'normal_range': '-20 to 0', 'clinical_significance': 'Baseline current measurement'},
+            'PSA_actual_peak_current': {'unit': 'μA', 'normal_range': '0-50', 'clinical_significance': 'Peak response specific to PSA antigen'},
+            'mean_current': {'unit': 'μA', 'normal_range': '-5 to 5', 'clinical_significance': 'Average electrochemical response'},
+            'area_under_curve': {'unit': 'μA·V', 'normal_range': '0-1000', 'clinical_significance': 'Total integrated response strength'},
+            'peak_height_ratio_PSA_CA125': {'unit': 'ratio', 'normal_range': '0-5', 'clinical_significance': 'Comparative biomarker expression levels'}
+        }
+
+        self.tab_analysis.text.config(state=tk.NORMAL)
+        self.tab_analysis.text.delete("1.0", tk.END)
+
+        header = f"COMPREHENSIVE FEATURE ANALYSIS: {feature_name.upper()}\n"
+        header += f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        header += "="*80 + "\n\n"
+
+        self.tab_analysis.text.insert(tk.END, header)
+
+        # Feature description
+        self.tab_analysis.text.insert(tk.END, "📋 FEATURE DESCRIPTION:\n")
+        self.tab_analysis.text.insert(tk.END, f"   {feature_descriptions.get(feature_name, 'Biomarker measurement feature')}\n\n")
+
+        # Technical specifications
+        info = feature_info.get(feature_name, {'unit': 'units', 'normal_range': 'N/A', 'clinical_significance': 'Under evaluation'})
+        self.tab_analysis.text.insert(tk.END, "🔬 TECHNICAL SPECIFICATIONS:\n")
+        self.tab_analysis.text.insert(tk.END, f"   • Unit: {info['unit']}\n")
+        self.tab_analysis.text.insert(tk.END, f"   • Normal Range: {info['normal_range']}\n")
+        self.tab_analysis.text.insert(tk.END, f"   • Clinical Significance: {info['clinical_significance']}\n\n")
+
+        # Get dataset statistics if available
+        dataset_stats = None
+        if self.data_path and hasattr(self, 'data_manager'):
+            try:
+                df = pd.read_csv(self.data_path)
+                if feature_name in df.columns:
+                    feature_data = df[feature_name]
+                    dataset_stats = {
+                        'count': len(feature_data),
+                        'dtype': str(feature_data.dtype),
+                        'null_count': feature_data.isnull().sum(),
+                        'null_percentage': (feature_data.isnull().sum() / len(feature_data)) * 100,
+                        'describe': feature_data.describe(),
+                        'unique_values': feature_data.nunique() if feature_data.dtype == 'object' else None,
+                        'most_frequent': feature_data.mode().iloc[0] if len(feature_data) > 0 else None,
+                        'skewness': feature_data.skew(),
+                        'kurtosis': feature_data.kurtosis()
+                    }
+
+                    # Correlation with target if available
+                    target_cols = ['target', 'label', 'diagnosis', 'cancer', 'class']
+                    target_col = None
+                    for col in target_cols:
+                        if col in df.columns:
+                            target_col = col
+                            break
+
+                    if target_col:
+                        correlation = feature_data.corr(df[target_col])
+                        dataset_stats['correlation_with_target'] = correlation
+                    else:
+                        dataset_stats['correlation_with_target'] = None
+
+            except Exception as e:
+                dataset_stats = {'error': str(e)}
+
+        # Data Info (like df.info())
+        self.tab_analysis.text.insert(tk.END, "📊 DATA INFO (Pandas-style):\n")
+        if dataset_stats and 'error' not in dataset_stats:
+            self.tab_analysis.text.insert(tk.END, f"   • Data Type: {dataset_stats['dtype']}\n")
+            self.tab_analysis.text.insert(tk.END, f"   • Total Observations: {dataset_stats['count']:,}\n")
+            self.tab_analysis.text.insert(tk.END, f"   • Missing Values: {dataset_stats['null_count']:,} ({dataset_stats['null_percentage']:.1f}%)\n")
+            if dataset_stats['unique_values'] is not None:
+                self.tab_analysis.text.insert(tk.END, f"   • Unique Values: {dataset_stats['unique_values']:,}\n")
+            self.tab_analysis.text.insert(tk.END, f"   • Memory Usage: ~{feature_data.memory_usage(deep=True):,} bytes\n")
+        else:
+            self.tab_analysis.text.insert(tk.END, "   • Dataset not available or feature not found in data\n")
+        self.tab_analysis.text.insert(tk.END, "\n")
+
+        # Descriptive Statistics (like df.describe())
+        self.tab_analysis.text.insert(tk.END, "📈 DESCRIPTIVE STATISTICS (Pandas df.describe()):\n")
+        if dataset_stats and 'describe' in dataset_stats:
+            desc = dataset_stats['describe']
+            self.tab_analysis.text.insert(tk.END, f"   • Count: {desc['count']:.0f}\n")
+            self.tab_analysis.text.insert(tk.END, f"   • Mean: {desc['mean']:.4f}\n")
+            self.tab_analysis.text.insert(tk.END, f"   • Std Dev: {desc['std']:.4f}\n")
+            self.tab_analysis.text.insert(tk.END, f"   • Min: {desc['min']:.4f}\n")
+            self.tab_analysis.text.insert(tk.END, f"   • 25% (Q1): {desc['25%']:.4f}\n")
+            self.tab_analysis.text.insert(tk.END, f"   • 50% (Median): {desc['50%']:.4f}\n")
+            self.tab_analysis.text.insert(tk.END, f"   • 75% (Q3): {desc['75%']:.4f}\n")
+            self.tab_analysis.text.insert(tk.END, f"   • Max: {desc['max']:.4f}\n")
+            self.tab_analysis.text.insert(tk.END, f"   • Range: {desc['max'] - desc['min']:.4f}\n")
+            self.tab_analysis.text.insert(tk.END, f"   • IQR: {desc['75%'] - desc['25%']:.4f}\n")
+        else:
+            self.tab_analysis.text.insert(tk.END, "   • Statistical summary not available\n")
+        self.tab_analysis.text.insert(tk.END, "\n")
+
+        # Distribution Analysis
+        self.tab_analysis.text.insert(tk.END, "📉 DISTRIBUTION ANALYSIS:\n")
+        if dataset_stats and 'describe' in dataset_stats:
+            desc = dataset_stats['describe']
+            # Coefficient of variation
+            cv = (desc['std'] / desc['mean']) * 100 if desc['mean'] != 0 else float('inf')
+            self.tab_analysis.text.insert(tk.END, f"   • Coefficient of Variation: {cv:.2f}%\n")
+
+            # Skewness interpretation
+            skewness = dataset_stats['skewness']
+            if abs(skewness) < 0.5:
+                skew_desc = "Approximately symmetric"
+            elif skewness > 0.5:
+                skew_desc = "Right-skewed (positive skew)"
+            else:
+                skew_desc = "Left-skewed (negative skew)"
+            self.tab_analysis.text.insert(tk.END, f"   • Skewness: {skewness:.4f} ({skew_desc})\n")
+
+            # Kurtosis interpretation
+            kurtosis = dataset_stats['kurtosis']
+            if kurtosis < -0.5:
+                kurt_desc = "Platykurtic (flat distribution)"
+            elif kurtosis > 0.5:
+                kurt_desc = "Leptokurtic (peaked distribution)"
+            else:
+                kurt_desc = "Mesokurtic (normal-like)"
+            self.tab_analysis.text.insert(tk.END, f"   • Kurtosis: {kurtosis:.4f} ({kurt_desc})\n")
+
+            # Outliers detection (IQR method)
+            q1, q3 = desc['25%'], desc['75%']
+            iqr = q3 - q1
+            lower_bound = q1 - 1.5 * iqr
+            upper_bound = q3 + 1.5 * iqr
+            outliers = ((feature_data < lower_bound) | (feature_data > upper_bound)).sum()
+            self.tab_analysis.text.insert(tk.END, f"   • Potential Outliers (IQR method): {outliers} ({outliers/len(feature_data)*100:.1f}%)\n")
+            self.tab_analysis.text.insert(tk.END, f"   • Outlier Bounds: [{lower_bound:.4f}, {upper_bound:.4f}]\n")
+        else:
+            self.tab_analysis.text.insert(tk.END, "   • Distribution analysis not available\n")
+        self.tab_analysis.text.insert(tk.END, "\n")
+
+        # Correlation Analysis
+        self.tab_analysis.text.insert(tk.END, "🔗 CORRELATION ANALYSIS:\n")
+        if dataset_stats and dataset_stats.get('correlation_with_target') is not None:
+            corr = dataset_stats['correlation_with_target']
+            corr_strength = "Very Weak" if abs(corr) < 0.1 else "Weak" if abs(corr) < 0.3 else "Moderate" if abs(corr) < 0.5 else "Strong" if abs(corr) < 0.7 else "Very Strong"
+            direction = "positive" if corr > 0 else "negative"
+            self.tab_analysis.text.insert(tk.END, f"   • Correlation with Target: {corr:.4f} ({corr_strength}, {direction})\n")
+
+            # Clinical interpretation
+            if abs(corr) > 0.5:
+                self.tab_analysis.text.insert(tk.END, "     → Strong predictive power for diagnosis\n")
+            elif abs(corr) > 0.3:
+                self.tab_analysis.text.insert(tk.END, "     → Moderate contribution to diagnosis\n")
+            else:
+                self.tab_analysis.text.insert(tk.END, "     → Limited diagnostic value alone\n")
+        else:
+            self.tab_analysis.text.insert(tk.END, "   • Target variable correlation not available\n")
+        self.tab_analysis.text.insert(tk.END, "\n")
+
+        # Current value (if available)
+        current_value = "Not available (no data loaded)"
+        if hasattr(self, 'tab_input') and self.tab_input.features:
+            for item in self.tab_input.tree.get_children():
+                values = self.tab_input.tree.item(item, 'values')
+                if values and len(values) >= 2 and values[0] == feature_name:
+                    current_value = values[1]
+                    break
+
+        self.tab_analysis.text.insert(tk.END, "📊 CURRENT VALUE:\n")
+        self.tab_analysis.text.insert(tk.END, f"   {current_value}\n\n")
+
+        # Feature importance (if model is loaded)
+        self.tab_analysis.text.insert(tk.END, "🎯 FEATURE IMPORTANCE:\n")
+        model_name = self.sidebar.model_var.get()
+        model = self.model_manager.load_model(model_name)
+        if model is not None:
+            try:
+                importance_data = self.model_manager.get_shap_data(model_name, self.data_path)
+                if importance_data:
+                    feature_importances = dict(importance_data)
+                    if feature_name in feature_importances:
+                        imp_value = feature_importances[feature_name]
+                        # Normalize to percentage (SHAP values can be negative, so we take absolute and scale)
+                        max_imp = max(abs(v) for v in feature_importances.values())
+                        if max_imp > 0:
+                            imp_percent = (abs(imp_value) / max_imp) * 100
+                        else:
+                            imp_percent = 0
+                        self.tab_analysis.text.insert(tk.END, f"   • {model_name}: {imp_percent:.2f}%\n")
+
+                        # Interpret importance
+                        if imp_percent > 20:
+                            self.tab_analysis.text.insert(tk.END, "     → High importance - strongly influences predictions\n")
+                        elif imp_percent > 10:
+                            self.tab_analysis.text.insert(tk.END, "     → Moderate importance - contributes to decisions\n")
+                        elif imp_percent > 5:
+                            self.tab_analysis.text.insert(tk.END, "     → Low importance - minimal influence\n")
+                        else:
+                            self.tab_analysis.text.insert(tk.END, "     → Very low importance - negligible effect\n")
+                    else:
+                        self.tab_analysis.text.insert(tk.END, f"   • {model_name}: Feature not found in model\n")
+                else:
+                    self.tab_analysis.text.insert(tk.END, f"   • {model_name}: Importance data unavailable\n")
+            except Exception as e:
+                self.tab_analysis.text.insert(tk.END, f"   • {model_name}: Error calculating importance ({str(e)})\n")
+        else:
+            self.tab_analysis.text.insert(tk.END, f"   • {model_name}: Model not loaded\n")
+
+        self.tab_analysis.text.insert(tk.END, "\n" + "="*80 + "\n")
+        self.tab_analysis.text.insert(tk.END, "💡 CLINICAL & STATISTICAL NOTES:\n")
+        self.tab_analysis.text.insert(tk.END, "   • Feature values should be interpreted in clinical context\n")
+        self.tab_analysis.text.insert(tk.END, "   • Multiple biomarkers provide more reliable diagnosis\n")
+        self.tab_analysis.text.insert(tk.END, "   • Consult laboratory reference ranges for specific thresholds\n")
+        self.tab_analysis.text.insert(tk.END, "   • Statistical measures help understand data distribution and quality\n")
+        self.tab_analysis.text.insert(tk.END, "   • Correlation indicates predictive relationship with diagnosis\n")
+        self.tab_analysis.text.config(state=tk.DISABLED)
 
     def show_pdp(self):
         if not self._require_data("Partial Dependence"): return
