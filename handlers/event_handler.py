@@ -69,21 +69,27 @@ class EventHandler:
         sidebar.model_var.trace('w', self.handle_model_change)
 
     # Event handlers
-    def handle_predict_single(self):
+    def handle_predict_single(self, silent=False):
         """Handle single prediction."""
 
         model_name = self.layout_manager.sidebar.model_var.get()
         if not self._require_model(model_name):
             return
 
+        if not silent:
+            # Immediate feedback for manual button click
+            self.layout_manager.update_status(f"AI: Processing clinical profile...", "orange")
+            self.root.update_idletasks() # Force UI refresh
+
         # Get input data from table
         input_data = self.layout_manager.tab_input.get_table_data()
         if not input_data:
-            messagebox.showwarning("Input Required", "Please enter biomarker values in the Input Features tab.")
+            if not silent: 
+                messagebox.showwarning("Input Required", "Please enter biomarker values in the Input Features tab.")
             return
 
         # Run prediction
-        self.model_controller.predict_single(input_data)
+        self.model_controller.predict_single(input_data, silent=silent)
 
     def handle_predict_file(self):
         """Handle batch file prediction."""
@@ -194,38 +200,53 @@ class EventHandler:
         tree = self.layout_manager.get_components()['tab_input'].tree
 
         # Get current value
-        current_value = tree.item(item, 'values')[col_index]
+        current_item = tree.item(item)
+        current_value = current_item['values'][col_index]
 
         # Create entry widget for editing
         x, y, width, height = tree.bbox(item, column=col_index)
-        entry = tk.Entry(tree, width=width//8)  # Approximate character width
+        entry = tk.Entry(tree, font=("Inter", 9))
         entry.place(x=x, y=y, width=width, height=height)
         entry.insert(0, current_value)
         entry.focus()
+        entry.select_range(0, tk.END)
 
         def save_edit(event=None):
-            new_value = entry.get()
+            if not entry.winfo_exists(): return
+            new_value = entry.get().strip()
             try:
-                # Validate numeric input
+                # 1. Validate numeric input (supports -, ., e)
+                if not new_value: 
+                    new_value = "0.0"
                 float(new_value)
-                # Update tree
+                
+                # 2. Update tree
                 values = list(tree.item(item, 'values'))
                 values[col_index] = new_value
                 tree.item(item, values=values)
-                # Update internal data
+                
+                # 3. Update internal dataset
                 feature_name = values[0]
                 self.layout_manager.tab_input.update_feature_value(feature_name, new_value)
+                
+                # 4. REAL-TIME AI UPDATE
+                # Automatically trigger prediction in the background
+                self.handle_predict_single(silent=True)
+                
             except ValueError:
-                messagebox.showerror("Invalid Input", "Please enter a numeric value.")
+                # Revert or ignore invalid non-numeric strings
+                pass
             finally:
-                entry.destroy()
+                if entry.winfo_exists():
+                    entry.destroy()
 
         def cancel_edit(event=None):
-            entry.destroy()
+            if entry.winfo_exists():
+                entry.destroy()
 
         entry.bind('<Return>', save_edit)
         entry.bind('<Escape>', cancel_edit)
-        entry.bind('<FocusOut>', cancel_edit)
+        entry.bind('<FocusOut>', save_edit) # Save on click-away
 
     def _set_default_value(self, item):
         """Set tree cell to default value."""

@@ -202,17 +202,20 @@ class ModelController:
             # Update Dashboard Metrics
             avg_risk = np.mean(risks) * 100
             avg_conf = np.mean(confidences) * 100
-            triage = "Review Required" if avg_risk > 50 else "Stable"
+            triage = "Action Required" if pos_count > 0 else "Monitoring"
             
+            # Professional Batch Status mapping
+            batch_status = f"Batch: {pos_count} Detected" if pos_count > 0 else "Batch: All Stable"
+
             self.layout_manager.update_metrics(
                 accuracy=avg_conf, 
                 precision=avg_risk, 
-                status=f"Batch: {pos_count} Positives",
+                status=batch_status,
                 triage=triage,
                 consensus=consensus_str
             )
 
-            status_msg = f"Batch prediction: {pos_count}/{total_count} positive cases"
+            status_msg = f"Batch Complete: {pos_count} clinical positives identified in {total_count} records"
             self.layout_manager.update_status(status_msg, "#10B981")
             self.error_handler.notify(status_msg, type='success')
 
