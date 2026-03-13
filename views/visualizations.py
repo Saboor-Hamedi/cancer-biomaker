@@ -1306,3 +1306,27 @@ class Visualizer:
 
         plt.tight_layout()
         return fig
+
+    @staticmethod
+    def plot_feature_distribution(df, feature_name):
+        """Plot the distribution of a specific feature, split by cancer risk class."""
+        fig = Figure(figsize=(10, 6))
+        ax = fig.add_subplot(111)
+
+        # Create Status column for legend
+        plot_df = df.copy()
+        if 'cancer_risk_class' in plot_df.columns:
+            plot_df['Status'] = plot_df['cancer_risk_class'].map({0: 'Healthy', 1: 'Detected'})
+            sns.histplot(data=plot_df, x=feature_name, hue='Status', kde=True, ax=ax, 
+                         palette={'Healthy': DESIGN_PALETTE['success'], 'Detected': DESIGN_PALETTE['danger']},
+                         alpha=0.5)
+        else:
+            sns.histplot(data=plot_df, x=feature_name, kde=True, ax=ax, color=DESIGN_PALETTE['primary'])
+
+        ax.set_title(f'Biomarker Distribution Profile — {feature_name}', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
+        ax.set_xlabel('Concentration / Signal Value', fontsize=STYLE_CONFIG['label_size'])
+        ax.set_ylabel('Patient Count', fontsize=STYLE_CONFIG['label_size'])
+        ax.grid(True, alpha=0.3)
+        
+        fig.tight_layout(pad=3.0)
+        return fig

@@ -75,3 +75,12 @@ class Sidebar(ttk.Frame):
                    command=self.callbacks.get('viz_violin')).pack(fill=tk.X, padx=8, pady=(2, 2))
         ttk.Button(xai_frame, text="Competitive Robustness",
                    command=self.callbacks.get('viz_robust')).pack(fill=tk.X, padx=8, pady=(2, 8))
+
+    def update_model_info(self, model_name):
+        """Update any sidebar info based on the selected model."""
+        # For now, we can just log it or update a label if we had one.
+        pass
+
+    def clear_input_fields(self):
+        """Reset input fields in the sidebar."""
+        self.sample_qty.set(20)

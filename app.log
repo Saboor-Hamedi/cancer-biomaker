@@ -1,0 +1,25 @@
+2026-03-13 21:13:28,121 [ERROR] utils.error_handler: Dataset Upload failed: name 'tk' is not defined
+2026-03-13 21:17:19,161 [ERROR] utils.error_handler: Dataset Upload failed: name 'np' is not defined
+2026-03-13 21:18:14,986 [ERROR] utils.error_handler: Dataset Upload failed: name 'np' is not defined
+2026-03-13 21:19:50,009 [ERROR] utils.error_handler: Dataset Upload failed: name 'np' is not defined
+2026-03-13 21:20:56,470 [ERROR] utils.error_handler: Dataset Upload failed: name 'np' is not defined
+2026-03-13 21:23:33,643 [ERROR] utils.error_handler: Explanation Generation failed: _path_exists: path should be string, bytes, os.PathLike or integer, not NoneType
+2026-03-13 21:30:35,943 [ERROR] utils.error_handler: Explanation Generation failed: _path_exists: path should be string, bytes, os.PathLike or integer, not NoneType
+2026-03-13 21:35:54,686 [INFO] logic.model_manager: Trained and saved: Random Forest
+2026-03-13 21:35:54,758 [INFO] logic.model_manager: Trained and saved: Logistic Regression
+2026-03-13 21:35:54,783 [INFO] logic.model_manager: Trained and saved: SVM
+2026-03-13 21:35:56,985 [INFO] logic.model_manager: Trained and saved: XGBoost
+2026-03-13 21:37:09,925 [INFO] logic.model_manager: Trained and saved: GNN
+2026-03-13 21:42:20,956 [INFO] logic.model_manager: Trained and saved: Random Forest
+2026-03-13 21:42:21,026 [INFO] logic.model_manager: Trained and saved: Logistic Regression
+2026-03-13 21:42:21,046 [INFO] logic.model_manager: Trained and saved: SVM
+2026-03-13 21:42:23,337 [INFO] logic.model_manager: Trained and saved: XGBoost
+2026-03-13 21:43:50,875 [INFO] logic.model_manager: Trained and saved: GNN
+2026-03-13 21:44:30,135 [INFO] logic.model_manager: Trained and saved: Random Forest
+2026-03-13 21:44:30,205 [INFO] logic.model_manager: Trained and saved: Logistic Regression
+2026-03-13 21:44:30,224 [INFO] logic.model_manager: Trained and saved: SVM
+2026-03-13 21:44:30,388 [INFO] logic.model_manager: Trained and saved: XGBoost
+2026-03-13 21:45:58,203 [INFO] logic.model_manager: Trained and saved: Random Forest
+2026-03-13 21:45:58,279 [INFO] logic.model_manager: Trained and saved: Logistic Regression
+2026-03-13 21:45:58,297 [INFO] logic.model_manager: Trained and saved: SVM
+2026-03-13 21:46:00,527 [INFO] logic.model_manager: Trained and saved: XGBoost

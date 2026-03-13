@@ -7,6 +7,7 @@ class DataManager:
         self.data_path = data_path
         self.uploaded_df = None
         self.prediction_results = None
+        self.mean_values = None
 
     def load_excel(self, file_path, sheet_name=None):
         try:
