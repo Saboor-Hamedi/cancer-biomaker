@@ -60,28 +60,31 @@ class Visualizer:
 
     @staticmethod
     def show_modal(parent, title, fig):
+        """Open a clean, centered chart window with matplotlib's native toolbar."""
         modal = tk.Toplevel(parent)
         modal.title(title)
-        Visualizer.center_window(modal, 900, 700)
+        modal.configure(bg='#FFFFFF')
+        Visualizer.center_window(modal, 1050, 760)
 
+        # Canvas fills the window
         canvas = FigureCanvasTkAgg(fig, master=modal)
         canvas.draw()
+        canvas.get_tk_widget().configure(highlightthickness=0)
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
+        # Native matplotlib toolbar at the bottom
         toolbar = NavigationToolbar2Tk(canvas, modal)
         toolbar.update()
 
-        # Track the modal for cleanup
+        # Tracking & cleanup
         Visualizer._open_modals.append(modal)
 
-        # Remove from tracking when closed
-        def on_modal_close():
+        def _close():
             if modal in Visualizer._open_modals:
                 Visualizer._open_modals.remove(modal)
             modal.destroy()
 
-        modal.protocol("WM_DELETE_WINDOW", on_modal_close)
-
+        modal.protocol('WM_DELETE_WINDOW', _close)
         return modal
 
     @staticmethod
@@ -1104,14 +1107,43 @@ class Visualizer:
         plot_features = features[:4]
         fig = Figure(figsize=(12, 8))
 
+        # Identify target column dynamically
+        target_col = 'cancer_risk_class'
+        if target_col not in df.columns:
+            # Fallback to 'Prediction' (from batch) or other common names
+            fallbacks = ['Prediction', 'target', 'Label', 'Status', 'cancer_risk']
+            for fb in fallbacks:
+                if fb in df.columns:
+                    target_col = fb
+                    break
+        
+        if target_col not in df.columns:
+            # If no target column found, we can't do a split violin easily
+            # We'll create a dummy one so the plot still works
+            plot_df = df.copy()
+            plot_df['Status'] = 'Population'
+            target_col = 'Status'
+            split_val = False
+        else:
+            plot_df = df.copy()
+            # Map values to clinical terms if they are numeric 0/1
+            if plot_df[target_col].dtype in [np.int64, np.int32, float]:
+                plot_df['Status'] = plot_df[target_col].map({0: 'Healthy', 1: 'Detected'}).fillna('Unknown')
+            else:
+                plot_df['Status'] = plot_df[target_col]
+            split_val = True
+
         # Melt dataframe for seaborn
-        melted = df.melt(id_vars='cancer_risk_class', value_vars=plot_features)
-        melted['Status'] = melted['cancer_risk_class'].map({0: 'Healthy', 1: 'Detected'})
+        melted = plot_df.melt(id_vars='Status', value_vars=plot_features)
 
         ax = fig.add_subplot(111)
-        sns.violinplot(data=melted, x='variable', y='value', hue='Status', split=True,
-                       palette={'Healthy': DESIGN_PALETTE['success'], 'Detected': DESIGN_PALETTE['danger']},
-                       inner="quartile", ax=ax, alpha=0.7)
+        # 'split' was renamed 'dodge' (or removed) in newer seaborn versions
+        import seaborn as _sns
+        _sns_version = tuple(int(x) for x in _sns.__version__.split('.')[:2])
+        split_kwarg = {'split': split_val} if _sns_version < (0, 13) else {}
+        sns.violinplot(data=melted, x='variable', y='value', hue='Status',
+                       palette={'Healthy': DESIGN_PALETTE['success'], 'Detected': DESIGN_PALETTE['danger'], 'Population': DESIGN_PALETTE['primary']},
+                       inner="quartile", ax=ax, alpha=0.7, **split_kwarg)
 
         ax.set_title('Biomarker Range Separation (Normal vs Detected)', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
         ax.set_xlabel('Clinical Biomarkers', fontsize=STYLE_CONFIG['label_size'])
@@ -1412,8 +1444,18 @@ class Visualizer:
 
         # Create Status column for legend
         plot_df = df.copy()
-        if 'cancer_risk_class' in plot_df.columns:
-            plot_df['Status'] = plot_df['cancer_risk_class'].map({0: 'Healthy', 1: 'Detected'})
+        target_col = 'cancer_risk_class'
+        if target_col not in plot_df.columns:
+            for fb in ['Prediction', 'target', 'Status']:
+                if fb in plot_df.columns:
+                    target_col = fb
+                    break
+        
+        if target_col in plot_df.columns:
+            if plot_df[target_col].dtype in [np.int64, np.int32, float]:
+                plot_df['Status'] = plot_df[target_col].map({0: 'Healthy', 1: 'Detected'}).fillna('Unknown')
+            else:
+                plot_df['Status'] = plot_df[target_col]
             sns.histplot(data=plot_df, x=feature_name, hue='Status', kde=True, ax=ax, 
                          palette={'Healthy': DESIGN_PALETTE['success'], 'Detected': DESIGN_PALETTE['danger']},
                          alpha=0.5, multiple="stack")
@@ -1441,4 +1483,98 @@ class Visualizer:
             "identifies diagnostic ambiguity, while separation indicates high predictive power.")
 
         fig.tight_layout(pad=4.0)
+        return fig
+
+    @staticmethod
+    def plot_model_selection_report(leaderboard):
+        """Premium multi-panel clinical leadership report with percentage labels."""
+        n = len(leaderboard)
+        models     = [item['model'] for item in leaderboard]
+        accuracies = [item['accuracy'] * 100 for item in leaderboard]
+        f1_scores  = [item['f1'] * 100 for item in leaderboard]
+        scores     = [item['rank_score'] * 100 for item in leaderboard]
+
+        # Consistent colour scheme: winner gets primary, rest get neutral
+        bar_colors  = [DESIGN_PALETTE['primary'] if i == 0 else DESIGN_PALETTE['neutral'] for i in range(n)]
+        acc_colors  = [DESIGN_PALETTE['success'] if i == 0 else '#93C5FD' for i in range(n)]
+        f1_colors   = [DESIGN_PALETTE['secondary'] if i == 0 else '#C4B5FD' for i in range(n)]
+
+        fig = Figure(figsize=(14, 9))
+        fig.patch.set_facecolor('#F8FAFC')
+
+        # ── Helper: annotate bars with % ────────────────────────────────
+        def _annotate_bars(ax_ref, bar_list, vals, inside=False):
+            for bar, val in zip(bar_list, vals):
+                w = bar.get_width()
+                y = bar.get_y() + bar.get_height() / 2
+                x_pos = w - 3 if inside else w + 1
+                ha    = 'right' if inside else 'left'
+                clr   = 'white' if inside else '#1E293B'
+                ax_ref.text(x_pos, y, f'{val:.1f}%', va='center', ha=ha,
+                            fontsize=10, fontweight='bold', color=clr)
+
+        y_pos = np.arange(n)
+
+        # ── Panel 1 (left): Strength Score ─────────────────────────────
+        ax1 = fig.add_subplot(131)
+        bars1 = ax1.barh(y_pos, scores, color=bar_colors, alpha=0.85, height=0.55)
+        _annotate_bars(ax1, bars1, scores, inside=True)
+        ax1.set_xlim(0, 115)
+        ax1.set_yticks(y_pos)
+        ax1.set_yticklabels(models, fontsize=10.5, fontweight='bold')
+        ax1.invert_yaxis()
+        ax1.set_title('Strength Score\n(Acc + F1 avg)', fontsize=11, fontweight='bold',
+                      color=DESIGN_PALETTE['primary'], pad=10)
+        ax1.set_xlabel('%', fontsize=9)
+        ax1.grid(axis='x', linestyle='--', alpha=0.25)
+        ax1.set_facecolor('#F8FAFC')
+        ax1.spines[['top', 'right']].set_visible(False)
+
+        # ── Panel 2 (centre): Accuracy ─────────────────────────────────
+        ax2 = fig.add_subplot(132)
+        bars2 = ax2.barh(y_pos, accuracies, color=acc_colors, alpha=0.85, height=0.55)
+        _annotate_bars(ax2, bars2, accuracies, inside=True)
+        ax2.set_xlim(0, 115)
+        ax2.set_yticks(y_pos)
+        ax2.set_yticklabels([], fontsize=10)
+        ax2.invert_yaxis()
+        ax2.set_title('Accuracy\n(Test Set)', fontsize=11, fontweight='bold',
+                      color=DESIGN_PALETTE['success'], pad=10)
+        ax2.set_xlabel('%', fontsize=9)
+        ax2.grid(axis='x', linestyle='--', alpha=0.25)
+        ax2.set_facecolor('#F8FAFC')
+        ax2.spines[['top', 'right']].set_visible(False)
+
+        # ── Panel 3 (right): F1-Score ──────────────────────────────────
+        ax3 = fig.add_subplot(133)
+        bars3 = ax3.barh(y_pos, f1_scores, color=f1_colors, alpha=0.85, height=0.55)
+        _annotate_bars(ax3, bars3, f1_scores, inside=True)
+        ax3.set_xlim(0, 115)
+        ax3.set_yticks(y_pos)
+        ax3.set_yticklabels([], fontsize=10)
+        ax3.invert_yaxis()
+        ax3.set_title('F1-Score\n(Clinical Reliability)', fontsize=11, fontweight='bold',
+                      color=DESIGN_PALETTE['secondary'], pad=10)
+        ax3.set_xlabel('%', fontsize=9)
+        ax3.grid(axis='x', linestyle='--', alpha=0.25)
+        ax3.set_facecolor('#F8FAFC')
+        ax3.spines[['top', 'right']].set_visible(False)
+
+        # ── Super-title & Winner Banner ─────────────────────────────────
+        winner = models[0]
+        fig.suptitle(
+            f'Clinical Model Leadership Report\nRecommended: {winner}  —  Score: {scores[0]:.1f}%  |  Acc: {accuracies[0]:.1f}%  |  F1: {f1_scores[0]:.1f}%',
+            fontsize=13, fontweight='bold', color='#1E293B', y=1.01
+        )
+
+        # ── Explanatory note ───────────────────────────────────────────
+        note_text = (
+            "Rank Methodology: The Strength Score is the average of Accuracy and F1-Score measured on a "
+            "held-out 20% test split. The top-ranked model is the most clinically reliable for this dataset."
+        )
+        fig.text(0.5, -0.03, note_text, ha='center', fontsize=9, style='italic',
+                 color='#475569', wrap=True,
+                 bbox=dict(facecolor='#F1F5F9', alpha=0.8, edgecolor='#E2E8F0', boxstyle='round,pad=0.8'))
+
+        fig.tight_layout(pad=3.5)
         return fig

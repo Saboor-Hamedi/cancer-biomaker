@@ -538,11 +538,27 @@ class VisualizationController:
         if not self._require_data("Clinical Violins"):
             return
 
-        df = self.data_manager.uploaded_df
+        # Prefer the full training dataset (has cancer_risk_class labels)
+        # Fall back to uploaded_df if training data is unavailable
+        df = None
+        if self.data_manager.data_path:
+            try:
+                df = self.model_manager.get_dataset_summary(self.data_manager.data_path)
+            except Exception:
+                pass
+        if df is None:
+            df = self.data_manager.uploaded_df
+
         features = self.model_manager.feature_names
 
-        fig = Visualizer.plot_biomarker_violins(df, features)
-        Visualizer.show_modal(self.layout_manager.root, "Clinical Biomarker Distributions (Violin Plots)", fig)
+        def task():
+            return Visualizer.plot_biomarker_violins(df, features)
+
+        self._run_async_task(
+            "Biomarker Violins",
+            task,
+            on_finish=lambda fig: Visualizer.show_modal(self.layout_manager.root, "Clinical Biomarker Distributions (Violin Plots)", fig) if fig else None
+        )
 
     def show_detailed_metrics(self):
         """Show detailed clinical performance report."""
@@ -768,3 +784,30 @@ class VisualizationController:
 
         fig = Visualizer.plot_feature_distribution(df, feature_name)
         Visualizer.show_modal(self.layout_manager.root, f"Biomarker Distribution Profile — {feature_name}", fig)
+
+    def show_model_leadership_report(self):
+        """Show the unified clinical leadership report for model selection."""
+        if not self._require_data("Model Selection Analysis"):
+            return
+
+        def task():
+            leaderboard = self.model_manager.get_model_leaderboard(self.data_manager.data_path)
+            # Log winner to analysis tab
+            winner = leaderboard[0]['model']
+            log_content = "MODEL STRENGTH LEADERBOARD\n"
+            log_content += f"{'RANK':<5} {'MODEL':<25} {'ACCURACY':<12} {'ROBUSTNESS':<12}\n"
+            log_content += "-"*60 + "\n"
+            for i, entry in enumerate(leaderboard):
+                log_content += f"#{i+1:<4} {entry['model']:<25} {entry['accuracy']*100:>10.2f}% {entry['rank_score']*100:>10.2f}%\n"
+            
+            log_content += f"\n🏆 CLINICAL RECOMMENDATION: Based on these metrics, the {winner} model "
+            log_content += "demonstrates the most stable diagnostic performance on this dataset."
+            
+            self.layout_manager.root.after(0, lambda: self._update_analysis_text("Model Leadership Audit", log_content))
+            return Visualizer.plot_model_selection_report(leaderboard)
+
+        self._run_async_task(
+            "Model Audit",
+            task,
+            on_finish=lambda fig: Visualizer.show_modal(self.layout_manager.root, "Clinical Model Selection Report", fig) if fig else None
+        )

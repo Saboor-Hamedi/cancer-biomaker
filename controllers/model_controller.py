@@ -60,27 +60,34 @@ class ModelController:
             except (TypeError, ValueError):
                 raise ValueError(f"Invalid value for '{k}': '{v}'. All biomarker values must be numeric.")
 
-        model = self.model_manager.load_model(model_name)
-        if not self.error_handler.require_model(model, model_name):
-            return
-
+        # Route to Ensemble or Individual Model
+        is_ensemble = "AI Ensemble" in model_name
+        models_list = self.layout_manager.callbacks.get('models', ["Random Forest", "Logistic Regression", "SVM"])
+        
         try:
-            # 1. Primary Model Prediction
-            prediction, conf, risk = self.model_manager.predict_single(model_name, feature_values)
+            if is_ensemble:
+                prediction, conf, risk = self.model_manager.predict_ensemble(feature_values, is_single=True)
+                # For Ensemble, consensus is baked into 'conf' (agreement %)
+                total_models = len([m for m in models_list if "AI Ensemble" not in m])
+                agree_count = int(round(conf * total_models))
+                consensus_str = f"{agree_count}/{total_models} Models"
+            else:
+                # 1. Primary Model Prediction
+                prediction, conf, risk = self.model_manager.predict_single(model_name, feature_values)
 
-            # 2. Calculate Consensus among all available models
-            models_list = self.layout_manager.callbacks.get('models', ["Random Forest", "Logistic Regression", "SVM"])
-            votes = []
-            for m_name in models_list:
-                try:
-                    p, _, _ = self.model_manager.predict_single(m_name, feature_values)
-                    votes.append(p)
-                except:
-                    continue
-            
-            total_models = len(votes)
-            agree_count = votes.count(prediction)
-            consensus_str = f"{agree_count}/{total_models} Models"
+                # 2. Calculate Consensus among individual models
+                votes = []
+                for m_name in models_list:
+                    if "AI Ensemble" in m_name: continue
+                    try:
+                        p, _, _ = self.model_manager.predict_single(m_name, feature_values)
+                        votes.append(p)
+                    except:
+                        continue
+                
+                total_models = len(votes)
+                agree_count = votes.count(prediction)
+                consensus_str = f"{agree_count}/{total_models} Models"
 
             result = {
                 'prediction': prediction,
@@ -144,29 +151,41 @@ class ModelController:
             self.layout_manager.update_status(f"Predicting with {model_name}...", "orange")
 
             df = self.data_manager.uploaded_df.copy()
+            models_list = self.layout_manager.callbacks.get('models', ["Random Forest", "Logistic Regression", "SVM"])
+            is_ensemble = "AI Ensemble" in model_name
             
-            # 1. Primary Model Prediction
-            predictions, confidences, risks = self.model_manager.predict_batch(model_name, df)
+            # 1. Prediction routing
+            if is_ensemble:
+                predictions, confidences, risks = self.model_manager.predict_ensemble(df, is_single=False)
+                # total individual models (excluding ensemble entry)
+                total_indiv = len([m for m in models_list if "AI Ensemble" not in m])
+                agreement_counts = confidences * total_indiv
+            else:
+                predictions, confidences, risks = self.model_manager.predict_batch(model_name, df)
 
             # 2. Consensus Calculation
-            models_list = self.layout_manager.callbacks.get('models', ["Random Forest", "Logistic Regression", "SVM"])
-            batch_votes = [] # List of prediction arrays
-            for m_name in models_list:
-                try:
-                    p, _, _ = self.model_manager.predict_batch(m_name, df)
-                    batch_votes.append(p)
-                except:
-                    continue
-            
-            # Calculate per-sample agreement with primary prediction
-            agreement_counts = np.zeros(len(predictions))
-            for v in batch_votes:
-                agreement_counts += (v == predictions).astype(int)
-            
-            avg_consensus = np.mean(agreement_counts)
-            total_models = len(batch_votes)
-            # Use g format to remove trailing .0 but keep other decimals
-            consensus_str = f"{avg_consensus:g}/{total_models} Models"
+            if is_ensemble:
+                avg_consensus = np.mean(agreement_counts)
+                total_models = len(models_list) - 1
+                consensus_str = f"{avg_consensus:g}/{total_models} Models"
+            else:
+                batch_votes = [] # List of prediction arrays
+                for m_name in models_list:
+                    if "AI Ensemble" in m_name: continue
+                    try:
+                        p, _, _ = self.model_manager.predict_batch(m_name, df)
+                        batch_votes.append(p)
+                    except:
+                        continue
+                
+                # Calculate per-sample agreement with primary prediction
+                agreement_counts = np.zeros(len(predictions))
+                for v in batch_votes:
+                    agreement_counts += (v == predictions).astype(int)
+                
+                avg_consensus = np.mean(agreement_counts)
+                total_models = len(batch_votes)
+                consensus_str = f"{avg_consensus:g}/{total_models} Models"
 
             # Add results to dataframe
             df['Prediction'] = ['POSITIVE' if p == 1 else 'NEGATIVE' for p in predictions]

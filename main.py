@@ -109,6 +109,12 @@ class CancerDetectionApp:
             self.layout_manager
         )
 
+        # Connect console to error handler
+        self.error_handler.console_callback = self.layout_manager.log
+        
+        # Initial welcome log
+        self.layout_manager.log("System initialization complete. Monitoring clinical diagnostics.", level="SUCCESS")
+
         # Apply Styles
         apply_styles()
 
@@ -125,6 +131,7 @@ class CancerDetectionApp:
             'viz_dist': self.visualization_controller.show_population_distribution,
             'viz_violin': self.visualization_controller.show_biomarker_violins,
             'viz_robust': self.visualization_controller.show_model_robustness_benchmark,
+            'viz_leadership': self.visualization_controller.show_model_leadership_report,
             'viz_pr_thresh': self.visualization_controller.show_pr_threshold,
             'edit_input_value': self.event_handler.handle_tree_double_click
         }

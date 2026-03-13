@@ -7,6 +7,7 @@ import tkinter as tk
 from ui.components.dashboard import Dashboard
 from ui.components.sidebar import Sidebar
 from ui.components.tabs import AnalysisTab, DataTab, InputTab
+from ui.components.console import ConsoleTab
 from logic.model_manager import HAS_XGB
 
 
@@ -25,6 +26,7 @@ class LayoutManager:
         self.tab_input = None
         self.tab_data = None
         self.tab_analysis = None
+        self.tab_console = None
 
     def setup_layout(self):
         """Set up the main application layout."""
@@ -32,6 +34,9 @@ class LayoutManager:
         model_list = ["Random Forest", "Logistic Regression", "SVM"]
         if HAS_XGB:
             model_list.append("XGBoost")
+        
+        # Add Ensemble Mode
+        model_list.append("AI Ensemble (Majority Vote)")
 
         # Update callbacks with model list
         self.callbacks['models'] = model_list
@@ -53,6 +58,12 @@ class LayoutManager:
         self.tab_analysis = AnalysisTab(self.dashboard.analysis_tab)
         self.tab_analysis.pack(fill=tk.BOTH, expand=True)
 
+        self.tab_console = ConsoleTab(self.dashboard.log_tab_frame)
+        self.tab_console.pack(fill=tk.BOTH, expand=True)
+        
+        # Link console back to dashboard for easy logging
+        self.dashboard.console = self.tab_console
+
         # Bind events
         self.tab_input.tree.bind("<Double-1>", self.callbacks.get('edit_input_value', lambda e: None))
 
@@ -64,7 +75,8 @@ class LayoutManager:
             'notebook': self.dashboard.notebook,
             'tab_input': self.tab_input,
             'tab_data': self.tab_data,
-            'tab_analysis': self.tab_analysis
+            'tab_analysis': self.tab_analysis,
+            'tab_console': self.tab_console
         }
 
     def refresh_input_features(self, features, first_row=None):
@@ -114,3 +126,8 @@ class LayoutManager:
         """Update the status bar."""
         if self.dashboard:
             self.dashboard.update_status(message, color)
+
+    def log(self, message, level="INFO"):
+        """Log a message to the persistent system console."""
+        if self.dashboard:
+            self.dashboard.log_message(message, level)

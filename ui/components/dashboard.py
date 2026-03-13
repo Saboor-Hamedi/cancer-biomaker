@@ -62,10 +62,12 @@ class Dashboard(ttk.Frame):
         self.input_tab = ttk.Frame(self.notebook)
         self.data_tab = ttk.Frame(self.notebook)
         self.analysis_tab = ttk.Frame(self.notebook)
+        self.log_tab_frame = ttk.Frame(self.notebook)
 
         self.notebook.add(self.input_tab, text="Input Features", sticky='nsew')
         self.notebook.add(self.data_tab, text="Data View", sticky='nsew')
         self.notebook.add(self.analysis_tab, text="Performance Analysis", sticky='nsew')
+        self.notebook.add(self.log_tab_frame, text="System Logs", sticky='nsew')
 
     def _create_metric_card(self, parent, title, value, color):
         card = ttk.Frame(parent, style='Card.TFrame', padding=15)
@@ -91,3 +93,8 @@ class Dashboard(ttk.Frame):
     def update_status(self, text, color="#3B82F6"):
         # Map simple color names to hex if needed or pass directly
         self.status_label.config(text=text, foreground=color)
+
+    def log_message(self, message, level="INFO"):
+        """Log a message to the internal console tab."""
+        if hasattr(self, 'console'):
+            self.console.log(message, level)

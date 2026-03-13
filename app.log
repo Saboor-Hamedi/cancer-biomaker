@@ -25,3 +25,11 @@
 2026-03-13 21:46:00,527 [INFO] logic.model_manager: Trained and saved: XGBoost
 2026-03-13 21:47:31,994 [INFO] logic.model_manager: Trained and saved: GNN
 2026-03-13 22:11:24,578 [INFO] utils.error_handler: Batch prediction complete. Processed 500 samples.
+2026-03-13 22:41:22,174 [ERROR] utils.error_handler: Batch Prediction failed: name 'models_list' is not defined
+2026-03-13 22:41:27,001 [ERROR] utils.error_handler: Batch Prediction failed: name 'models_list' is not defined
+2026-03-13 22:41:31,675 [ERROR] utils.error_handler: Batch Prediction failed: name 'models_list' is not defined
+2026-03-13 22:41:40,049 [ERROR] utils.error_handler: Batch Prediction failed: name 'models_list' is not defined
+2026-03-13 22:41:54,666 [ERROR] utils.error_handler: Model Audit Task failed: ModelManager.get_raw_training_set() got an unexpected keyword argument 'train'
+2026-03-13 22:42:04,542 [ERROR] utils.error_handler: Model Audit Task failed: ModelManager.get_raw_training_set() got an unexpected keyword argument 'train'
+2026-03-13 22:49:41,836 [ERROR] utils.error_handler: Model Audit Task failed: ModelManager.get_raw_training_set() got an unexpected keyword argument 'train'
+2026-03-13 22:54:03,216 [ERROR] utils.error_handler: Model Audit Task failed: ModelManager.get_raw_training_set() got an unexpected keyword argument 'train'

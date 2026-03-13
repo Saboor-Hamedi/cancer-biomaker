@@ -70,6 +70,7 @@ class MenuHandler:
         analytics_menu.add_command(label="Detailed Clinical Metrics", command=self.visualization_controller.show_detailed_metrics)
         analytics_menu.add_command(label="Cross-Model Comparison", command=self.visualization_controller.show_model_comparison)
         analytics_menu.add_command(label="Accuracy Comparison", command=self.visualization_controller.show_accuracy_comparison)
+        analytics_menu.add_command(label="Model Leadership Selection Report", command=self.visualization_controller.show_model_leadership_report)
         analytics_menu.add_separator()
         analytics_menu.add_command(label="Correlation Heatmap", command=self.visualization_controller.show_correlation_heatmap)
         analytics_menu.add_command(label="Reliability Chart", command=self.visualization_controller.show_calibration_curve)
@@ -94,6 +95,7 @@ class MenuHandler:
         stats_menu.add_command(label="Permutation Feature Importance", command=self.visualization_controller.show_permutation_importance)
         stats_menu.add_command(label="SHAP Feature Analysis", command=self.visualization_controller.show_shap_analysis)
         stats_menu.add_command(label="Model Robustness Analysis", command=self.visualization_controller.show_model_robustness_benchmark)
+        stats_menu.add_command(label="Clinical Leadership Report", command=self.visualization_controller.show_model_leadership_report)
         stats_menu.add_command(label="Sensitivity Analysis", command=self.visualization_controller.show_sensitivity_analysis)
         menubar.add_cascade(label="Statistics", menu=stats_menu)
 

@@ -12,10 +12,14 @@ class ErrorHandler:
     def __init__(self, root=None, log_instance=None):
         self.root = root
         self.log = log_instance or logging.getLogger(__name__)
+        self.console_callback = None
 
     def log_and_notify(self, operation, error, title="Error", show_dialog=True):
         error_msg = f"{operation} failed: {str(error)}"
         self.log.error(error_msg)
+
+        if self.console_callback:
+            self.console_callback(error_msg, level='ERROR')
 
         if show_dialog:
             self.notify(error_msg, type='error')
@@ -26,6 +30,10 @@ class ErrorHandler:
             try:
                 from ui.components.toast import show_toast
                 show_toast(self.root, message, type=type)
+                
+                # Also log to system console if available
+                if self.console_callback:
+                    self.console_callback(message, level=type.upper())
             except Exception as e:
                 self.log.error(f"Failed to show toast: {e}")
                 # Fallback to standard messagebox for critical errors if toast fails

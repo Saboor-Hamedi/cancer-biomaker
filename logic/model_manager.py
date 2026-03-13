@@ -625,6 +625,102 @@ class ModelManager:
         risks = probabilities[:, 1]
         return predictions, confs, risks
 
+    def predict_ensemble(self, X_input, is_single=True):
+        """
+        AI Clinical Ensemble: Performs majority voting across all trained models.
+        Returns prediction, confidence (agreement level), and risk (mean probability).
+        """
+        available_models = ["Random Forest", "Logistic Regression", "SVM"]
+        if HAS_XGB:
+            available_models.append("XGBoost")
+
+        all_preds = []
+        all_probs = []
+
+        for name in available_models:
+            try:
+                model = self.load_model(name)
+                if model is not None:
+                    if is_single:
+                        # Normalize single input for consistency
+                        if isinstance(X_input, dict):
+                            X_test = pd.DataFrame([X_input])[self.feature_names]
+                        else:
+                            X_test = pd.DataFrame([X_input]).iloc[:, :len(self.feature_names)]
+                            X_test.columns = self.feature_names
+                        
+                        pred = model.predict(X_test)[0]
+                        prob = model.predict_proba(X_test)[0]
+                    else:
+                        X_test = X_input[self.feature_names]
+                        pred = model.predict(X_test)
+                        prob = model.predict_proba(X_test)
+                    
+                    all_preds.append(pred)
+                    all_probs.append(prob)
+            except:
+                continue
+
+        if not all_preds:
+            raise ValueError("No models available for ensemble prediction.")
+
+        # Voting Logic
+        if is_single:
+            # Simple Majority Vote for single prediction
+            final_pred = 1 if all_preds.count(1) > all_preds.count(0) else 0
+            # Confidence = % of models that agreed with the final prediction
+            confidence = all_preds.count(final_pred) / len(all_preds)
+            # Risk = Mean of all 'Detected' probabilities
+            risk = np.mean([p[1] for p in all_probs])
+            return final_pred, confidence, risk
+        else:
+            # Batch Voting
+            stacked_preds = np.array(all_preds) # (models, samples)
+            final_preds = []
+            agreement_levels = []
+            
+            for i in range(stacked_preds.shape[1]):
+                votes = list(stacked_preds[:, i])
+                win_pred = 1 if votes.count(1) > votes.count(0) else 0
+                final_preds.append(win_pred)
+                agreement_levels.append(votes.count(win_pred) / len(votes))
+            
+            # Risks = mean across models for each sample
+            stacked_probs = np.array([p[:, 1] for p in all_probs]) # (models, samples)
+            final_risks = np.mean(stacked_probs, axis=0)
+            
+            return np.array(final_preds), np.array(agreement_levels), final_risks
+
+    def get_model_leaderboard(self, data_path):
+        """
+        Analyzes all models and returns a ranked leaderboard based on accuracy and stability.
+        """
+        from sklearn.metrics import accuracy_score, f1_score
+        # Use load_training_data to get test split for evaluation
+        _, X_test, _, y_test, _ = self._load_training_data(data_path)
+        
+        available_models = ["Random Forest", "Logistic Regression", "SVM"]
+        if HAS_XGB:
+            available_models.append("XGBoost")
+            
+        leaderboard = []
+        for name in available_models:
+            model = self.load_model(name)
+            if model:
+                y_pred = model.predict(X_test[self.feature_names])
+                acc = accuracy_score(y_test, y_pred)
+                f1 = f1_score(y_test, y_pred)
+                leaderboard.append({
+                    'model': name,
+                    'accuracy': acc,
+                    'f1': f1,
+                    'rank_score': (acc + f1) / 2
+                })
+        
+        # Sort by rank score
+        leaderboard.sort(key=lambda x: x['rank_score'], reverse=True)
+        return leaderboard
+
     # ── Local Explanation ──────────────────────────────────────────────────────
 
     def get_local_explanation(self, model_name, inputs, data_path=None):
