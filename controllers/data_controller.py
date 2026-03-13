@@ -55,14 +55,27 @@ class DataController:
                                  "\n".join(f"• {issue}" for issue in issues) +
                                  "\n\nYou can proceed, but results may be affected.")
 
-        self.data_manager.uploaded_df = df
         self.data_path = file_path
         self.data_manager.data_path = file_path
+        
+        # Determine total rows in the original file
+        full_row_count = len(df)
 
-        # Update UI
-        self.update_ui_after_load()
+        # Apply default sample size from sidebar if available
+        try:
+            qty = self.layout_manager.sidebar.sample_qty.get()
+        except:
+            qty = 20
+            
+        if full_row_count > qty:
+            df = df.sample(n=qty, random_state=42).reset_index(drop=True)
 
-    def handle_sample(self, sample_size=100):
+        self.data_manager.uploaded_df = df
+
+        # Update UI with both total and sampled counts
+        self.update_ui_after_load(total_count=full_row_count)
+
+    def handle_sample(self, sample_size=20):
         """Load a sample of the current dataset."""
         if not self.data_path:
             self.error_handler.require_data("Sample Loading")
@@ -79,20 +92,22 @@ class DataController:
         if not os.path.exists(self.data_path):
             raise FileNotFoundError(f"Dataset not found: {self.data_path}")
 
-        df = pd.read_excel(self.data_path, sheet_name='Training_Data')
+        full_df = pd.read_excel(self.data_path, sheet_name='Training_Data')
+        full_row_count = len(full_df)
 
         # Sample the data
-        if len(df) > sample_size:
-            # Use a slightly more dynamic sampling (no fixed random_state) to show variety
-            df = df.sample(n=sample_size).reset_index(drop=True)
+        if full_row_count > sample_size:
+            df = full_df.sample(n=sample_size, random_state=42).reset_index(drop=True)
+        else:
+            df = full_df
 
         self.data_manager.uploaded_df = df
         self.data_manager.data_path = self.data_path
 
         # Update UI
-        self.update_ui_after_load()
+        self.update_ui_after_load(total_count=full_row_count)
 
-    def update_ui_after_load(self):
+    def update_ui_after_load(self, total_count=None):
         """Update UI components after data loading."""
         df = self.data_manager.uploaded_df
         if df is None:
@@ -105,13 +120,13 @@ class DataController:
                                  f"Issues found:\n" + "\n".join(f"• {issue}" for issue in issues))
 
         # Update data info
-        total_rows = len(df)
+        total_rows = total_count if total_count is not None else len(df)
         total_cols = len(df.columns)
         current_samples = len(df)
         self.layout_manager.update_data_info(total_rows, total_cols, current_samples)
 
         # Update status and notify
-        status_msg = f"Imported {current_samples} samples"
+        status_msg = f"Imported {current_samples} samples for clinical analysis"
         self.layout_manager.update_status(status_msg, "#10B981")
         self.error_handler.notify(status_msg, type='success')
 

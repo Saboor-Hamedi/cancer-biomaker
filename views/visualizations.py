@@ -159,9 +159,10 @@ class Visualizer:
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
 
-        Visualizer._add_explanatory_note(fig, "Feature Hierarchy", 
-            "These biomarkers are primary drivers of clinical decision-making. "
-            "Higher impact scores indicate that shifts in these values cause the largest output changes.")
+        Visualizer._add_explanatory_note(fig, "Feature Hierarchy & Clinical Utility", 
+            "These biomarkers are the primary drivers of the AI's diagnostic decisions. Higher scores (impact) "
+            "indicate that the model relies heavily on these specific patient signals to determine risk status. "
+            "Clinically, prioritizing these markers during laboratory screening will yield the highest diagnostic yield.")
 
         fig.tight_layout(rect=[0, 0.08, 1, 0.95], pad=3.0)
         return fig
@@ -189,9 +190,10 @@ class Visualizer:
         
         ax.tick_params(labelsize=STYLE_CONFIG['label_size'])
         
-        Visualizer._add_explanatory_note(fig, "Diagnostic Accuracy", 
-            "Diagonal cells show correct predictions. Off-diagonal cells represent clinical errors: "
-            "False Positives and False Negatives.")
+        Visualizer._add_explanatory_note(fig, "Diagnostic Accuracy Audit", 
+            "Diagonal cells (Top-Left/Bottom-Right) represent correct patient classifications. Off-diagonal cells "
+            "reveal clinical errors: False Negatives (omissions) and False Positives (over-detection). "
+            "A high-performing model maximizes the diagonal 'heat' while minimizing color in the error zones.")
 
         fig.tight_layout(rect=[0, 0.08, 1, 0.95], pad=3.0)
         return fig
@@ -239,9 +241,10 @@ class Visualizer:
         ax.grid(True, alpha=0.3, linestyle='--')
         ax.tick_params(labelsize=STYLE_CONFIG['label_size'])
         
-        Visualizer._add_explanatory_note(fig, "Clinical Precision", 
-            "This curve evaluates the trade-off between identifying all cases (Recall) vs minimizing "
-            "false alarms (Precision). Essential for screening optimization.")
+        Visualizer._add_explanatory_note(fig, "Clinical Screening Precision", 
+            "This curve evaluates the trade-off between sensitivity (identifying all cases) and PPV (minimizing "
+            "false alarms). For high-stakes oncology, a curve closer to the top-right corner indicates a superior "
+            "balance, ensuring that localized detection is both thorough and highly reliable.")
 
         fig.tight_layout(rect=[0, 0.08, 1, 0.95], pad=3.0)
         return fig
@@ -275,9 +278,10 @@ class Visualizer:
         ax.tick_params(axis='x', rotation=45, labelsize=STYLE_CONFIG['label_size'])
         ax.tick_params(axis='y', labelsize=STYLE_CONFIG['label_size'])
 
-        Visualizer._add_explanatory_note(fig, "Comparative Matrix", 
-            "Identifies performance clusters across algorithms. Green intensity indicates optimal "
-            "metric alignment for reliable diagnostic decision support.")
+        Visualizer._add_explanatory_note(fig, "Competitive Performance Benchmarking", 
+            "This heatmap enables cross-validation of model reliability. Green intensity indicates 'consensus "
+            "excellence' where accuracy, sensitivity, and calibration align. This visualization is critical "
+            "for selecting the gold-standard algorithm for final clinical deployment in the diagnostic laboratory.")
 
         fig.tight_layout(rect=[0, 0.08, 1, 0.95], pad=3.0)
         return fig
@@ -1303,8 +1307,10 @@ class Visualizer:
         fig.suptitle('COMPUTATIONAL RESOURCE AUDIT', fontsize=STYLE_CONFIG['title_size'], 
                      fontweight='bold', fontfamily=STYLE_CONFIG['font_family'], y=0.98)
 
-        Visualizer._add_explanatory_note(fig, "Efficiency Analysis", 
-            "Benchmarks the hardware overhead required to sustain clinical operations at scale.")
+        Visualizer._add_explanatory_note(fig, "Computational Efficiency & Scalability", 
+            "Benchmarks the hardware resources required to sustain clinical operations. Training latency tells us "
+            "how long retraining takes, while Inference Speed (Per-Sample) measures the real-time responsiveness "
+            "of the AI during a patient consultation. Lower memory footprints ensure the system remains stable on standard hardware.")
 
         fig.tight_layout(rect=[0, 0.08, 1, 0.93])
         return fig
@@ -1356,17 +1362,17 @@ class Visualizer:
             color = colors[color_idx % len(colors)]
             color_idx += 1
 
-            ax.plot(train_sizes, train_mean, 'o-', color=color, label=f"{name} Training")
+            ax.plot(train_sizes, train_mean, marker='o', linestyle='-', color=color, label=f"{name} Train")
             ax.fill_between(
                 train_sizes,
                 train_mean - train_std,
                 train_mean + train_std,
-                alpha=0.1,
+                alpha=0.08,
                 color=color,
             )
-            ax.plot(train_sizes, val_mean, 's-', color=color, linestyle='--', label=f"{name} Validation")
+            ax.plot(train_sizes, val_mean, marker='s', linestyle='--', color=color, label=f"{name} Val")
             ax.fill_between(
-                train_sizes, val_mean - val_std, val_mean + val_std, alpha=0.1, color=color
+                train_sizes, val_mean - val_std, val_mean + val_std, alpha=0.05, color=color
             )
 
         ax.set_xlabel("Training Set Size")
@@ -1402,26 +1408,35 @@ class Visualizer:
                 plot_df['Status'] = plot_df[target_col].map({0: 'Healthy', 1: 'Detected'}).fillna('Unknown')
             else:
                 plot_df['Status'] = plot_df[target_col]
+            
             sns.histplot(data=plot_df, x=feature_name, hue='Status', kde=True, ax=ax, 
                          palette={'Healthy': DESIGN_PALETTE['success'], 'Detected': DESIGN_PALETTE['danger']},
-                         alpha=0.5, multiple="stack")
+                         alpha=0.4, multiple="layer", element="bars", bins=25)
         else:
-            sns.histplot(data=plot_df, x=feature_name, kde=True, ax=ax, color=DESIGN_PALETTE['primary'])
+            sns.histplot(data=plot_df, x=feature_name, kde=True, ax=ax, 
+                         color=DESIGN_PALETTE['primary'], alpha=0.4, bins=25)
 
-        # Add percentage labels on top of bars
+        # 4. Smart Labeling: Only annotate significant bars to prevent "tiny" overlapping text
         total = len(df)
+        max_h = ax.get_ylim()[1]
         for p in ax.patches:
-            height = p.get_height()
-            if height > 0:
-                percentage = f'{100 * height / total:.1f}%'
-                ax.annotate(percentage, (p.get_x() + p.get_width() / 2., height),
-                            ha='center', va='center', fontsize=9, xytext=(0, 7),
-                            textcoords='offset points', fontweight='bold', color=DESIGN_PALETTE['neutral'])
+            h = p.get_height()
+            if h > (total * 0.05): # Only label bars representing >5% of population
+                percentage = f'{100 * h / total:.0f}%'
+                ax.annotate(percentage, (p.get_x() + p.get_width() / 2., h),
+                            ha='center', va='bottom', fontsize=STYLE_CONFIG['label_size']-2, 
+                            xytext=(0, 5), textcoords='offset points', 
+                            fontweight='bold', color=DESIGN_PALETTE['neutral'],
+                            fontfamily=STYLE_CONFIG['font_family'])
 
-        ax.set_title(f'Biomarker Distribution Profile — {feature_name}', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
-        ax.set_xlabel('Concentration / Signal Value', fontsize=STYLE_CONFIG['label_size'])
-        ax.set_ylabel('Patient Count', fontsize=STYLE_CONFIG['label_size'])
-        ax.grid(True, alpha=0.3)
+        ax.set_title(f'Biomarker Distribution Profile — {feature_name}', 
+                     fontsize=STYLE_CONFIG['title_size'], fontweight='bold', 
+                     fontfamily=STYLE_CONFIG['font_family'], pad=20)
+        ax.set_xlabel('Concentration / Signal Value', fontsize=STYLE_CONFIG['label_size'], fontfamily=STYLE_CONFIG['font_family'])
+        ax.set_ylabel('Patient Count', fontsize=STYLE_CONFIG['label_size'], fontfamily=STYLE_CONFIG['font_family'])
+        ax.tick_params(labelsize=STYLE_CONFIG['label_size'])
+        ax.grid(True, alpha=0.2, linestyle='--')
+        ax.spines[['top', 'right']].set_visible(False)
         
         # Explanatory Note for Research
         Visualizer._add_explanatory_note(fig, "Biomarker Distribution", 
