@@ -428,15 +428,44 @@ class VisualizationController:
         )
 
     def show_tsne_map(self):
-        """Show t-SNE patient map."""
+        """Show t-SNE patient map and update analysis tab."""
         if not self._require_data("Patient Mapping"):
             return
+
+        def finish(data):
+            if not data:
+                return
+            
+            # Calculate counts for analysis tab
+            n_samples = len(data['x'])
+            n_positive = sum(data['labels'])
+            n_negative = n_samples - n_positive
+            
+            content = "═" * 60 + "\n"
+            content += "  PATIENT TOPOLOGICAL CLUSTERING (t-SNE) SUMMARY\n"
+            content += "═" * 60 + "\n\n"
+            content += f"  Total Cohort Size Analysed:   {n_samples}\n"
+            content += f"  - 'Detected' Populations:     {n_positive}\n"
+            content += f"  - 'Healthy' populations:      {n_negative}\n\n"
+            content += "  CLINICAL EXPLANATION:\n"
+            content += "  t-SNE (t-distributed Stochastic Neighbor Embedding) is a nonlinear \n"
+            content += "  dimensionality reduction technique. It maps complex, high-dimensional \n"
+            content += "  patient biomarker profiles into a 2D spaces.\n\n"
+            content += "  • Patients appearing in tight 'clusters' share highly similar \n"
+            content += "    biological diagnostic signals.\n"
+            content += "  • Separation between color clusters (Blue/Red) indicates how well \n"
+            content += "    the global biomarker pattern distinguishes between conditions.\n"
+            
+            self._update_analysis_text("Patient Similarity Audit", content)
+            
+            # Show visual modal
+            fig = Visualizer.plot_tsne_map(data)
+            Visualizer.show_modal(self.layout_manager.root, "Patient Similarity Map (t-SNE)", fig)
 
         self._run_async_task(
             "Patient Map (t-SNE)",
             lambda: self.model_manager.get_tsne_data(self.data_manager.data_path),
-            on_finish=lambda data: Visualizer.show_modal(self.layout_manager.root, "Patient Distribution (t-SNE)",
-                                                       Visualizer.plot_tsne_map(data)) if data else None
+            on_finish=finish
         )
 
     def show_shap_summary(self):
@@ -495,23 +524,91 @@ class VisualizationController:
         return self.show_shap_summary()
 
     def show_pdp(self):
-        """Show Partial Dependence Plot for the first feature."""
+        """Show Partial Dependence Plot and update analysis tab with clinical trend interpretation."""
         if not self._require_data_and_model("Partial Dependence"):
             return
 
         model_name = self.layout_manager.sidebar.model_var.get()
         try:
             X, _ = self.model_manager.get_raw_training_set(self.data_manager.data_path)
-            feature = X.columns[0]
+            # Find feature name: prefer mean_current if exists, otherwise first column
+            feature = "mean_current" if "mean_current" in X.columns else X.columns[0]
         except Exception as e:
             self.error_handler.log_and_notify("PDP Support", e)
             return
 
-        self._run_async_task(
-            f"Impact of {feature}",
-            lambda: Visualizer.plot_pdp(self.model_manager.load_model(model_name), X, feature, model_name),
-            on_finish=lambda fig: Visualizer.show_modal(self.layout_manager.root, f"Biomarker Impact (PDP) - {feature}", fig) if fig else None
-        )
+        def task():
+            model = self.model_manager.load_model(model_name)
+            if not model:
+                return None
+            
+            # Compute PDP values
+            import numpy as np
+            points = np.linspace(X[feature].min(), X[feature].max(), 50)
+            X_copy = X.iloc[:min(50, len(X))].copy()
+            probabilities = []
+            
+            for p in points:
+                X_copy[feature] = p
+                probabilities.append(model.predict_proba(X_copy)[:, 1].mean())
+            
+            return {
+                'points': points,
+                'probs': np.array(probabilities),
+                'feature': feature,
+                'model_name': model_name
+            }
+
+        def finish(data):
+            if not data:
+                return
+            
+            points = data['points']
+            probs = data['probs']
+            feat = data['feature']
+            m_name = data['model_name']
+            
+            # Trend Analysis
+            start_prob = probs[0]
+            end_prob = probs[-1]
+            diff = end_prob - start_prob
+            
+            content = "═" * 60 + "\n"
+            content += f"  BIOMARKER IMPACT AUDIT (PDP): {feat.upper()}\n"
+            content += "═" * 60 + "\n\n"
+            content += f"  Model Context:      {m_name}\n"
+            content += f"  Risk Range:        [{min(probs):.1%} to {max(probs):.1%}]\n\n"
+            
+            content += "  CURVE INTERPRETATION:\n"
+            if diff < -0.05:
+                content += "  📉 TREND: INVERSE (UP-TO-DOWN)\n"
+                content += "     As this biomarker levels INCREASE, the diagnostic risk \n"
+                content += "     DECREASES significantly.\n\n"
+                content += "  🟢 CLINICAL MEANING:\n"
+                content += "     This marker acts as a 'Protective Factor'. Higher \n"
+                content += "     concentrations are associated with a healthy state in \n"
+                content += "     this specific AI model's decision logic.\n"
+            elif diff > 0.05:
+                content += "  📈 TREND: POSITIVE (DOWN-TO-UP)\n"
+                content += "     As this biomarker levels INCREASE, the diagnostic risk \n"
+                content += "     INCREASES significantly.\n\n"
+                content += "  🔴 CLINICAL MEANING:\n"
+                content += "     This marker acts as a 'Pathogenic Driver'. Higher \n"
+                content += "     concentrations strongly signal the presence of a \n"
+                content += "     detected condition.\n"
+            else:
+                content += "  📊 TREND: NEUTRAL / STABLE\n"
+                content += "     Variation in this biomarker has minimal direct impact on \n"
+                content += "     the final prediction outcome.\n"
+
+            self._update_analysis_text(f"Impact Profile: {feat}", content)
+            
+            # Use Visualizer to plot (we can pass precomputed data or just recompute)
+            # To keep it simple and clean, we'll re-run plotting or update Visualizer
+            fig = Visualizer.plot_pdp(self.model_manager.load_model(m_name), X, feat, m_name)
+            Visualizer.show_modal(self.layout_manager.root, f"Marginal Impact Profile — {feat}", fig)
+
+        self._run_async_task(f"Impact Analysis: {feature}", task, on_finish=finish)
 
     def show_population_distribution(self):
         """Show population risk distribution."""
@@ -712,7 +809,7 @@ class VisualizationController:
         )
 
     def show_multi_learning_curves(self):
-        """Show comparative learning curves."""
+        """Show comparative learning curves and update analysis tab with maturity metrics."""
         if not self._require_data("Learning Curves"):
             return
 
@@ -722,19 +819,77 @@ class VisualizationController:
             models_to_test.append("XGBoost")
 
         def task():
+            from sklearn.model_selection import learning_curve
+            from sklearn.preprocessing import StandardScaler
+            import numpy as np
+            
             X, y = self.model_manager.get_raw_training_set(self.data_manager.data_path)
+            scaler = StandardScaler().fit(X)
+            
             loaded_models = {}
+            summary_data = []
+
             for m_name in models_to_test:
                 m = self.model_manager.load_model(m_name)
                 if m:
                     loaded_models[m_name] = m
-            return Visualizer.plot_multi_learning_curves(loaded_models, X, y, scaler=None)
+                    
+                    # Compute specific metrics for the analysis tab
+                    X_lc = scaler.transform(X) if m_name in ["Logistic Regression", "SVM"] else X
+                    
+                    train_sizes, train_scores, val_scores = learning_curve(
+                        m, X_lc, y, cv=5, n_jobs=-1,
+                        train_sizes=np.linspace(0.1, 1.0, 5),
+                        scoring="accuracy"
+                    )
+                    
+                    final_train = np.mean(train_scores[-1])
+                    final_val = np.mean(val_scores[-1])
+                    gap = final_train - final_val
+                    
+                    summary_data.append({
+                        'model': m_name,
+                        'train_acc': final_train,
+                        'val_acc': final_val,
+                        'gap': gap
+                    })
 
-        self._run_async_task(
-            "Comparative Learning",
-            task,
-            on_finish=lambda fig: Visualizer.show_modal(self.layout_manager.root, "Comparative Learning Curve Analysis", fig) if fig else None
-        )
+            fig = Visualizer.plot_multi_learning_curves(loaded_models, X, y, scaler=scaler)
+            return fig, summary_data
+
+        def finish(payload):
+            if not payload:
+                return
+            fig, summary_data = payload
+            if not fig:
+                return
+
+            # Build Analysis Report
+            content = "═" * 60 + "\n"
+            content += "  SYSTEM-WIDE LEARNING DYNAMICS & MATURITY AUDIT\n"
+            content += "═" * 60 + "\n\n"
+            content += f"  {'MODEL':<22} {'TRAIN':>8} {'VAL':>8} {'GAP':>8}\n"
+            content += "  " + "-" * 48 + "\n"
+            
+            for item in summary_data:
+                status = "Optimal" if item['gap'] < 0.05 else "Overfit" if item['gap'] > 0.15 else "Stabilizing"
+                content += (f"  {item['model']:<22} {item['train_acc']:>7.1%} "
+                           f"{item['val_acc']:>7.1%} {item['gap']:>7.1%} ({status})\n")
+            
+            content += "\n  CLINICAL MATURITY INTERPRETATION:\n"
+            content += "  • LEARNING GAP: The difference between training and validation.\n"
+            content += "    A wide gap (>10%) suggests the model is memorizing noise \n"
+            content += "    rather than learning general clinical patterns (Overfitting).\n"
+            content += "  • CONVERGENCE: If curves are still rising at the far right, \n"
+            content += "    adding more patient samples will likely improve accuracy.\n"
+            content += "  • STABILITY: Tight validation bands (shaded areas in plot) \n"
+            content += "    indicate the model is reliable across different patient subsets.\n"
+            
+            self._update_analysis_text("Learning Dynamics Audit", content)
+            
+            Visualizer.show_modal(self.layout_manager.root, "Comparative Learning Curve Analysis", fig)
+
+        self._run_async_task("Comparative Learning", task, on_finish=finish)
 
     def show_sensitivity_analysis(self):
         """Show model sensitivity analysis."""

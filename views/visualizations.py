@@ -33,7 +33,7 @@ STYLE_CONFIG = {
     'title_size':  18,       # Large Header
     'label_size':  10,       # standard labels
     'note_size':   9,        # Subtle but visible
-    'dpi':         110,      # Higher fidelity
+    'dpi':         90,       # Standardized for better cross-device fit
 }
 
 class Visualizer:
@@ -81,18 +81,18 @@ class Visualizer:
         
         Visualizer.center_window(modal, 1080, 780)
 
-        # Main Plot Container
-        container = tk.Frame(modal, bg=DESIGN_PALETTE['bg'], pady=10)
-        container.pack(fill=tk.BOTH, expand=True)
+        # 1. Navigation Footer - PACKED FIRST to ensure visibility
+        footer = tk.Frame(modal, bg='#FFFFFF', height=45)
+        footer.pack(fill=tk.X, side=tk.BOTTOM)
         
+        # 2. Main Plot Container
+        container = tk.Frame(modal, bg=DESIGN_PALETTE['bg'], pady=5)
+        container.pack(fill=tk.BOTH, expand=True)
+
         canvas = FigureCanvasTkAgg(fig, master=container)
         canvas.draw()
         canvas.get_tk_widget().configure(highlightthickness=0, bg=DESIGN_PALETTE['bg'])
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
-
-        # Navigation Footer
-        footer = tk.Frame(modal, bg='#FFFFFF', height=45)
-        footer.pack(fill=tk.X, side=tk.BOTTOM)
         
         toolbar = NavigationToolbar2Tk(canvas, footer)
         toolbar.update()
@@ -251,7 +251,7 @@ class Visualizer:
 
     @staticmethod
     def plot_model_comparison(results_df):
-        fig = Figure(figsize=(10, 8), facecolor=DESIGN_PALETTE['bg'])
+        fig = Figure(figsize=(10, 6), facecolor=DESIGN_PALETTE['bg'])
         ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
 
         # Select key metrics for heatmap
@@ -326,7 +326,7 @@ class Visualizer:
         Plot statistical comparison between models using paired t-tests
         cv_results_dict: dict with model names as keys and list of CV scores as values
         """
-        fig = Figure(figsize=(12, 8))
+        fig = Figure(figsize=(10, 6))
         ax = fig.add_subplot(111)
 
         models = list(cv_results_dict.keys())
@@ -379,7 +379,7 @@ class Visualizer:
         """
         Plot permutation feature importance
         """
-        fig = Figure(figsize=(10, 8))
+        fig = Figure(figsize=(10, 6))
         ax = fig.add_subplot(111)
 
         from sklearn.inspection import permutation_importance
@@ -418,7 +418,7 @@ class Visualizer:
         """
         Plot SHAP summary plot for global feature importance
         """
-        fig = Figure(figsize=(10, 8))
+        fig = Figure(figsize=(10, 6))
         ax = fig.add_subplot(111)
 
         try:
@@ -473,7 +473,7 @@ class Visualizer:
         """
         Plot robustness analysis showing variance across CV folds
         """
-        fig = Figure(figsize=(12, 8))
+        fig = Figure(figsize=(10, 6))
 
         models = list(cv_results_dict.keys())
         scores = [cv_results_dict[m] for m in models]
@@ -884,7 +884,7 @@ class Visualizer:
         """
         Two-Panel Impact Dashboard with standardized typography.
         """
-        fig = Figure(figsize=(12, 8), facecolor=DESIGN_PALETTE['bg'])
+        fig = Figure(figsize=(10, 6), facecolor=DESIGN_PALETTE['bg'])
 
         if not explanation:
             ax = fig.add_subplot(111)
@@ -1003,7 +1003,7 @@ class Visualizer:
         v_norm += v_norm[:1]
         angles += angles[:1]
 
-        fig = Figure(figsize=(8, 8), facecolor=DESIGN_PALETTE['bg'])
+        fig = Figure(figsize=(7, 7), facecolor=DESIGN_PALETTE['bg'])
         ax = fig.add_subplot(111, polar=True)
 
         ax.fill(angles, v_norm, color=DESIGN_PALETTE['primary'], alpha=0.25)
@@ -1129,7 +1129,7 @@ class Visualizer:
     def plot_biomarker_violins(df, features):
         """Standardized clinical violin plots with Inter typography."""
         plot_features = features[:4]
-        fig = Figure(figsize=(12, 8), facecolor=DESIGN_PALETTE['bg'])
+        fig = Figure(figsize=(10, 6), facecolor=DESIGN_PALETTE['bg'])
 
         target_col = 'cancer_risk_class'
         for fb in ['Prediction', 'target', 'Label', 'Status', 'cancer_risk']:
@@ -1169,7 +1169,7 @@ class Visualizer:
     @staticmethod
     def plot_model_robustness_benchmark(all_results):
         """Multi-panel dashboard with standardized consistent typography."""
-        fig = Figure(figsize=(12, 10), facecolor=DESIGN_PALETTE['bg'])
+        fig = Figure(figsize=(10, 6), facecolor=DESIGN_PALETTE['bg'])
 
         models = list(all_results.keys())
         accs = [res['metrics'].get('Accuracy', 0)*100 for res in all_results.values()]
@@ -1279,7 +1279,7 @@ class Visualizer:
         performance_results = Visualizer.get_performance_data(models_dict, X_train, y_train)
         df = pd.DataFrame(performance_results)
 
-        fig = Figure(figsize=(18, 7), facecolor=DESIGN_PALETTE['bg'])
+        fig = Figure(figsize=(9, 5), facecolor=DESIGN_PALETTE['bg'])
         axes = fig.subplots(1, 3)
         
         metrics = [('Training_Time', 'Latency (s)', DESIGN_PALETTE['primary']),
@@ -1332,7 +1332,7 @@ class Visualizer:
         if scaler is None:
             scaler = StandardScaler().fit(X_train)
 
-        fig = Figure(figsize=(12, 8))
+        fig = Figure(figsize=(10, 6))
         ax = fig.add_subplot(111)
 
         colors = ['blue', 'red', 'green', 'orange', 'purple', 'brown']
@@ -1457,7 +1457,7 @@ class Visualizer:
         mcc_vals    = [item.get('mcc', 0) * 100 for item in leaderboard]
         spec_vals   = [item.get('specificity', 0) * 100 for item in leaderboard]
 
-        fig = Figure(figsize=(18, 9), facecolor=DESIGN_PALETTE['bg'])
+        fig = Figure(figsize=(10, 5), facecolor=DESIGN_PALETTE['bg'])
         
         y_pos = np.arange(n)
         def _build_panel(idx, data, title, color_theme, xlabel="%"):
