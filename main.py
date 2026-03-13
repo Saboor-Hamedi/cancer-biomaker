@@ -63,6 +63,11 @@ class CancerDetectionApp:
     def on_close(self):
         """Clean shutdown of the application"""
         try:
+            # Close all modal windows first
+            from views.visualizations import Visualizer
+            Visualizer.close_all_modals()
+
+
             self.root.destroy()
         except:
             pass
@@ -115,6 +120,8 @@ class CancerDetectionApp:
         analytics_menu.add_command(label="Patient Radar Profile",       command=self.show_patient_radar)
         analytics_menu.add_command(label="Detailed Clinical Metrics",  command=self.show_detailed_metrics)
         analytics_menu.add_command(label="Cross-Model Comparison",     command=self.show_model_comparison)
+        analytics_menu.add_command(label="Accuracy Comparison",        command=self.show_accuracy_comparison)
+        analytics_menu.add_separator()
         analytics_menu.add_command(label="Correlation Heatmap",        command=self.show_correlation_heatmap)
         analytics_menu.add_command(label="Reliability Chart",          command=self.show_calibration_curve)
         analytics_menu.add_command(label="Learning Analysis",          command=self.show_learning_curve)
@@ -125,6 +132,15 @@ class CancerDetectionApp:
         analytics_menu.add_command(label="Patient Map (t-SNE)",        command=self.show_tsne_map)
         analytics_menu.add_command(label="Biomarker Impact (PDP)",     command=self.show_pdp)
         menubar.add_cascade(label="Analytics", menu=analytics_menu)
+
+        # ── Statistics ────────────────────────────────────
+        stats_menu = tk.Menu(menubar, tearoff=0)
+        stats_menu.add_command(label="Statistical Model Comparison", command=self.show_statistical_comparison)
+        stats_menu.add_command(label="Permutation Feature Importance", command=self.show_permutation_importance)
+        stats_menu.add_command(label="SHAP Feature Analysis",       command=self.show_shap_analysis)
+        stats_menu.add_command(label="Model Robustness Analysis",   command=self.show_robustness_analysis)
+        stats_menu.add_command(label="Sensitivity Analysis",        command=self.show_sensitivity_analysis)
+        menubar.add_cascade(label="Statistics", menu=stats_menu)
 
         # ── Help ──────────────────────────────────────────
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -662,6 +678,11 @@ class CancerDetectionApp:
         model_name = self.current_prediction_data.get('model', 'Active Model')
         inputs = self.current_prediction_data.get('inputs', {})
 
+        # Display analysis in tab
+        radar_data = Visualizer.get_patient_radar_data(inputs, model_name)
+        self.display_patient_radar_metrics(radar_data)
+
+        # Show the plot in modal
         fig = Visualizer.plot_patient_radar(inputs, model_name)
         Visualizer.show_modal(self.root, f"Patient Biomarker Radar — {model_name}", fig)
 
@@ -737,6 +758,198 @@ class CancerDetectionApp:
             Visualizer.show_modal(self.root, "Model Performance Heatmap", fig)
 
         self._run_async_task("Model Comparison", task, on_finish=finish)
+
+    def show_accuracy_comparison(self):
+        if not self._require_data("Accuracy Comparison"): return
+
+        from logic.model_manager import HAS_XGB
+        models_to_compare = ["Random Forest", "Logistic Regression", "SVM"]
+        if HAS_XGB: models_to_compare.append("XGBoost")
+
+        def task():
+            results = []
+            for model_name in models_to_compare:
+                if not self.model_manager.load_model(model_name):
+                    continue
+                metrics = self.model_manager.get_detailed_metrics(model_name, self.data_path)
+                if metrics:
+                    results.append({
+                        "Model": model_name,
+                        "Accuracy": metrics.get("Accuracy", 0),
+                        "Precision": metrics.get("Precision", 0),
+                        "Recall": metrics.get("Recall", 0),
+                        "F1 Score": metrics.get("F1 Score", 0),
+                        "AUC": metrics.get("AUC", 0),
+                    })
+            results_df = pd.DataFrame(results)
+            return results_df
+
+        def finish(results_df):
+            if results_df.empty:
+                messagebox.showwarning("Warning", "No model metrics available.")
+                return
+            fig = Visualizer.plot_accuracy_comparison(results_df)
+            Visualizer.show_modal(self.root, "Model Accuracy Comparison", fig)
+
+        self._run_async_task("Accuracy Comparison", task, on_finish=finish)
+
+    def show_statistical_comparison(self):
+        if not self._require_data("Statistical Comparison"): return
+
+        from logic.model_manager import HAS_XGB
+        models_to_compare = ["Random Forest", "Logistic Regression", "SVM"]
+        if HAS_XGB: models_to_compare.append("XGBoost")
+
+        def task():
+            cv_results = {}
+            for model_name in models_to_compare:
+                if not self.model_manager.load_model(model_name):
+                    continue
+                scores = self.model_manager.get_cv_scores(model_name, self.data_path)
+                if scores:
+                    cv_results[model_name] = scores
+            return cv_results
+
+        def finish(cv_results):
+            if not cv_results:
+                messagebox.showwarning("Warning", "No CV results available.")
+                return
+            fig = Visualizer.plot_statistical_comparison(cv_results)
+            Visualizer.show_modal(self.root, "Statistical Model Comparison", fig)
+
+        self._run_async_task("Statistical Comparison", task, on_finish=finish)
+
+    def show_permutation_importance(self):
+        if not self._require_data("Permutation Importance"): return
+        model_name = self.sidebar.model_var.get()
+        if not self._require_model(model_name): return
+
+        def task():
+            from sklearn.model_selection import train_test_split
+            X, y = self.model_manager.get_training_data(self.data_path)
+
+            # Use a holdout set for permutation importance to avoid overfitting effects
+            if len(X) > 100:  # Only split if we have enough data
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+                # Retrain model on training split
+                model = self.model_manager.load_model(model_name)
+                if hasattr(model, 'fit'):
+                    model.fit(X_train, y_train)
+                X_eval, y_eval = X_test, y_test
+            else:
+                # Use all data if too small
+                model = self.model_manager.load_model(model_name)
+                X_eval, y_eval = X, y
+
+            if model and X_eval is not None:
+                plot_fig = Visualizer.plot_permutation_importance(model, X_eval, y_eval, self.model_manager.feature_names, model_name)
+                data = Visualizer.get_permutation_data(model, X_eval, y_eval, self.model_manager.feature_names, model_name)
+                return plot_fig, data
+            return None, None
+
+        def finish(result):
+            plot_fig, data = result
+            if plot_fig and data:
+                # Display data in performance analysis tab
+                self.display_statistical_analysis(data)
+                # Show plot in modal
+                Visualizer.show_modal(self.root, f"Permutation Feature Importance — {model_name}", plot_fig)
+            else:
+                messagebox.showwarning("Warning", "Could not generate permutation importance plot.")
+
+        self._run_async_task("Permutation Importance", task, on_finish=finish)
+
+    def show_shap_analysis(self):
+        if not self._require_data("SHAP Analysis"): return
+        model_name = self.sidebar.model_var.get()
+        if not self._require_model(model_name): return
+
+        def task():
+            from sklearn.model_selection import train_test_split
+            X, y = self.model_manager.get_training_data(self.data_path)
+
+            # Use a subset for SHAP analysis to avoid computational issues
+            if len(X) > 200:  # Limit to 200 samples for SHAP
+                _, X_shap, _, y_shap = train_test_split(X, y, test_size=min(200, len(X)), random_state=42)
+            else:
+                X_shap, y_shap = X, y
+
+            model = self.model_manager.load_model(model_name)
+            if model and X_shap is not None:
+                plot_fig = Visualizer.plot_shap_analysis(model, X_shap, model_name)
+                data = Visualizer.get_shap_data(model, X_shap, model_name)
+                return plot_fig, data
+            return None, None
+
+        def finish(result):
+            plot_fig, data = result
+            if plot_fig and data:
+                # Display data in performance analysis tab
+                self.display_statistical_analysis(data)
+                # Show plot in modal
+                Visualizer.show_modal(self.root, f"SHAP Feature Analysis — {model_name}", plot_fig)
+            else:
+                messagebox.showwarning("Warning", "SHAP analysis requires shap package. Install with: pip install shap")
+
+        self._run_async_task("SHAP Analysis", task, on_finish=finish)
+
+    def show_robustness_analysis(self):
+        if not self._require_data("Robustness Analysis"): return
+
+        from logic.model_manager import HAS_XGB
+        models_to_compare = ["Random Forest", "Logistic Regression", "SVM"]
+        if HAS_XGB: models_to_compare.append("XGBoost")
+
+        def task():
+            cv_results = {}
+            for model_name in models_to_compare:
+                if not self.model_manager.load_model(model_name):
+                    continue
+                scores = self.model_manager.get_cv_scores(model_name, self.data_path)
+                if scores:
+                    cv_results[model_name] = scores
+            return cv_results
+
+        def finish(cv_results):
+            if not cv_results:
+                messagebox.showwarning("Warning", "No CV results available.")
+                return
+
+            # Display data in performance analysis tab
+            robustness_data = Visualizer.get_robustness_data(cv_results)
+            self.display_robustness_analysis(robustness_data)
+
+            # Show plot in modal
+            fig = Visualizer.plot_robustness_analysis(cv_results)
+            Visualizer.show_modal(self.root, "Model Robustness Analysis", fig)
+
+        self._run_async_task("Robustness Analysis", task, on_finish=finish)
+
+    def show_sensitivity_analysis(self):
+        if not self._require_data("Sensitivity Analysis"): return
+        model_name = self.sidebar.model_var.get()
+        if not self._require_model(model_name): return
+
+        def task():
+            X, y = self.model_manager.get_training_data(self.data_path)
+            model = self.model_manager.load_model(model_name)
+            if model and X is not None:
+                plot_fig = Visualizer.plot_sensitivity_analysis(model, X, y, self.model_manager.feature_names, model_name)
+                data = Visualizer.get_sensitivity_data(model, X, y, self.model_manager.feature_names, model_name)
+                return plot_fig, data
+            return None, None
+
+        def finish(result):
+            plot_fig, data = result
+            if plot_fig and data:
+                # Display data in performance analysis tab
+                self.display_sensitivity_analysis(data)
+                # Show plot in modal
+                Visualizer.show_modal(self.root, f"Sensitivity Analysis — {model_name}", plot_fig)
+            else:
+                messagebox.showwarning("Warning", "Could not generate sensitivity analysis plot.")
+
+        self._run_async_task("Sensitivity Analysis", task, on_finish=finish)
 
     def show_correlation_heatmap(self):
         df = self.data_manager.uploaded_df
@@ -851,7 +1064,9 @@ class CancerDetectionApp:
         )
 
     def show_performance_analysis(self):
+
         if not self._require_data("Performance Analysis"): return
+
 
         from logic.model_manager import HAS_XGB
         models_to_analyze = ["Random Forest", "Logistic Regression", "SVM"]
@@ -875,10 +1090,259 @@ class CancerDetectionApp:
             if not models:
                 messagebox.showwarning("Warning", "No models available for performance analysis.")
                 return
+
+            # Get performance data and display in tab
+            performance_data = Visualizer.get_performance_data(models, X, y)
+            self.display_performance_metrics(performance_data)
+
+            # Still show the plot in modal
             fig = Visualizer.plot_performance_analysis(models, X, y)
             Visualizer.show_modal(self.root, "Model Performance Analysis: Time and Memory", fig)
 
         self._run_async_task("Performance Analysis", task, on_finish=finish)
+
+    def display_performance_metrics(self, performance_data):
+        """Display performance analysis results in the analysis tab"""
+        from datetime import datetime
+
+        self.tab_analysis.text.config(state=tk.NORMAL)
+        self.tab_analysis.text.delete("1.0", tk.END)
+
+        header = "MODEL PERFORMANCE ANALYSIS SUMMARY\n"
+        header += f"Evaluation Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        header += "="*80 + "\n\n"
+
+        self.tab_analysis.text.insert(tk.END, header)
+
+        for model_data in performance_data:
+            model_name = model_data['Model']
+            self.tab_analysis.text.insert(tk.END, f"{model_name}:\n")
+            self.tab_analysis.text.insert(tk.END, f"  • Training Time: {model_data['Training_Time']:.4f} seconds\n")
+            self.tab_analysis.text.insert(tk.END, f"  • Prediction Time: {model_data['Prediction_Time']:.4f} seconds\n")
+            self.tab_analysis.text.insert(tk.END, f"  • Memory Usage: {model_data['Memory_Usage_MB']:.2f} MB\n")
+
+            # Performance insights
+            if model_data['Training_Time'] == min(p['Training_Time'] for p in performance_data):
+                self.tab_analysis.text.insert(tk.END, "    → Fastest training time - good for frequent model updates\n")
+            elif model_data['Training_Time'] == max(p['Training_Time'] for p in performance_data):
+                self.tab_analysis.text.insert(tk.END, "    → Slowest training time - consider for offline/batch training\n")
+
+            if model_data['Prediction_Time'] == min(p['Prediction_Time'] for p in performance_data):
+                self.tab_analysis.text.insert(tk.END, "    → Fastest predictions - ideal for real-time clinical use\n")
+            elif model_data['Prediction_Time'] == max(p['Prediction_Time'] for p in performance_data):
+                self.tab_analysis.text.insert(tk.END, "    → Slowest predictions - may need optimization for clinical deployment\n")
+
+            if model_data['Memory_Usage_MB'] == min(p['Memory_Usage_MB'] for p in performance_data):
+                self.tab_analysis.text.insert(tk.END, "    → Lowest memory footprint - suitable for resource-constrained environments\n")
+            elif model_data['Memory_Usage_MB'] == max(p['Memory_Usage_MB'] for p in performance_data):
+                self.tab_analysis.text.insert(tk.END, "    → Highest memory usage - ensure adequate system resources\n")
+
+            self.tab_analysis.text.insert(tk.END, "\n")
+
+        # Overall recommendations
+        fastest_train = min(performance_data, key=lambda x: x['Training_Time'])['Model']
+        fastest_pred = min(performance_data, key=lambda x: x['Prediction_Time'])['Model']
+        lowest_mem = min(performance_data, key=lambda x: x['Memory_Usage_MB'])['Model']
+
+        self.tab_analysis.text.insert(tk.END, "🏆 RECOMMENDATIONS:\n")
+        self.tab_analysis.text.insert(tk.END, f"  • For rapid prototyping: {fastest_train} (fastest training)\n")
+        self.tab_analysis.text.insert(tk.END, f"  • For clinical deployment: {fastest_pred} (fastest predictions)\n")
+        self.tab_analysis.text.insert(tk.END, f"  • For resource efficiency: {lowest_mem} (lowest memory usage)\n")
+
+        self.tab_analysis.text.config(state=tk.DISABLED)
+
+    def display_patient_radar_metrics(self, radar_data):
+        """Display patient radar analysis results in the analysis tab"""
+        from datetime import datetime
+
+        self.tab_analysis.text.config(state=tk.NORMAL)
+        self.tab_analysis.text.delete("1.0", tk.END)
+
+        header = "PATIENT BIOMARKER PROFILE ANALYSIS\n"
+        header += f"Evaluation Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        header += "="*80 + "\n\n"
+
+        self.tab_analysis.text.insert(tk.END, header)
+        self.tab_analysis.text.insert(tk.END, f"Model Used: {radar_data['model_name']}\n")
+        self.tab_analysis.text.insert(tk.END, f"Biomarkers Analyzed: {radar_data['biomarkers_analyzed']}\n\n")
+
+        self.tab_analysis.text.insert(tk.END, "📊 BIOMARKER VALUES:\n")
+        for biomarker in radar_data['biomarker_data']:
+            self.tab_analysis.text.insert(tk.END, f"  • {biomarker['name']}: {biomarker['value']:.3f}\n")
+            self.tab_analysis.text.insert(tk.END, f"    → {biomarker['insight']}\n")
+
+        self.tab_analysis.text.insert(tk.END, f"\n🔍 CLINICAL ASSESSMENT:\n")
+        self.tab_analysis.text.insert(tk.END, f"  • Elevated biomarkers: {radar_data['elevated_count']}/{radar_data['biomarkers_analyzed']}\n")
+        self.tab_analysis.text.insert(tk.END, f"  • Low biomarkers: {radar_data['low_count']}/{radar_data['biomarkers_analyzed']}\n")
+        self.tab_analysis.text.insert(tk.END, f"  • Normal biomarkers: {radar_data['normal_count']}/{radar_data['biomarkers_analyzed']}\n")
+        self.tab_analysis.text.insert(tk.END, f"  → Overall profile suggests {radar_data['assessment']}\n")
+
+        self.tab_analysis.text.insert(tk.END, "\n💡 NOTE: This is a visual representation of biomarker levels.\n")
+        self.tab_analysis.text.insert(tk.END, "   Consult with clinical guidelines for interpretation of specific values.\n")
+
+        self.tab_analysis.text.config(state=tk.DISABLED)
+
+    def display_statistical_analysis(self, analysis_data):
+        """Display statistical analysis results in the analysis tab"""
+        from datetime import datetime
+
+        self.tab_analysis.text.config(state=tk.NORMAL)
+        self.tab_analysis.text.delete("1.0", tk.END)
+
+        header = f"{analysis_data['analysis_type'].upper()}\n"
+        header += f"Model: {analysis_data['model_name']}\n"
+        header += f"Evaluation Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        header += "="*80 + "\n\n"
+
+        self.tab_analysis.text.insert(tk.END, header)
+
+        if 'error' in analysis_data:
+            self.tab_analysis.text.insert(tk.END, f"Error: {analysis_data['error']}\n")
+        else:
+            self.tab_analysis.text.insert(tk.END, "📊 FEATURE IMPORTANCE RANKING:\n\n")
+
+            for i, feature_data in enumerate(analysis_data['top_features'][:10], 1):
+                if len(feature_data) == 3:  # Permutation importance (name, mean, std)
+                    name, mean_imp, std_imp = feature_data
+                    self.tab_analysis.text.insert(tk.END, f"{i:2d}. {name}\n")
+                    self.tab_analysis.text.insert(tk.END, f"    Importance: {mean_imp:.4f} ± {std_imp:.4f}\n")
+                    if mean_imp > 0.01:
+                        self.tab_analysis.text.insert(tk.END, "    → Strong predictive feature\n")
+                    elif mean_imp > 0.001:
+                        self.tab_analysis.text.insert(tk.END, "    → Moderate predictive feature\n")
+                    else:
+                        self.tab_analysis.text.insert(tk.END, "    → Weak predictive feature\n")
+                else:  # SHAP importance (name, importance)
+                    name, importance = feature_data
+                    self.tab_analysis.text.insert(tk.END, f"{i:2d}. {name}\n")
+                    self.tab_analysis.text.insert(tk.END, f"    SHAP Impact: {importance:.4f}\n")
+                    if abs(importance) > 0.1:
+                        self.tab_analysis.text.insert(tk.END, "    → High impact on predictions\n")
+                    elif abs(importance) > 0.01:
+                        self.tab_analysis.text.insert(tk.END, "    → Moderate impact on predictions\n")
+                    else:
+                        self.tab_analysis.text.insert(tk.END, "    → Low impact on predictions\n")
+
+                self.tab_analysis.text.insert(tk.END, "\n")
+
+        self.tab_analysis.text.insert(tk.END, "="*80 + "\n")
+        self.tab_analysis.text.insert(tk.END, "💡 INTERPRETATION:\n")
+        if analysis_data['analysis_type'] == 'SHAP Feature Importance':
+            self.tab_analysis.text.insert(tk.END, "   SHAP values show how much each feature contributes to predictions.\n")
+            self.tab_analysis.text.insert(tk.END, "   Positive values push toward positive class, negative toward negative class.\n")
+        elif analysis_data['analysis_type'] == 'Permutation Feature Importance':
+            self.tab_analysis.text.insert(tk.END, "   Permutation importance shows accuracy drop when feature is randomized.\n")
+            self.tab_analysis.text.insert(tk.END, "   Higher values indicate more important features.\n")
+            # Check if all values are zero
+            all_zero = all(mean_imp == 0.0 for _, mean_imp, _ in analysis_data['top_features'])
+            if all_zero:
+                self.tab_analysis.text.insert(tk.END, "   NOTE: All features show zero importance. This may indicate:\n")
+                self.tab_analysis.text.insert(tk.END, "   - The model may not be using these features effectively\n")
+                self.tab_analysis.text.insert(tk.END, "   - The dataset may be too small for reliable permutation testing\n")
+                self.tab_analysis.text.insert(tk.END, "   - Features may be highly correlated or redundant\n")
+
+        self.tab_analysis.text.config(state=tk.DISABLED)
+
+    def display_robustness_analysis(self, robustness_data):
+        """Display robustness analysis results in the analysis tab"""
+        from datetime import datetime
+
+        self.tab_analysis.text.config(state=tk.NORMAL)
+        self.tab_analysis.text.delete("1.0", tk.END)
+
+        header = f"{robustness_data['analysis_type'].upper()}\n"
+        header += f"Evaluation Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        header += "="*80 + "\n\n"
+
+        self.tab_analysis.text.insert(tk.END, header)
+
+        self.tab_analysis.text.insert(tk.END, "📊 MODEL ROBUSTNESS STATISTICS:\n\n")
+
+        for model_name, stats in robustness_data['robustness_stats'].items():
+            self.tab_analysis.text.insert(tk.END, f"{model_name}:\n")
+            self.tab_analysis.text.insert(tk.END, f"  • Mean Accuracy: {stats['mean_accuracy']:.4f}\n")
+            self.tab_analysis.text.insert(tk.END, f"  • Standard Deviation: {stats['std_accuracy']:.4f}\n")
+            self.tab_analysis.text.insert(tk.END, f"  • Coefficient of Variation: {stats['coefficient_of_variation']:.4f}\n")
+            self.tab_analysis.text.insert(tk.END, f"  • Accuracy Range: {stats['min_score']:.4f} - {stats['max_score']:.4f}\n")
+            self.tab_analysis.text.insert(tk.END, f"  • Score Spread: {stats['range']:.4f}\n")
+
+            # Stability assessment
+            cv = stats['coefficient_of_variation']
+            if cv < 0.05:
+                stability = "Very Stable"
+            elif cv < 0.10:
+                stability = "Stable"
+            elif cv < 0.20:
+                stability = "Moderately Stable"
+            else:
+                stability = "Unstable"
+
+            self.tab_analysis.text.insert(tk.END, f"  • Stability Rating: {stability}\n\n")
+
+        # Overall ranking
+        self.tab_analysis.text.insert(tk.END, "🏆 MODEL STABILITY RANKING:\n")
+        for i, (model_name, _) in enumerate(robustness_data['stability_ranking'], 1):
+            self.tab_analysis.text.insert(tk.END, f"  {i}. {model_name}\n")
+
+        self.tab_analysis.text.insert(tk.END, f"\n🎯 MOST ROBUST MODEL: {robustness_data['most_robust_model']}\n")
+
+        self.tab_analysis.text.insert(tk.END, "\n" + "="*80 + "\n")
+        self.tab_analysis.text.insert(tk.END, "💡 INTERPRETATION:\n")
+        self.tab_analysis.text.insert(tk.END, "   • Lower coefficient of variation indicates more consistent performance\n")
+        self.tab_analysis.text.insert(tk.END, "   • Smaller accuracy range suggests better stability across folds\n")
+        self.tab_analysis.text.insert(tk.END, "   • Most robust model is recommended for clinical deployment\n")
+
+        self.tab_analysis.text.config(state=tk.DISABLED)
+
+    def display_sensitivity_analysis(self, sensitivity_data):
+        """Display sensitivity analysis results in the analysis tab"""
+        from datetime import datetime
+
+        self.tab_analysis.text.config(state=tk.NORMAL)
+        self.tab_analysis.text.delete("1.0", tk.END)
+
+        header = f"{sensitivity_data['analysis_type'].upper()}\n"
+        header += f"Model: {sensitivity_data['model_name']}\n"
+        header += f"Evaluation Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        header += "="*80 + "\n\n"
+
+        self.tab_analysis.text.insert(tk.END, header)
+
+        if 'error' in sensitivity_data:
+            self.tab_analysis.text.insert(tk.END, f"Error: {sensitivity_data['error']}\n")
+        else:
+            self.tab_analysis.text.insert(tk.END, "📊 SENSITIVITY TO INPUT NOISE:\n\n")
+            self.tab_analysis.text.insert(tk.END, f"Baseline Accuracy: {sensitivity_data['baseline_accuracy']:.4f}\n\n")
+
+            self.tab_analysis.text.insert(tk.END, "NOISE LEVEL ANALYSIS:\n")
+            for result in sensitivity_data['sensitivity_results']:
+                self.tab_analysis.text.insert(tk.END, f"  • {result['noise_type']}: {result['accuracy']:.4f}")
+                if 'accuracy_drop' in result:
+                    drop_pct = (result['accuracy_drop'] / sensitivity_data['baseline_accuracy']) * 100
+                    self.tab_analysis.text.insert(tk.END, f" (Drop: {result['accuracy_drop']:.4f} / {drop_pct:.1f}%)")
+
+                    if drop_pct < 1:
+                        stability = "Very Stable"
+                    elif drop_pct < 5:
+                        stability = "Stable"
+                    elif drop_pct < 10:
+                        stability = "Moderately Sensitive"
+                    else:
+                        stability = "Highly Sensitive"
+
+                    self.tab_analysis.text.insert(tk.END, f" - {stability}")
+                self.tab_analysis.text.insert(tk.END, "\n")
+
+            self.tab_analysis.text.insert(tk.END, f"\n🎯 MOST SENSITIVE TO: {sensitivity_data['most_sensitive_noise']}\n")
+            self.tab_analysis.text.insert(tk.END, f"   Maximum Accuracy Drop: {sensitivity_data['max_accuracy_drop']:.4f}\n")
+
+        self.tab_analysis.text.insert(tk.END, "\n" + "="*80 + "\n")
+        self.tab_analysis.text.insert(tk.END, "💡 INTERPRETATION:\n")
+        self.tab_analysis.text.insert(tk.END, "   • Lower accuracy drops indicate better noise tolerance\n")
+        self.tab_analysis.text.insert(tk.END, "   • Models with <5% drop are suitable for clinical environments\n")
+        self.tab_analysis.text.insert(tk.END, "   • Consider preprocessing for noisy biomarker data\n")
+
+        self.tab_analysis.text.config(state=tk.DISABLED)
 
     def show_multi_learning_curves(self):
         if not self._require_data("Multi-Model Learning Curves"): return
@@ -888,7 +1352,6 @@ class CancerDetectionApp:
         if HAS_XGB: models_to_analyze.append("XGBoost")
 
         def task():
-            # Load all models
             models = {}
             for model_name in models_to_analyze:
                 model = self.model_manager.load_model(model_name)

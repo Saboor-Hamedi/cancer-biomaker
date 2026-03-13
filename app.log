@@ -14,3 +14,7 @@
 2026-03-10 20:00:13,204 [INFO] logic.model_manager: Trained and saved: SVM
 2026-03-10 20:00:13,448 [INFO] logic.model_manager: Trained and saved: XGBoost
 2026-03-10 20:01:36,281 [ERROR] logic.model_manager: Error loading model 'XGBoost': 'ModelManager' object has no attribute 'xgb_model'
+2026-03-13 14:49:33,710 [ERROR] __main__: Permutation Importance failed: 'ModelManager' object has no attribute 'models'
+2026-03-13 14:49:56,425 [ERROR] __main__: SHAP Analysis failed: 'ModelManager' object has no attribute 'models'
+2026-03-13 14:50:01,450 [ERROR] __main__: Sensitivity Analysis failed: 'ModelManager' object has no attribute 'models'
+2026-03-13 14:52:17,481 [ERROR] __main__: SHAP Analysis failed: Visualizer.plot_shap_summary() takes 2 positional arguments but 3 were given

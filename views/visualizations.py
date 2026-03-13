@@ -3,6 +3,9 @@ import time
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+import matplotlib
+
+matplotlib.use('TkAgg')  # Use TkAgg backend for tkinter compatibility
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -10,6 +13,7 @@ import psutil
 import seaborn as sns
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
+from scipy import stats
 
 # ── Design System ─────────────────────────────────────────────────────────────
 DESIGN_PALETTE = {
@@ -29,6 +33,9 @@ STYLE_CONFIG = {
 }
 
 class Visualizer:
+    # Keep track of open modal windows for cleanup
+    _open_modals = []
+
     @staticmethod
     def center_window(window, width, height):
         window.withdraw()
@@ -52,7 +59,29 @@ class Visualizer:
 
         toolbar = NavigationToolbar2Tk(canvas, modal)
         toolbar.update()
+
+        # Track the modal for cleanup
+        Visualizer._open_modals.append(modal)
+
+        # Remove from tracking when closed
+        def on_modal_close():
+            if modal in Visualizer._open_modals:
+                Visualizer._open_modals.remove(modal)
+            modal.destroy()
+
+        modal.protocol("WM_DELETE_WINDOW", on_modal_close)
+
         return modal
+
+    @staticmethod
+    def close_all_modals():
+        """Close all open modal windows"""
+        for modal in Visualizer._open_modals[:]:  # Copy the list to avoid modification during iteration
+            try:
+                modal.destroy()
+            except:
+                pass
+        Visualizer._open_modals.clear()
 
     @staticmethod
     def plot_feature_importance(model, feature_names, model_name):
@@ -163,6 +192,386 @@ class Visualizer:
         fig.savefig("model_performance_heatmap.png", dpi=300, bbox_inches="tight")
 
         return fig
+
+    @staticmethod
+    def plot_accuracy_comparison(results_df):
+        fig = Figure(figsize=(10, 6))
+        ax = fig.add_subplot(111)
+
+        models = results_df["Model"]
+        accuracies = results_df["Accuracy"] * 100  # Convert to percentage
+
+        bars = ax.bar(models, accuracies, color=DESIGN_PALETTE['primary'], alpha=0.8)
+        ax.set_title("Model Accuracy Comparison", fontsize=STYLE_CONFIG['title_size'] + 4, fontweight='bold', pad=20)
+        ax.set_ylabel("Accuracy (%)", fontsize=STYLE_CONFIG['label_size'])
+        ax.set_xlabel("Models", fontsize=STYLE_CONFIG['label_size'])
+        ax.tick_params(axis='x', rotation=45)
+        ax.grid(axis='y', linestyle='--', alpha=0.4)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        # Add percentage labels on top of bars
+        for bar, acc in zip(bars, accuracies):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + 1, f'{acc:.1f}%', ha='center', va='bottom', fontweight='bold', fontsize=12)
+
+        fig.tight_layout(pad=3.0)
+
+        # Save the figure like in the notebook
+        fig.savefig("model_accuracy_comparison.png", dpi=300, bbox_inches="tight")
+
+        return fig
+
+    @staticmethod
+    def plot_statistical_comparison(cv_results_dict):
+        """
+        Plot statistical comparison between models using paired t-tests
+        cv_results_dict: dict with model names as keys and list of CV scores as values
+        """
+        fig = Figure(figsize=(12, 8))
+        ax = fig.add_subplot(111)
+
+        models = list(cv_results_dict.keys())
+        n_models = len(models)
+
+        # Create matrix for p-values
+        p_matrix = np.ones((n_models, n_models))
+        t_matrix = np.zeros((n_models, n_models))
+
+        for i in range(n_models):
+            for j in range(i+1, n_models):
+                scores1 = cv_results_dict[models[i]]
+                scores2 = cv_results_dict[models[j]]
+                t_stat, p_val = stats.ttest_rel(scores1, scores2)
+                p_matrix[i, j] = p_val
+                p_matrix[j, i] = p_val
+                t_matrix[i, j] = t_stat
+                t_matrix[j, i] = -t_stat
+
+        # Plot heatmap of p-values
+        mask = np.triu(np.ones_like(p_matrix, dtype=bool))
+        sns.heatmap(p_matrix, mask=mask, annot=True, fmt='.3f', cmap='RdYlGn_r',
+                   xticklabels=models, yticklabels=models, ax=ax,
+                   cbar_kws={'label': 'p-value', 'shrink': 0.8})
+        ax.set_title('Statistical Significance Matrix (Paired t-test p-values)', fontsize=STYLE_CONFIG['title_size'] + 2, fontweight='bold')
+        ax.set_xlabel('Model B')
+        ax.set_ylabel('Model A')
+
+        # Add significance stars
+        for i in range(n_models):
+            for j in range(i+1, n_models):
+                p_val = p_matrix[i, j]
+                star = ''
+                if p_val < 0.001:
+                    star = '***'
+                elif p_val < 0.01:
+                    star = '**'
+                elif p_val < 0.05:
+                    star = '*'
+                if star:
+                    ax.text(j + 0.5, i + 0.5, star, ha='center', va='center',
+                           fontsize=16, fontweight='bold', color='white')
+
+        fig.tight_layout(pad=3.0)
+        fig.savefig("statistical_model_comparison.png", dpi=300, bbox_inches="tight")
+        return fig
+
+    @staticmethod
+    def plot_permutation_importance(model, X, y, feature_names, model_name):
+        """
+        Plot permutation feature importance
+        """
+        fig = Figure(figsize=(10, 8))
+        ax = fig.add_subplot(111)
+
+        from sklearn.inspection import permutation_importance
+        perm_importance = permutation_importance(model, X, y, n_repeats=10, random_state=42)
+
+        sorted_idx = perm_importance.importances_mean.argsort()
+        importances = perm_importance.importances_mean[sorted_idx]
+        stds = perm_importance.importances_std[sorted_idx]
+
+        # Handle case where all importances are zero
+        if np.all(importances == 0):
+            ax.text(0.5, 0.5, f"All features show zero permutation importance.\n"
+                     f"This may indicate the model is not using these features\n"
+                     f"or the dataset is too small for reliable estimation.",
+                     ha='center', va='center', fontsize=12, transform=ax.transAxes)
+            ax.set_title(f'Permutation Feature Importance — {model_name}', fontsize=STYLE_CONFIG['title_size'] + 2, fontweight='bold')
+        else:
+            ax.barh(range(len(sorted_idx)), importances,
+                   xerr=stds, capsize=5,
+                   color=DESIGN_PALETTE['primary'], alpha=0.7)
+            ax.set_yticks(range(len(sorted_idx)))
+            ax.set_yticklabels([feature_names[i] for i in sorted_idx])
+            ax.set_xlabel('Permutation Importance (decrease in accuracy)')
+            ax.set_title(f'Permutation Feature Importance — {model_name}', fontsize=STYLE_CONFIG['title_size'] + 2, fontweight='bold')
+            ax.grid(axis='x', linestyle='--', alpha=0.3)
+
+        fig.tight_layout(pad=3.0)
+        return fig
+
+    @staticmethod
+    def plot_shap_analysis(model, X, model_name):
+        """
+        Plot SHAP summary plot for global feature importance
+        """
+        fig = Figure(figsize=(10, 8))
+        ax = fig.add_subplot(111)
+
+        try:
+            import shap
+            # Ensure we're not using any global matplotlib state
+            with plt.ioff():  # Turn off interactive mode
+                explainer = shap.Explainer(model)
+                shap_values = explainer(X)
+
+                # Use SHAP's built-in plotting which creates its own figure
+                # We'll capture it and embed it in our figure
+                import io
+
+                # Clear any existing plots
+                plt.clf()
+                plt.close('all')
+
+                # Create SHAP plot
+                shap.summary_plot(shap_values, X, show=False)
+
+                # Get the current figure that SHAP created
+                current_fig = plt.gcf()
+
+                # Save it to buffer
+                buf = io.BytesIO()
+                current_fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+                buf.seek(0)
+
+                # Load the image into our axes
+                from PIL import Image
+                img = Image.open(buf)
+                ax.imshow(img)
+                ax.set_title(f'SHAP Feature Importance Summary — {model_name}', fontsize=STYLE_CONFIG['title_size'] + 2, fontweight='bold')
+                ax.axis('off')  # Hide axes for image display
+
+                # Clean up
+                plt.close(current_fig)
+                buf.close()
+
+        except ImportError:
+            ax.text(0.5, 0.5, "SHAP not installed. Install with: pip install shap",
+                   ha='center', va='center', fontsize=14)
+        except Exception as e:
+            ax.text(0.5, 0.5, f"SHAP analysis failed: {str(e)}",
+                   ha='center', va='center', fontsize=12)
+
+        fig.tight_layout(pad=3.0)
+        return fig
+
+    @staticmethod
+    def plot_robustness_analysis(cv_results_dict):
+        """
+        Plot robustness analysis showing variance across CV folds
+        """
+        fig = Figure(figsize=(12, 8))
+
+        models = list(cv_results_dict.keys())
+        scores = [cv_results_dict[m] for m in models]
+
+        # Box plot
+        ax1 = fig.add_subplot(211)
+        bp = ax1.boxplot(scores, labels=models, patch_artist=True,
+                        boxprops=dict(facecolor=DESIGN_PALETTE['primary'], alpha=0.7, linewidth=2),
+                        medianprops=dict(color='white', linewidth=2),
+                        whiskerprops=dict(linewidth=2, color=DESIGN_PALETTE['neutral']),
+                        capprops=dict(linewidth=2, color=DESIGN_PALETTE['neutral']),
+                        flierprops=dict(marker='o', markersize=5, alpha=0.6, markerfacecolor=DESIGN_PALETTE['danger']))
+        ax1.set_title('Cross-Validation Score Distribution (Robustness)', fontsize=STYLE_CONFIG['title_size'] + 2, fontweight='bold')
+        ax1.set_ylabel('Accuracy Score')
+        ax1.grid(axis='y', linestyle='--', alpha=0.3)
+
+        # Ensure boxes are visible by setting proper y-limits
+        if scores:
+            all_scores = [score for model_scores in scores for score in model_scores]
+            if all_scores:
+                y_min, y_max = min(all_scores), max(all_scores)
+                y_range = y_max - y_min
+                ax1.set_ylim(y_min - 0.1 * y_range, y_max + 0.1 * y_range)
+
+        # Variance plot
+        ax2 = fig.add_subplot(212)
+        variances = [np.var(s) for s in scores]
+        means = [np.mean(s) for s in scores]
+        ax2.scatter(variances, means, s=100, color=DESIGN_PALETTE['secondary'], alpha=0.8)
+        for i, model in enumerate(models):
+            ax2.annotate(model, (variances[i], means[i]), xytext=(5, 5), textcoords='offset points')
+        ax2.set_xlabel('Variance (Lower = More Robust)')
+        ax2.set_ylabel('Mean Accuracy')
+        ax2.set_title('Robustness vs Performance Trade-off', fontsize=STYLE_CONFIG['title_size'] + 2, fontweight='bold')
+        ax2.grid(True, alpha=0.3)
+
+        fig.tight_layout(pad=3.0)
+        return fig
+
+    @staticmethod
+    def plot_sensitivity_analysis(model, X, y, feature_names, model_name, noise_levels=[0.01, 0.05, 0.1, 0.2]):
+        """
+        Plot sensitivity to input noise
+        """
+        fig = Figure(figsize=(10, 6))
+        ax = fig.add_subplot(111)
+
+        baseline_score = model.score(X, y)
+        scores = [baseline_score]
+
+        for noise in noise_levels:
+            X_noisy = X + np.random.normal(0, noise * X.std(), X.shape)
+            score = model.score(X_noisy, y)
+            scores.append(score)
+
+        labels = ['Baseline'] + [f'Noise {int(n*100)}%' for n in noise_levels]
+        bars = ax.bar(labels, scores, color=DESIGN_PALETTE['warning'], alpha=0.7)
+        ax.set_ylabel('Accuracy Score')
+        ax.set_title(f'Model Sensitivity to Input Noise — {model_name}', fontsize=STYLE_CONFIG['title_size'] + 2, fontweight='bold')
+        ax.grid(axis='y', linestyle='--', alpha=0.3)
+
+        # Add value labels
+        for bar, score in zip(bars, scores):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + 0.005, f'{score:.3f}',
+                   ha='center', va='bottom', fontweight='bold')
+
+        fig.tight_layout(pad=3.0)
+        return fig
+
+    @staticmethod
+    def get_shap_data(model, X, model_name):
+        """
+         Get SHAP analysis data for display in tab
+        """
+        try:
+            import shap
+            explainer = shap.Explainer(model)
+            shap_values = explainer(X)
+
+            # Get feature importance - ensure we get scalar values
+            feature_importance = np.abs(shap_values.values).mean(0)
+            feature_names = X.columns
+
+            # Convert to list of floats to ensure scalar values
+            feature_importance = [float(imp) for imp in feature_importance]
+
+            # Sort by importance
+            sorted_idx = np.argsort(feature_importance)[::-1]
+            top_features = [(feature_names[i], feature_importance[i]) for i in sorted_idx[:10]]
+
+            return {
+                'model_name': model_name,
+                'top_features': top_features,
+                'analysis_type': 'SHAP Feature Importance'
+            }
+
+        except Exception as e:
+            return {
+                'model_name': model_name,
+                'error': f"SHAP analysis failed: {str(e)}",
+                'analysis_type': 'SHAP Feature Importance'
+            }
+
+    @staticmethod
+    def get_permutation_data(model, X, y, feature_names, model_name):
+        """
+        Get permutation importance data for display in tab
+        """
+        try:
+            from sklearn.inspection import permutation_importance
+            # Increase n_repeats for more reliable results
+            perm_importance = permutation_importance(model, X, y, n_repeats=10, random_state=42)
+
+            # Sort by importance
+            sorted_idx = perm_importance.importances_mean.argsort()[::-1]
+            top_features = [(feature_names[i], float(perm_importance.importances_mean[i]), float(perm_importance.importances_std[i]))
+                          for i in sorted_idx[:10]]
+
+            return {
+                'model_name': model_name,
+                'top_features': top_features,
+                'analysis_type': 'Permutation Feature Importance'
+            }
+
+        except Exception as e:
+            return {
+                'model_name': model_name,
+                'error': f"Permutation importance failed: {str(e)}",
+                'analysis_type': 'Permutation Feature Importance'
+            }
+
+    @staticmethod
+    def get_robustness_data(cv_results_dict):
+        """
+        Get robustness analysis data for display in tab
+        """
+        robustness_stats = {}
+
+        for model_name, scores in cv_results_dict.items():
+            mean_score = np.mean(scores)
+            std_score = np.std(scores)
+            cv_score = std_score / mean_score if mean_score > 0 else 0
+
+            robustness_stats[model_name] = {
+                'mean_accuracy': mean_score,
+                'std_accuracy': std_score,
+                'coefficient_of_variation': cv_score,
+                'min_score': np.min(scores),
+                'max_score': np.max(scores),
+                'range': np.max(scores) - np.min(scores)
+            }
+
+        # Find most robust model (lowest coefficient of variation)
+        most_robust = min(robustness_stats.items(), key=lambda x: x[1]['coefficient_of_variation'])
+
+        return {
+            'analysis_type': 'Model Robustness Analysis',
+            'robustness_stats': robustness_stats,
+            'most_robust_model': most_robust[0],
+            'stability_ranking': sorted(robustness_stats.items(), key=lambda x: x[1]['coefficient_of_variation'])
+        }
+
+    @staticmethod
+    def get_sensitivity_data(model, X, y, feature_names, model_name, noise_levels=[0.01, 0.05, 0.1, 0.2]):
+        """
+        Get sensitivity analysis data for display in tab
+        """
+        try:
+            baseline_score = model.score(X, y)
+            sensitivity_results = [{'noise_level': 0.0, 'accuracy': baseline_score, 'noise_type': 'Baseline'}]
+
+            for noise in noise_levels:
+                X_noisy = X + np.random.normal(0, noise * X.std(), X.shape)
+                score = model.score(X_noisy, y)
+                sensitivity_results.append({
+                    'noise_level': noise,
+                    'accuracy': score,
+                    'noise_type': f'Noise {int(noise*100)}%',
+                    'accuracy_drop': baseline_score - score
+                })
+
+            # Find most sensitive noise level
+            max_drop = max(sensitivity_results[1:], key=lambda x: x['accuracy_drop'])
+
+            return {
+                'model_name': model_name,
+                'sensitivity_results': sensitivity_results,
+                'baseline_accuracy': baseline_score,
+                'most_sensitive_noise': max_drop['noise_type'],
+                'max_accuracy_drop': max_drop['accuracy_drop'],
+                'analysis_type': 'Sensitivity Analysis'
+            }
+
+        except Exception as e:
+            return {
+                'model_name': model_name,
+                'error': f"Sensitivity analysis failed: {str(e)}",
+                'analysis_type': 'Sensitivity Analysis'
+            }
 
     @staticmethod
     def plot_correlation_heatmap(df):
@@ -395,11 +804,51 @@ class Visualizer:
         return fig
 
     @staticmethod
+    def get_patient_radar_data(inputs, model_name):
+        """
+        Get patient biomarker data for display in tab.
+        Returns dictionary with analysis data.
+        """
+        # Select top 8 biomarkers to avoid clutter
+        items = list(inputs.items())[:8]
+        labels = [i[0] for i in items]
+        values = [float(i[1]) for i in items]
+
+        # Clinical insights
+        high_count = sum(1 for v in values if v > 5.0)  # Assuming 0-10 scale
+        low_count = sum(1 for v in values if v < 2.0)
+        normal_count = len(values) - high_count - low_count
+
+        biomarker_analysis = []
+        for label, value in zip(labels, values):
+            insight = ""
+            if value > 5.0:
+                insight = "Elevated level - may indicate increased risk"
+            elif value < 2.0:
+                insight = "Low level - may indicate protective factor"
+            else:
+                insight = "Normal range - typical clinical values"
+
+            biomarker_analysis.append({
+                'name': label,
+                'value': value,
+                'insight': insight
+            })
+
+        return {
+            'model_name': model_name,
+            'biomarkers_analyzed': len(labels),
+            'biomarker_data': biomarker_analysis,
+            'elevated_count': high_count,
+            'low_count': low_count,
+            'normal_count': normal_count,
+            'assessment': ("increased risk factors present" if high_count > low_count else
+                         "protective factors dominant" if low_count > high_count else
+                         "balanced biomarker profile observed")
+        }
+
+    @staticmethod
     def plot_patient_radar(inputs, model_name):
-        """
-        Radar Plot (Spider Chart) showing the patient's biomarker profile.
-        This provides a 'Different Shape' for clinical visualization.
-        """
         # Select top 6-8 biomarkers to avoid clutter
         items = list(inputs.items())[:8]
         labels = [i[0] for i in items]
@@ -665,14 +1114,10 @@ class Visualizer:
         return fig
 
     @staticmethod
-    def plot_performance_analysis(models, X_train, y_train):
+    def get_performance_data(models, X_train, y_train):
         """
-        Analyze model performance in terms of training time, prediction time, and memory usage.
-
-        Parameters:
-        models (dict): Dictionary of model names to model instances
-        X_train (array): Training features
-        y_train (array): Training labels
+        Get performance analysis data without plotting.
+        Returns list of performance dictionaries for each model.
         """
         from sklearn.preprocessing import StandardScaler
         scaler = StandardScaler().fit(X_train)
@@ -680,8 +1125,6 @@ class Visualizer:
         performance_results = []
 
         for name, model in models.items():
-            print(f"\nAnalyzing {name}...")
-
             # Memory usage before training
             process = psutil.Process(os.getpid())
             mem_before = process.memory_info().rss / 1024 / 1024  # MB
@@ -721,6 +1164,15 @@ class Visualizer:
                 }
             )
 
+        return performance_results
+
+    @staticmethod
+    def plot_performance_analysis(models, X_train, y_train):
+        """
+        Plot performance analysis using pre-computed data.
+        """
+        # Get performance data
+        performance_results = Visualizer.get_performance_data(models, X_train, y_train)
         performance_df = pd.DataFrame(performance_results)
 
         # Create the plot

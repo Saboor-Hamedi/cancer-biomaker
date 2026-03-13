@@ -372,6 +372,26 @@ class ModelManager:
         self.analytics_cache['shap'][model_name] = res
         return res
 
+    def get_cv_scores(self, model_name, data_path):
+        """Get cross-validation scores for robustness analysis."""
+        model = self.load_model(model_name)
+        if model is None:
+            return None
+
+        X, y = self.get_raw_training_set(data_path)
+        if len(np.unique(y)) < 2:
+            return None
+
+        from sklearn.model_selection import cross_val_score
+        cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        scores = cross_val_score(model, X, y, cv=cv, n_jobs=1)
+        return scores.tolist()
+
+    def get_training_data(self, data_path):
+        """Get training data for analysis."""
+        X, y = self.get_raw_training_set(data_path)
+        return X, y
+
     # ── Model Loading ──────────────────────────────────────────────────────────
 
     def load_model(self, model_name):
