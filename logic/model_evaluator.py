@@ -438,9 +438,10 @@ class ModelEvaluator:
         ranking = evaluation_results['ranking']
         for model in ranking:
             report.append(f"{model['rank']}. {model['model']}")
-            report.append(".3f")
-            report.append(".3f")
-            report.append(".3f")
+            report.append(f"   Composite Score : {model['composite_score']:.4f}")
+            report.append(f"   Accuracy        : {model.get('accuracy', 0):.3f}")
+            report.append(f"   F1 Score        : {model.get('f1_score', 0):.3f}")
+            report.append(f"   ROC-AUC         : {model.get('roc_auc', 0) or 0:.3f}")
             report.append("")
 
         # Detailed Metrics
@@ -450,8 +451,20 @@ class ModelEvaluator:
             report.append(f"\n{model_name}:")
             metrics = result['metrics']
             for metric, value in metrics.items():
+                if metric == 'confusion_matrix':
+                    continue  # Skip nested array
                 if isinstance(value, (int, float)) and not isinstance(value, bool):
-                    report.append(".3f")
+                    report.append(f"  {metric:<30}: {value:.4f}")
+
+        # Cross-validation Scores
+        report.append("\nCROSS-VALIDATION SCORES")
+        report.append("-" * 40)
+        for model_name, result in evaluation_results['individual_results'].items():
+            cv = result.get('cv_scores', {})
+            if 'accuracy' in cv and isinstance(cv['accuracy'], dict):
+                mean = cv['accuracy'].get('mean', 0)
+                std  = cv['accuracy'].get('std', 0)
+                report.append(f"  {model_name:<25}: {mean:.4f} ± {std:.4f}")
 
         # Recommendations
         report.append("\nRECOMMENDATIONS")

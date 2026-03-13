@@ -66,13 +66,13 @@ class DataManager:
         if df is None: return None
         new_df = df.copy()
         numeric_cols = new_df.select_dtypes(include=[np.number]).columns
-        
+
         if method == 'mean':
             for col in numeric_cols:
-                new_df[col].fillna(new_df[col].mean(), inplace=True)
+                new_df[col] = new_df[col].fillna(new_df[col].mean())
         elif method == 'drop':
-            new_df.dropna(inplace=True)
-            
+            new_df = new_df.dropna()
+
         return new_df
 
     def apply_scaling(self, df, method='normalize'):

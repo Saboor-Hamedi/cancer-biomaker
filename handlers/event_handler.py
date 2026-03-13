@@ -232,21 +232,20 @@ class EventHandler:
         tree = self.layout_manager.get_components()['tab_input'].tree
         feature_name = tree.item(item, 'values')[0]
 
-        # Get default value (you might want to define defaults elsewhere)
-        defaults = {
-            'PSA_peak_height': 0.0,
-            'min_slope': 0.0,
-            'PSA_concentration_pg_per_ml': 0.0,
-            'max_slope': 0.0,
-            'current_at_-0.46V': 0.0,
-            'min_current': 0.0,
-            'PSA_actual_peak_current': 0.0,
-            'mean_current': 0.0,
-            'area_under_curve': 0.0,
-            'peak_height_ratio_PSA_CA125': 0.0
-        }
-
-        default_value = defaults.get(feature_name, 0.0)
+        # Get default value dynamically from training data if available
+        default_value = 0.0
+        try:
+            model_mgr = self.model_controller.model_manager
+            if model_mgr.cached_train_df is not None:
+                if feature_name in model_mgr.cached_train_df.columns:
+                    # Use median for robustness against outliers
+                    default_value = float(model_mgr.cached_train_df[feature_name].median())
+                    # Format nicely (2-4 decimal places)
+                    default_value = round(default_value, 4)
+        except Exception as e:
+            # Fallback to zero if data is inaccessible
+            print(f"Warning: Could not get dynamic default for {feature_name}: {e}")
+            default_value = 0.0
 
         # Update tree
         values = list(tree.item(item, 'values'))

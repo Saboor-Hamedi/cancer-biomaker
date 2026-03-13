@@ -114,54 +114,52 @@ class VisualizationController:
         pred_data = None
         if self.model_controller and self.model_controller.current_prediction_data:
             pred_data = self.model_controller.current_prediction_data
-        
+
         if not pred_data:
             from tkinter import messagebox
             messagebox.showwarning("No Prediction", "Please make a prediction first to see local explanations.")
             return
 
         model_name = pred_data.get('model', 'Active Model')
-        
-        # We need an explanation! If not in result, calculate it now
-        explanation = pred_data.get('explanation')
-        if not explanation:
-            # Need features and input values
-            inputs = pred_data.get('inputs', {})
-            if not inputs:
-                return
-            
-            # Show progress
-            self.layout_manager.update_status("Calculating clinical explanation...", "orange")
-            
-            def calculate_task():
-                # Calculate SHAP for this single patient
-                model = self.model_manager.load_model(model_name)
-                
-                # Convert inputs to DF
-                full_input = {feat: 0.0 for feat in self.model_manager.feature_names}
-                for k, v in inputs.items():
-                    if k in full_input: full_input[k] = float(v)
-                input_df = pd.DataFrame([full_input])[self.model_manager.feature_names]
-                
-                inputs_dict = input_df.iloc[0].to_dict()
-                
-                # Call model_manager's local explanation logic
-                return self.model_manager.get_local_explanation(
-                    model_name, 
-                    inputs_dict, 
-                    data_path=self.data_manager.data_path
-                )
-                
-            def finish(explanation):
-                if explanation:
-                    fig = Visualizer.plot_local_explanation(explanation, model_name)
-                    Visualizer.show_modal(self.layout_manager.root, f"Clinical Impact Profile — {model_name}", fig)
-                    self.layout_manager.update_status("Explanation generated", "#10B981")
-                else:
-                    self.layout_manager.update_status("Explanation failed", "red")
 
-            self._run_async_task("SHAP Analysis", calculate_task, on_finish=finish)
+        # If explanation already cached in pred_data, show it immediately
+        explanation = pred_data.get('explanation')
+        if explanation:
+            fig = Visualizer.plot_local_explanation(explanation, model_name)
+            Visualizer.show_modal(self.layout_manager.root, f"Clinical Impact Profile — {model_name}", fig)
             return
+
+        # Otherwise compute it now
+        inputs = pred_data.get('inputs', {})
+        if not inputs:
+            from tkinter import messagebox
+            messagebox.showwarning("No Inputs", "No biomarker input values found for this prediction.")
+            return
+
+        self.layout_manager.update_status("Calculating clinical explanation...", "orange")
+
+        def calculate_task():
+            full_input = {feat: 0.0 for feat in self.model_manager.feature_names}
+            for k, v in inputs.items():
+                if k in full_input:
+                    full_input[k] = float(v)
+            input_df = pd.DataFrame([full_input])[self.model_manager.feature_names]
+            inputs_dict = input_df.iloc[0].to_dict()
+            return self.model_manager.get_local_explanation(
+                model_name,
+                inputs_dict,
+                data_path=self.data_manager.data_path
+            )
+
+        def finish(expl):
+            if expl:
+                fig = Visualizer.plot_local_explanation(expl, model_name)
+                Visualizer.show_modal(self.layout_manager.root, f"Clinical Impact Profile — {model_name}", fig)
+                self.layout_manager.update_status("Explanation generated", "#10B981")
+            else:
+                self.layout_manager.update_status("Explanation failed", "red")
+
+        self._run_async_task("SHAP Analysis", calculate_task, on_finish=finish)
 
     def show_patient_radar(self):
         """Show patient radar profile."""
@@ -449,26 +447,25 @@ class VisualizationController:
         model_name = self.layout_manager.sidebar.model_var.get()
 
         def finish(data):
-            if data and 'feature_names' in data:
-                # Format importance list for tab
-                content = f"XAI Explanation Model: {model_name}\n"
-                content += "Ranked Biomarker Importance (SHAP values):\n"
-                content += "-"*50 + "\n"
-                
-                # Zip and sort by importance
-                importances = np.abs(data['shap_values']).mean(axis=0)
-                sorted_indices = np.argsort(importances)[::-1]
-                
-                for i in sorted_indices[:15]: # Show top 15
-                    feat = data['feature_names'][i]
-                    imp = importances[i]
-                    content += f"  • {feat:.<35} {imp:.6f}\n"
+            # data is a list of (feature_name, importance) tuples, sorted descending
+            if not data:
+                return
 
-                self._update_analysis_text(f"Global XAI: {model_name}", content)
-                
-                # Show visual modal
-                Visualizer.show_modal(self.layout_manager.root, f"Global XAI (SHAP) - {model_name}", 
-                                   Visualizer.plot_shap_summary(data, model_name))
+            # Format importance list for the analysis tab
+            content = f"XAI Explanation Model: {model_name}\n"
+            content += "Ranked Biomarker Importance (SHAP / proxy values):\n"
+            content += "-" * 50 + "\n"
+            for feat, imp in data[:15]:
+                content += f"  • {feat:.<35} {imp:.6f}\n"
+
+            self._update_analysis_text(f"Global XAI: {model_name}", content)
+
+            # Show visual modal — plot_shap_summary expects list of (feat, val) tuples
+            Visualizer.show_modal(
+                self.layout_manager.root,
+                f"Global XAI (SHAP) — {model_name}",
+                Visualizer.plot_shap_summary(data, model_name)
+            )
 
         self._run_async_task(
             "Global XAI (SHAP)",
@@ -786,28 +783,105 @@ class VisualizationController:
         Visualizer.show_modal(self.layout_manager.root, f"Biomarker Distribution Profile — {feature_name}", fig)
 
     def show_model_leadership_report(self):
-        """Show the unified clinical leadership report for model selection."""
+        """Show the unified clinical leadership report using ModelEvaluator composite scoring."""
         if not self._require_data("Model Selection Analysis"):
             return
 
-        def task():
-            leaderboard = self.model_manager.get_model_leaderboard(self.data_manager.data_path)
-            # Log winner to analysis tab
-            winner = leaderboard[0]['model']
-            log_content = "MODEL STRENGTH LEADERBOARD\n"
-            log_content += f"{'RANK':<5} {'MODEL':<25} {'ACCURACY':<12} {'ROBUSTNESS':<12}\n"
-            log_content += "-"*60 + "\n"
-            for i, entry in enumerate(leaderboard):
-                log_content += f"#{i+1:<4} {entry['model']:<25} {entry['accuracy']*100:>10.2f}% {entry['rank_score']*100:>10.2f}%\n"
-            
-            log_content += f"\n🏆 CLINICAL RECOMMENDATION: Based on these metrics, the {winner} model "
-            log_content += "demonstrates the most stable diagnostic performance on this dataset."
-            
-            self.layout_manager.root.after(0, lambda: self._update_analysis_text("Model Leadership Audit", log_content))
-            return Visualizer.plot_model_selection_report(leaderboard)
+        from logic.model_manager import HAS_XGB
+        models_to_eval = ["Random Forest", "Logistic Regression", "SVM"]
+        if HAS_XGB:
+            models_to_eval.append("XGBoost")
 
-        self._run_async_task(
-            "Model Audit",
-            task,
-            on_finish=lambda fig: Visualizer.show_modal(self.layout_manager.root, "Clinical Model Selection Report", fig) if fig else None
-        )
+        def task():
+            from logic.model_evaluator import ModelEvaluator
+            X_train, X_test, y_train, y_test, _ = self.model_manager._load_training_data(
+                self.data_manager.data_path
+            )
+
+            models_dict = {}
+            for name in models_to_eval:
+                m = self.model_manager.load_model(name)
+                if m is not None:
+                    models_dict[name] = m
+
+            if not models_dict:
+                return None, None
+
+            evaluator = ModelEvaluator()
+            results = evaluator.evaluate_all_models(models_dict, X_train, X_test, y_train, y_test)
+            return results, evaluator
+
+        def finish(payload):
+            if payload is None:
+                return
+            results, evaluator = payload
+            if not results:
+                return
+
+            ranking = results.get('ranking', [])
+            recommendations = results.get('recommendations', {})
+
+            # ── Build analysis tab content ──────────────────────────
+            winner = ranking[0]['model'] if ranking else "N/A"
+            log_content = "═" * 62 + "\n"
+            log_content += "  COMPREHENSIVE MODEL EVALUATION — COMPOSITE LEADERBOARD\n"
+            log_content += "═" * 62 + "\n\n"
+            log_content += f"  {'RANK':<5} {'MODEL':<22} {'COMPOSITE':>10} {'ACCURACY':>10} {'F1':>8} {'ROC-AUC':>9}\n"
+            log_content += "  " + "-" * 60 + "\n"
+            for entry in ranking:
+                log_content += (
+                    f"  #{entry['rank']:<4} {entry['model']:<22}"
+                    f" {entry['composite_score']:>10.4f}"
+                    f" {entry.get('accuracy', 0):>10.2%}"
+                    f" {entry.get('f1_score', 0):>8.4f}"
+                    f" {entry.get('roc_auc', 0) or 0:>9.4f}\n"
+                )
+
+            # Add MCC & specificity from individual results
+            ind = results.get('individual_results', {})
+            log_content += "\n  EXTENDED METRICS (MCC · Specificity · PR-AUC)\n"
+            log_content += "  " + "-" * 60 + "\n"
+            for name, res in ind.items():
+                m = res.get('metrics', {})
+                mcc  = m.get('mcc', 0) or 0
+                spec = m.get('specificity', 0) or 0
+                pr_auc = m.get('pr_auc', 0) or 0
+                log_content += f"  {name:<22}  MCC={mcc:>6.4f}  Spec={spec:>6.2%}  PR-AUC={pr_auc:>6.4f}\n"
+
+            # Clinical recommendation
+            primary_rec = recommendations.get('primary_recommendation', '')
+            clinical_use = recommendations.get('clinical_use_case', '')
+            cautions = recommendations.get('cautions', [])
+
+            log_content += f"\n🏆 RECOMMENDATION:\n  {primary_rec}\n"
+            log_content += f"\n💊 CLINICAL USE:\n  {clinical_use}\n"
+            if cautions:
+                log_content += "\n⚠️  CAUTIONS:\n"
+                for c in cautions:
+                    log_content += f"  • {c}\n"
+
+            self.layout_manager.root.after(
+                0, lambda: self._update_analysis_text("Model Evaluation Report", log_content)
+            )
+
+            # Build leaderboard list expected by plot_model_selection_report
+            leaderboard = [
+                {
+                    'model':      entry['model'],
+                    'accuracy':   entry.get('accuracy', 0),
+                    'f1':         entry.get('f1_score', 0),
+                    'rank_score': entry.get('composite_score', 0),
+                    'mcc':        ind.get(entry['model'], {}).get('metrics', {}).get('mcc', 0) or 0,
+                    'specificity':ind.get(entry['model'], {}).get('metrics', {}).get('specificity', 0) or 0,
+                    'pr_auc':     ind.get(entry['model'], {}).get('metrics', {}).get('pr_auc', 0) or 0,
+                }
+                for entry in ranking
+            ]
+            fig = Visualizer.plot_model_selection_report(leaderboard)
+            Visualizer.show_modal(
+                self.layout_manager.root,
+                "Clinical Model Selection Report — Composite Evaluation",
+                fig
+            )
+
+        self._run_async_task("Model Evaluation", task, on_finish=finish)

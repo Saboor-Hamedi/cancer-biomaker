@@ -1487,19 +1487,22 @@ class Visualizer:
 
     @staticmethod
     def plot_model_selection_report(leaderboard):
-        """Premium multi-panel clinical leadership report with percentage labels."""
+        """Premium 5-panel clinical leadership report with composite scoring, MCC, and Specificity."""
         n = len(leaderboard)
-        models     = [item['model'] for item in leaderboard]
-        accuracies = [item['accuracy'] * 100 for item in leaderboard]
-        f1_scores  = [item['f1'] * 100 for item in leaderboard]
-        scores     = [item['rank_score'] * 100 for item in leaderboard]
+        models      = [item['model'] for item in leaderboard]
+        accuracies  = [item.get('accuracy', 0) * 100 for item in leaderboard]
+        f1_scores   = [item.get('f1', 0) * 100 for item in leaderboard]
+        scores      = [item.get('rank_score', 0) * 100 for item in leaderboard]
+        mcc_vals    = [item.get('mcc', 0) * 100 for item in leaderboard]
+        spec_vals   = [item.get('specificity', 0) * 100 for item in leaderboard]
 
-        # Consistent colour scheme: winner gets primary, rest get neutral
-        bar_colors  = [DESIGN_PALETTE['primary'] if i == 0 else DESIGN_PALETTE['neutral'] for i in range(n)]
-        acc_colors  = [DESIGN_PALETTE['success'] if i == 0 else '#93C5FD' for i in range(n)]
-        f1_colors   = [DESIGN_PALETTE['secondary'] if i == 0 else '#C4B5FD' for i in range(n)]
+        bar_colors = [DESIGN_PALETTE['primary']   if i == 0 else DESIGN_PALETTE['neutral']   for i in range(n)]
+        acc_colors = [DESIGN_PALETTE['success']   if i == 0 else '#93C5FD'                   for i in range(n)]
+        f1_colors  = [DESIGN_PALETTE['secondary'] if i == 0 else '#C4B5FD'                   for i in range(n)]
+        mcc_colors = [DESIGN_PALETTE['warning']   if i == 0 else '#FCD34D'                   for i in range(n)]
+        sp_colors  = [DESIGN_PALETTE['danger']    if i == 0 else '#FCA5A5'                   for i in range(n)]
 
-        fig = Figure(figsize=(14, 9))
+        fig = Figure(figsize=(18, 9))
         fig.patch.set_facecolor('#F8FAFC')
 
         # ── Helper: annotate bars with % ────────────────────────────────
@@ -1515,38 +1518,38 @@ class Visualizer:
 
         y_pos = np.arange(n)
 
-        # ── Panel 1 (left): Strength Score ─────────────────────────────
-        ax1 = fig.add_subplot(131)
+        # Panel 1: Composite Score
+        ax1 = fig.add_subplot(151)
         bars1 = ax1.barh(y_pos, scores, color=bar_colors, alpha=0.85, height=0.55)
         _annotate_bars(ax1, bars1, scores, inside=True)
         ax1.set_xlim(0, 115)
         ax1.set_yticks(y_pos)
         ax1.set_yticklabels(models, fontsize=10.5, fontweight='bold')
         ax1.invert_yaxis()
-        ax1.set_title('Strength Score\n(Acc + F1 avg)', fontsize=11, fontweight='bold',
+        ax1.set_title('Composite Score\n(7-Metric Weighted)', fontsize=11, fontweight='bold',
                       color=DESIGN_PALETTE['primary'], pad=10)
         ax1.set_xlabel('%', fontsize=9)
         ax1.grid(axis='x', linestyle='--', alpha=0.25)
         ax1.set_facecolor('#F8FAFC')
         ax1.spines[['top', 'right']].set_visible(False)
 
-        # ── Panel 2 (centre): Accuracy ─────────────────────────────────
-        ax2 = fig.add_subplot(132)
+        # Panel 2: Accuracy
+        ax2 = fig.add_subplot(152)
         bars2 = ax2.barh(y_pos, accuracies, color=acc_colors, alpha=0.85, height=0.55)
         _annotate_bars(ax2, bars2, accuracies, inside=True)
         ax2.set_xlim(0, 115)
         ax2.set_yticks(y_pos)
         ax2.set_yticklabels([], fontsize=10)
         ax2.invert_yaxis()
-        ax2.set_title('Accuracy\n(Test Set)', fontsize=11, fontweight='bold',
+        ax2.set_title('Accuracy\n(Test Split)', fontsize=11, fontweight='bold',
                       color=DESIGN_PALETTE['success'], pad=10)
         ax2.set_xlabel('%', fontsize=9)
         ax2.grid(axis='x', linestyle='--', alpha=0.25)
         ax2.set_facecolor('#F8FAFC')
         ax2.spines[['top', 'right']].set_visible(False)
 
-        # ── Panel 3 (right): F1-Score ──────────────────────────────────
-        ax3 = fig.add_subplot(133)
+        # Panel 3: F1-Score
+        ax3 = fig.add_subplot(153)
         bars3 = ax3.barh(y_pos, f1_scores, color=f1_colors, alpha=0.85, height=0.55)
         _annotate_bars(ax3, bars3, f1_scores, inside=True)
         ax3.set_xlim(0, 115)
@@ -1560,21 +1563,58 @@ class Visualizer:
         ax3.set_facecolor('#F8FAFC')
         ax3.spines[['top', 'right']].set_visible(False)
 
+        # Panel 4: MCC
+        ax4 = fig.add_subplot(154)
+        bars4 = ax4.barh(y_pos, mcc_vals, color=mcc_colors, alpha=0.85, height=0.55)
+        _annotate_bars(ax4, bars4, mcc_vals, inside=False)
+        ax4.set_xlim(0, 115)
+        ax4.set_yticks(y_pos)
+        ax4.set_yticklabels([], fontsize=10)
+        ax4.invert_yaxis()
+        ax4.set_title('MCC x100\n(Balanced Quality)', fontsize=11, fontweight='bold',
+                      color=DESIGN_PALETTE['warning'], pad=10)
+        ax4.set_xlabel('scaled', fontsize=9)
+        ax4.grid(axis='x', linestyle='--', alpha=0.25)
+        ax4.set_facecolor('#F8FAFC')
+        ax4.spines[['top', 'right']].set_visible(False)
+
+        # Panel 5: Specificity
+        ax5 = fig.add_subplot(155)
+        bars5 = ax5.barh(y_pos, spec_vals, color=sp_colors, alpha=0.85, height=0.55)
+        _annotate_bars(ax5, bars5, spec_vals, inside=True)
+        ax5.set_xlim(0, 115)
+        ax5.set_yticks(y_pos)
+        ax5.set_yticklabels([], fontsize=10)
+        ax5.invert_yaxis()
+        ax5.set_title('Specificity\n(True-Negative Rate)', fontsize=11, fontweight='bold',
+                      color=DESIGN_PALETTE['danger'], pad=10)
+        ax5.set_xlabel('%', fontsize=9)
+        ax5.grid(axis='x', linestyle='--', alpha=0.25)
+        ax5.set_facecolor('#F8FAFC')
+        ax5.spines[['top', 'right']].set_visible(False)
+
         # ── Super-title & Winner Banner ─────────────────────────────────
-        winner = models[0]
+        winner  = models[0]
+        top_mcc = leaderboard[0].get('mcc', 0) or 0
+        top_pr  = leaderboard[0].get('pr_auc', 0) or 0
         fig.suptitle(
-            f'Clinical Model Leadership Report\nRecommended: {winner}  —  Score: {scores[0]:.1f}%  |  Acc: {accuracies[0]:.1f}%  |  F1: {f1_scores[0]:.1f}%',
-            fontsize=13, fontweight='bold', color='#1E293B', y=1.01
+            f'Clinical Model Leadership Report\n'
+            f'Recommended: {winner}  |  Score: {scores[0]:.1f}%  |  '
+            f'Acc: {accuracies[0]:.1f}%  |  F1: {f1_scores[0]:.1f}%  |  '
+            f'MCC: {top_mcc:.3f}  |  PR-AUC: {top_pr:.3f}',
+            fontsize=12, fontweight='bold', color='#1E293B', y=1.02
         )
 
         # ── Explanatory note ───────────────────────────────────────────
         note_text = (
-            "Rank Methodology: The Strength Score is the average of Accuracy and F1-Score measured on a "
-            "held-out 20% test split. The top-ranked model is the most clinically reliable for this dataset."
+            "Rank Methodology: Composite Score is a weighted combination of 7 metrics "
+            "(Accuracy 20%, ROC-AUC 20%, Precision 15%, Recall 15%, F1 15%, Specificity 10%, NPV 5%). "
+            "MCC captures balanced quality across all class combinations. "
+            "Specificity = True Negative Rate. All scores on a held-out 20% test split."
         )
-        fig.text(0.5, -0.03, note_text, ha='center', fontsize=9, style='italic',
+        fig.text(0.5, -0.04, note_text, ha='center', fontsize=9, style='italic',
                  color='#475569', wrap=True,
-                 bbox=dict(facecolor='#F1F5F9', alpha=0.8, edgecolor='#E2E8F0', boxstyle='round,pad=0.8'))
+                 bbox=dict(facecolor='#F1F5F9', alpha=0.9, edgecolor='#E2E8F0', boxstyle='round,pad=0.8'))
 
         fig.tight_layout(pad=3.5)
         return fig

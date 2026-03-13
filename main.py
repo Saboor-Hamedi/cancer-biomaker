@@ -72,7 +72,8 @@ class CancerDetectionApp:
         self.data_controller = DataController(
             self.data_manager,
             self.layout_manager,
-            self.error_handler
+            self.error_handler,
+            model_manager=self.model_manager
         )
 
         self.model_controller = ModelController(

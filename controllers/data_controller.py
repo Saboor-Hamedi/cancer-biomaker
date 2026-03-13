@@ -14,8 +14,9 @@ from utils.error_handler import ErrorHandler
 class DataController:
     """Controller for data loading, preprocessing, and export operations."""
 
-    def __init__(self, data_manager, layout_manager, error_handler=None):
+    def __init__(self, data_manager, layout_manager, error_handler=None, model_manager=None):
         self.data_manager = data_manager
+        self.model_manager = model_manager  # Optional — used for analytics cache reset
         self.layout_manager = layout_manager
         self.error_handler = error_handler or ErrorHandler()
         self.data_path = None
