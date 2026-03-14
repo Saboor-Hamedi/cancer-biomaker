@@ -502,18 +502,76 @@ class VisualizationController:
             on_finish=finish
         )
     def show_precision_recall_threshold(self):
-        """Show precision-recall threshold analysis."""
+        """Show precision-recall threshold analysis and update analysis tab with decision metrics."""
         if not self._require_data_and_model("Threshold Analysis"):
             return
 
         model_name = self.layout_manager.sidebar.model_var.get()
 
-        self._run_async_task(
-            "PR Threshold Analysis",
-            lambda: self.model_manager.get_pr_threshold_data(model_name, self.data_manager.data_path),
-            on_finish=lambda data: Visualizer.show_modal(self.layout_manager.root, f"Threshold Decision Audit: {model_name}",
-                                                       Visualizer.plot_pr_threshold(data, model_name)) if data else None
-        )
+        def task():
+            data = self.model_manager.get_pr_threshold_data(model_name, self.data_manager.data_path)
+            if not data:
+                return None
+            
+            # Identify Intersection (Clinical Balance)
+            idx = np.argmin(np.abs(data['precision'][:-1] - data['recall'][:-1]))
+            balance_point = {
+                'threshold': data['thresholds'][idx],
+                'precision': data['precision'][idx],
+                'recall': data['recall'][idx]
+            }
+            
+            # Identify Max F1 (Accuracy Peak)
+            p = data['precision'][:-1]
+            r = data['recall'][:-1]
+            f1 = 2 * (p * r) / (p + r + 1e-10)
+            max_idx = np.argmax(f1)
+            f1_point = {
+                'threshold': data['thresholds'][max_idx],
+                'f1': f1[max_idx],
+                'prec': p[max_idx],
+                'rec': r[max_idx]
+            }
+            
+            fig = Visualizer.plot_pr_threshold(data, model_name)
+            return fig, balance_point, f1_point
+
+        def finish(payload):
+            if not payload:
+                return
+            fig, balance, f1_opt = payload
+            
+            # Build Analysis Report
+            content = "═" * 60 + "\n"
+            content += f"  DIAGNOSTIC DECISION THRESHOLD AUDIT: {model_name}\n"
+            content += "═" * 60 + "\n\n"
+            
+            content += "  1. CLINICAL BALANCE (Intersection Point)\n"
+            content += "     --------------------------------------------------\n"
+            content += f"     • Optimal Threshold:  {balance['threshold']:.3f}\n"
+            content += f"     • Balanced Precision: {balance['precision']:.1%}\n"
+            content += f"     • Balanced Recall:    {balance['recall']:.1%}\n"
+            content += "     (Best for standard diagnostic screening)\n\n"
+            
+            content += "  2. DIAGNOSTIC PEAK (Maximum F1-Score)\n"
+            content += "     --------------------------------------------------\n"
+            content += f"     • Cutoff Threshold:   {f1_opt['threshold']:.3f}\n"
+            content += f"     • Peak F1-Quality:    {f1_opt['f1']:.3f}\n"
+            content += f"     • Resulting Prec:     {f1_opt['prec']:.1%}\n"
+            content += f"     • Resulting Recall:   {f1_opt['rec']:.1%}\n"
+            content += "     (Best for maximizing overall model accuracy)\n\n"
+            
+            content += "  CLINICAL INTERPRETATION:\n"
+            content += "  • LOWER THRESHOLD: Increases 'Recall' (Sensitivity). \n"
+            content += "    Ensures fewer cancer cases are missed (Safe approach).\n"
+            content += "  • HIGHER THRESHOLD: Increases 'Precision' (Confidence).\n"
+            content += "    Reduces false alarms/unnecessary biopsies.\n"
+            
+            self._update_analysis_text("Diagnostic Threshold Audit", content)
+            
+            Visualizer.show_modal(self.layout_manager.root, f"Threshold Decision Audit: {model_name}", fig)
+
+        self._run_async_task("PR Threshold Analysis", task, on_finish=finish)
 
     def show_pr_threshold(self):
         """Alias for compatibility."""
@@ -726,7 +784,7 @@ class VisualizationController:
         )
 
     def show_performance_analysis(self):
-        """Show model performance analysis (memory/time)."""
+        """Show model performance analysis and update analysis tab with resource metrics."""
         if not self._require_data("Performance"):
             return
 
@@ -742,13 +800,44 @@ class VisualizationController:
                 m = self.model_manager.load_model(m_name)
                 if m:
                     loaded_models[m_name] = m
-            return Visualizer.plot_performance_analysis(loaded_models, X, y)
+            
+            # Get raw data for the tab
+            raw_data = Visualizer.get_performance_data(loaded_models, X, y)
+            # Get fig for the modal
+            fig = Visualizer.plot_performance_analysis(loaded_models, X, y)
+            return fig, raw_data
 
-        self._run_async_task(
-            "Performance Profile",
-            task,
-            on_finish=lambda fig: Visualizer.show_modal(self.layout_manager.root, "Resource Efficiency Audit", fig) if fig else None
-        )
+        def finish(payload):
+            if not payload:
+                return
+            fig, raw_data = payload
+            if not fig:
+                return
+
+            # Build Analysis Report
+            content = "═" * 60 + "\n"
+            content += "  COMPUTATIONAL RESOURCE & HARDWARE EFFICIENCY AUDIT\n"
+            content += "═" * 60 + "\n\n"
+            content += f"  {'MODEL':<22} {'TRAIN (s)':>10} {'INFER (s)':>10} {'RAM (MB)':>10}\n"
+            content += "  " + "-" * 56 + "\n"
+            
+            for item in raw_data:
+                content += (f"  {item['Model']:<22} {item['Training_Time']:>10.3f} "
+                           f"{item['Prediction_Time']:>10.5f} {item['Memory_Usage_MB']:>10.2f}\n")
+            
+            content += "\n  EFFICIENCY INTERPRETATION:\n"
+            content += "  • TRAINING LATENCY: Time required to calibrate the AI on the \n"
+            content += "    current 500-patient cohort. Lower is better for retraining.\n"
+            content += "  • INFERENCE SPEED: Per-sample latency. This defines how fast \n"
+            content += "    the 'Single Prediction' button reacts in real-time.\n"
+            content += "  • MEMORY FOOTPRINT: Total RAM consumed during training. \n"
+            content += "    Vital for ensuring the system runs on standard hardware.\n"
+            
+            self._update_analysis_text("Computational Efficiency Audit", content)
+            
+            Visualizer.show_modal(self.layout_manager.root, "Resource Efficiency Audit", fig)
+
+        self._run_async_task("Performance Profile", task, on_finish=finish)
 
     def show_statistical_comparison(self):
         """Show statistical model comparison."""

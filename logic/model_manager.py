@@ -227,12 +227,13 @@ class ModelManager:
         """Check if models exist. Trains ONLY if missing and data is available."""
         if not data_path:
             # If not forcing, we just check if models exist
-            if not force:
-                models_exist = all(os.path.exists(os.path.join(self.script_dir, m)) for m in [
-                    'random_forest_model.pkl', 'logistic_regression_model.pkl', 'svm_model.pkl'
-                ])
-                if models_exist:
-                    return True, "Models present"
+            required_models = ['random_forest_model.pkl', 'logistic_regression_model.pkl', 'svm_model.pkl']
+            if HAS_XGB:
+                required_models.append('xgboost_model.pkl')
+                
+            models_exist = all(os.path.exists(os.path.join(self.script_dir, m)) for m in required_models)
+            if models_exist:
+                return True, "Models present"
             return False, "Dataset path is empty. Please upload a dataset to train models."
 
         if not os.path.exists(data_path) and not force:
