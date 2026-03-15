@@ -1,0 +1,32 @@
+In our project, the feature extraction process follows a clinical-technical pipeline that transforms raw laboratory data into diagnostic signals.
+
+Here is specifically how I extracted features
+
+Direct Biomarker Mapping
+I start with a 61-feature panel. These are the raw concentrations of biomarkers (proteins, enzymes, hormones, and genetic indicators) provided in the clinical dataset. Each biomarker is treated as a unique feature dimension.
+
+Statistical Denoising & Cleaning
+Before the AI "sees" the features, they undergo a cleaning process in the 
+
+Data Manager
+
+Outlier Removal: I use the IQR (Interquartile Range) method. Any biomarker concentration that falls 1.5x above or below the IQR is removed to ensure the model isn't confused by temporary lab errors.
+Normalization: Since different biomarkers have different scales (some in mg/dL, others in μg/L), I apply Min-Max Scaling. This compresses all features into a unified 0 to 1 range, ensuring no single marker dominates the model's decision just because its numerical value is larger.
+
+Target Feature Derivation (Unsupervised Extraction)
+One of the most unique extraction steps is using K-Means Clustering to derive the target class.
+
+Because clinical "labels" are often missing in pilot data, the system extracts a "Clinical Risk Category" by identifying natural clusters in the 61-feature space. This turns the raw distribution of biomarkers into a structured binary feature: Healthy (Class 0) vs. Detected (Class 1).
+
+Graph Construction (Structural Extraction)
+For the Graph Neural Network (GNN), I perform "Structural Feature Extraction":
+The system calculates a Correlation Matrix across the biomarkers.
+If two biomarkers have a correlation coefficient $> 0.5$, an edge (connection) is created.
+The Result: The AI doesn't just look at the markers as a list; it extracts a "Biological Network" feature where the nodes are biomarkers and the connections represent their physiological interactions.
+
+Topological Embedding (t-SNE)
+For the clinician to "see" the features, I use t-SNE (t-Distributed Stochastic Neighbor Embedding).
+This extracts the most important "proximity" features and maps the 61-dimensional biomarker space into a 2D Patient Similarity Map. This allows us to prove that "Detected" patients share a unique biological fingerprint that is topologically distinct from healthy donors.
+
+Summary 
+Features are extracted through a multi-stage pipeline: first by cleaning outliers (IQR) and normalizing scales, then by structural correlation mapping (for the GNN), and finally by unsupervised clustering to define the diagnostic risk categories.

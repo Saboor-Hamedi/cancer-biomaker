@@ -1,0 +1,22 @@
+# Core Data Science & Analysis
+pandas
+numpy
+scikit-learn
+scipy
+joblib
+
+# Visualization & XAI
+matplotlib
+seaborn
+umap-learn
+shap
+
+# Machine Learning & Deep Learning
+xgboost
+psutil
+openpyxl
+
+# Deep Learning (PyTorch Ecosystem)
+# Note: For CPU-only installation use: pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch
+torch-geometric
