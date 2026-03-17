@@ -14,11 +14,12 @@ from utils.error_handler import ErrorHandler
 class DataController:
     """Controller for data loading, preprocessing, and export operations."""
 
-    def __init__(self, data_manager, layout_manager, error_handler=None, model_manager=None):
+    def __init__(self, data_manager, layout_manager, error_handler=None, model_manager=None, version="1.0.1"):
         self.data_manager = data_manager
         self.model_manager = model_manager  # Optional — used for analytics cache reset
         self.layout_manager = layout_manager
         self.error_handler = error_handler or ErrorHandler()
+        self.version = version
         self.data_path = None
 
     def handle_upload(self):
@@ -258,12 +259,12 @@ class DataController:
             tab.text.insert(tk.END, f"{null_counts} missing values identified in the matrix. Imputation is recommended.\n", "crit")
 
         # Section 2: Bio-Statistics
-        tab.text.insert(tk.END, "\n◈ 2. DESCRIPTIVE BIO-STATISTICS\n", "sub")
+        tab.text.insert(tk.END, "\n◈ 2. DESCRIPTIVE BIO-STATISTICS (POPULATION MEAN)\n", "sub")
         
         if not numeric_df.empty:
-            # Table Header
-            h_line = f" {'BIOMARKER PEAK':<30} │ {'MEAN':>12} │ {'STD DEV':>12} │ {'MAX PEAK':>12} \n"
-            divider = " " + "—" * 30 + "┼" + "—" * 14 + "┼" + "—" * 14 + "┼" + "—" * 14 + "\n"
+            # Table Header - Professional Minimalism
+            h_line = f" {'BIOMARKER PEAK':<30}   {'MEAN':>12}   {'STD DEV':>12}   {'MAX PEAK':>12} \n"
+            divider = " " + "—" * 70 + "\n"
             
             tab.text.insert(tk.END, h_line, "table_head")
             tab.text.insert(tk.END, divider, "dim")
@@ -271,9 +272,16 @@ class DataController:
             # Table Body
             for i, (feat, row) in enumerate(desc.iterrows()):
                 f_label = (str(feat)[:27] + "...") if len(str(feat)) > 30 else str(feat)
-                row_line = f" {f_label:<30} │ {row['mean']:>12.2f} │ {row['std']:>12.2f} │ {row['max']:>12.2f} \n"
-                # Alternate row coloring if desired, but for now just clean rows
+                row_line = f" {f_label:<30}   {row['mean']:>12.2f}   {row['std']:>12.2f}   {row['max']:>12.2f} \n"
+                
+                # Insert row with clean tag
                 tab.text.insert(tk.END, row_line, "table_row")
+                
+                # Subtle separator every few rows for readability
+                if (i + 1) % 5 == 0 and (i + 1) < len(desc):
+                    tab.text.insert(tk.END, " " + "." * 70 + "\n", "dim")
+            
+            tab.text.insert(tk.END, divider, "dim")
         else:
             tab.text.insert(tk.END, "  • No numeric diagnostic markers were identified in this population sample.\n", "dim")
         
@@ -286,7 +294,7 @@ class DataController:
 
         # Footer
         tab.text.insert(tk.END, "\n" + "—" * 60 + "\n", "dim")
-        tab.text.insert(tk.END, "CONFIDENTIAL CLINICAL AUDIT | BIO-RECON ANALYTICS | V1.0.1", "highlight")
+        tab.text.insert(tk.END, f"CONFIDENTIAL CLINICAL AUDIT | BIO-RECON ANALYTICS | V{self.version}", "highlight")
         
         tab.text.config(state=tk.DISABLED)
 

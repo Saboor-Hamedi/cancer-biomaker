@@ -146,7 +146,7 @@ class MenuHandler:
         """Show a professional scrollable modal with detailed documentation."""
         help_win = tk.Toplevel(self.root)
         help_win.title("SYSTEM DOCUMENTATION & CLINICAL GUIDE")
-        help_win.geometry("850x700")
+        help_win.geometry("900x800")
         help_win.configure(bg="#FFFFFF")
         help_win.transient(self.root)
         help_win.grab_set()
@@ -161,18 +161,35 @@ class MenuHandler:
         main = ttk.Frame(help_win, style='Card.TFrame', padding=25)
         main.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(main, text="BIOMARKER AI CLINICAL DOCUMENTATION", font=("Inter", 15, "bold"), foreground="#0F172A").pack(anchor=tk.W, pady=(0, 15))
+        header_frame = ttk.Frame(main)
+        header_frame.pack(fill=tk.X, pady=(0, 15))
+        ttk.Label(header_frame, text="BIOMARKER AI CLINICAL DOCUMENTATION", 
+                  font=("Inter", 16, "bold"), foreground="#0F172A").pack(side=tk.LEFT)
+        
+        ttk.Button(main, text="CLOSE GUIDE", style='Primary.TButton', 
+                   command=help_win.destroy).pack(side=tk.BOTTOM, pady=(20, 0), anchor=tk.E)
 
         txt_frame = ttk.Frame(main)
         txt_frame.pack(fill=tk.BOTH, expand=True)
         sb = ttk.Scrollbar(txt_frame)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
         
-        text = tk.Text(txt_frame, wrap=tk.WORD, font=("Inter", 11), padx=25, pady=25, 
+        text = tk.Text(txt_frame, wrap=tk.WORD, font=("Inter", 11), padx=30, pady=30, 
                        bg="#F8FAFC", fg="#1E293B", borderwidth=0, highlightthickness=0,
                        yscrollcommand=sb.set)
         text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.config(command=text.yview)
+
+        # Configure Premium Markdown Tags
+        text.tag_configure("h1", font=("Inter", 20, "bold"), foreground="#0F172A", spacing1=20, spacing3=10)
+        text.tag_configure("h2", font=("Inter", 15, "bold"), foreground="#1E40AF", spacing1=25, spacing3=10)
+        text.tag_configure("h3", font=("Inter", 12, "bold"), foreground="#0369A1", spacing1=15, spacing3=5)
+        text.tag_configure("bold", font=("Inter", 11, "bold"))
+        text.tag_configure("italic", font=("Inter", 11, "italic"))
+        text.tag_configure("code_block", font=("Consolas", 10), background="#E2E8F0", spacing1=5, spacing3=5, lmargin1=20, rmargin=20)
+        text.tag_configure("bullet", font=("Inter", 11), lmargin1=20, lmargin2=35)
+        text.tag_configure("rule", font=("Inter", 2), background="#CBD5E1", spacing1=10, spacing3=10)
+        text.tag_configure("normal", font=("Inter", 11), spacing1=2, spacing3=2)
 
         # Robust content loading
         content = ""
@@ -186,14 +203,41 @@ class MenuHandler:
                     content = f.read()
                     break
         
-        if content:
-            text.insert(tk.END, content)
-        else:
-            text.insert(tk.END, "DETAILED DOCUMENTATION GUIDE\n" + "="*30 + "\n\n")
-            text.insert(tk.END, "1. UPLOAD: Use File -> Upload Dataset (.xlsx)\n")
-            text.insert(tk.END, "2. TRAINING: Go to Data -> Re-Train All Models\n")
-            text.insert(tk.END, "3. DIAGNOSIS: Select Analytics to view SHAP/ROC results.")
+        if not content:
+            content = "# Help & Documentation\nDataset guide and troubleshooting."
+
+        # Simple Premium Markdown Parser
+        text.config(state=tk.NORMAL)
+        lines = content.split('\n')
+        in_code_block = False
+        
+        for line in lines:
+            if line.startswith('```'):
+                in_code_block = not in_code_block
+                continue
+            
+            if in_code_block:
+                text.insert(tk.END, line + "\n", "code_block")
+                continue
+
+            if line.startswith('# '):
+                text.insert(tk.END, line[2:] + "\n", "h1")
+            elif line.startswith('## '):
+                text.insert(tk.END, line[3:] + "\n", "h2")
+            elif line.startswith('### '):
+                text.insert(tk.END, line[4:] + "\n", "h3")
+            elif line.startswith('---'):
+                text.insert(tk.END, " " * 200 + "\n", "rule")
+            elif line.startswith('* ') or line.startswith('- ') or line.strip().isdigit() and line.strip().endswith('.'):
+                text.insert(tk.END, "  • " + line.lstrip('* -').strip() + "\n", "bullet")
+            elif '|' in line and (line.count('|') > 2): # Very basic table handling
+                text.insert(tk.END, line.replace('|', '  ').strip() + "\n", "code_block")
+            else:
+                # Handle basic inline bolding **text**
+                parts = line.split('**')
+                for i, part in enumerate(parts):
+                    tag = "bold" if i % 2 == 1 else "normal"
+                    text.insert(tk.END, part, tag)
+                text.insert(tk.END, "\n", "normal")
 
         text.config(state=tk.DISABLED)
-        
-        ttk.Button(main, text="CLOSE GUIDE", style='Primary.TButton', command=help_win.destroy).pack(side=tk.RIGHT, pady=(20, 0))

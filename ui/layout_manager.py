@@ -15,11 +15,12 @@ from logic.model_manager import HAS_XGB
 class LayoutManager:
     """Manages the assembly and layout of UI components."""
 
-    def __init__(self, root, model_manager, data_manager, callbacks):
+    def __init__(self, root, model_manager, data_manager, callbacks, version="1.0.0"):
         self.root = root
         self.model_manager = model_manager
         self.data_manager = data_manager
         self.callbacks = callbacks
+        self.version = version
 
         # UI Components
         self.sidebar = None
@@ -63,7 +64,7 @@ class LayoutManager:
         self.tab_data = DataTab(self.dashboard.data_tab)
         self.tab_data.pack(fill=tk.BOTH, expand=True)
 
-        self.tab_analysis = AnalysisTab(self.dashboard.analysis_tab)
+        self.tab_analysis = AnalysisTab(self.dashboard.analysis_tab, version=self.version)
         self.tab_analysis.pack(fill=tk.BOTH, expand=True)
 
         self.tab_validation = ValidationTab(self.dashboard.validation_tab)

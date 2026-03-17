@@ -121,17 +121,27 @@ class StyleManager:
                   bordercolor=[('selected', PALETTE['primary']), ('!selected', PALETTE['border'])],
                   focuscolor=[('selected', ''), ('!selected', '')])
 
-        # --- Scrollbar Styling (Unified with Sidebars) ---
+        # --- Scrollbar Styling (Modern Premium - Enhanced Thickness) ---
         style.configure('Vertical.TScrollbar', 
-                        troughcolor=PALETTE['sidebar_bg'], 
-                        background=PALETTE['sidebar_hover'], # Using hover as a subtle thumb
+                        troughcolor='#F1F5F9', # Light Slate 100
+                        background='#CBD5E1', # Slate 300 Thumb
+                        relief='flat',
                         borderwidth=0, 
-                        arrowsize=12)
+                        arrowsize=18,
+                        width=18)
         style.configure('Horizontal.TScrollbar', 
-                        troughcolor=PALETTE['sidebar_bg'], 
-                        background=PALETTE['sidebar_hover'],
+                        troughcolor='#F1F5F9', 
+                        background='#CBD5E1',
+                        relief='flat',
                         borderwidth=0,
-                        arrowsize=12)
+                        arrowsize=18,
+                        width=18)
+
+        # Style mapping for hover effects
+        style.map('Vertical.TScrollbar',
+                  background=[('active', '#94A3B8'), ('pressed', '#64748B')])
+        style.map('Horizontal.TScrollbar',
+                  background=[('active', '#94A3B8'), ('pressed', '#64748B')])
 
         style.configure('Treeview', 
                         font=FONT_PRIMARY, 

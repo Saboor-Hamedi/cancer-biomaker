@@ -8,7 +8,7 @@ class InputTab(ttk.Frame):
         super().__init__(parent)
         self.features = features or []
         self.data_manager = data_manager
-        self.tree = None
+        self.tree: ttk.Treeview = None # type: ignore
         self._create_widgets()
         if self.features: self.refresh_features(self.features)
 
@@ -17,12 +17,21 @@ class InputTab(ttk.Frame):
         header.pack(fill=tk.X)
         ttk.Label(header, text="PATIENT BIOMARKER INPUTS", font=('Inter', 10, 'bold'), foreground="#475569").pack(side=tk.LEFT)
         
-        self.tree = ttk.Treeview(self, columns=("feature", "value"), show="headings", height=15)
+        # Container for Tree and Scrollbar
+        container = ttk.Frame(self)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        self.tree = ttk.Treeview(container, columns=("feature", "value"), show="headings", height=15)
         self.tree.heading("feature", text="BIOMARKER NAME")
         self.tree.heading("value", text="VALUE")
-        self.tree.column("feature", width=300)
+        self.tree.column("feature", width=300, anchor=tk.CENTER)
         self.tree.column("value", width=150, anchor=tk.CENTER)
-        self.tree.pack(fill=tk.BOTH, expand=True)
+        
+        vsb = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=vsb.set)
+        
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
 
         btn_frame = ttk.Frame(self, padding=5)
         btn_frame.pack(fill=tk.X)
@@ -69,32 +78,34 @@ class InputTab(ttk.Frame):
 class DataTab(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
-        self.tree = None
+        self.tree: ttk.Treeview = None # type: ignore
         self._create_widgets()
 
     def _create_widgets(self):
-        container = ttk.Frame(self)
-        container.pack(fill=tk.BOTH, expand=True)
+        # Vertical Container for Tree + Horizontal Scrollbar
+        main_container = ttk.Frame(self)
+        main_container.pack(fill=tk.BOTH, expand=True)
         
-        self.tree = ttk.Treeview(container, show="headings")
+        # Top part: Tree + Vertical Scrollbar
+        top_container = ttk.Frame(main_container)
+        top_container.pack(fill=tk.BOTH, expand=True)
         
-        ysb = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.tree.yview)
-        xsb = ttk.Scrollbar(self, orient=tk.HORIZONTAL, command=self.tree.xview)
-        self.tree.configure(yscroll=ysb.set, xscroll=xsb.set)
+        self.tree = ttk.Treeview(top_container, show="headings")
         
-        self.tree.grid(row=0, column=0, sticky='nsew')
-        ysb.grid(row=0, column=1, sticky='ns')
-        xsb.pack(fill=tk.X)
+        vsb = ttk.Scrollbar(top_container, orient=tk.VERTICAL, command=self.tree.yview)
+        hsb = ttk.Scrollbar(main_container, orient=tk.HORIZONTAL, command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
         
-        container.grid_columnconfigure(0, weight=1)
-        container.grid_rowconfigure(0, weight=1)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        hsb.pack(side=tk.BOTTOM, fill=tk.X)
 
     def update_data(self, df):
         self.tree.delete(*self.tree.get_children())
         self.tree["columns"] = list(df.columns)
         for col in df.columns:
             self.tree.heading(col, text=col.upper())
-            self.tree.column(col, width=120)
+            self.tree.column(col, width=120, anchor=tk.CENTER)
         for _, row in df.iterrows():
             self.tree.insert("", tk.END, values=list(row))
 
@@ -106,9 +117,11 @@ class AnalysisTab(ttk.Frame):
     """
     PREMIUM CLINICAL PERFORMANCE: Standardized robust scrolling with deep-dive forensic insights.
     """
-    def __init__(self, parent):
+    def __init__(self, parent, version="1.0.1"):
         super().__init__(parent)
-        self.text = None
+        self.version = version
+        self.text: tk.Text = None # type: ignore
+        self.sb: ttk.Scrollbar = None # type: ignore
         self._create_widgets()
 
     def _create_widgets(self):
@@ -195,7 +208,7 @@ class AnalysisTab(ttk.Frame):
         self.text.insert(tk.END, "  • Memory Integrity: VERIFIED | GPU Acceleration: OPTIMIZED\n", "code")
         
         self.text.insert(tk.END, "\n" + "—" * 65 + "\n", "dim")
-        self.text.insert(tk.END, "CONFIDENTIAL CLINICAL REPORT | DIAGNOSTIC AI POWERED | V1.0.1", "highlight")
+        self.text.insert(tk.END, f"CONFIDENTIAL CLINICAL REPORT | DIAGNOSTIC AI POWERED | V{self.version}", "highlight")
         
         self.text.config(state=tk.DISABLED)
 
@@ -218,22 +231,38 @@ class AnalysisTab(ttk.Frame):
         self.text.config(state=tk.DISABLED)
 
 class ValidationTab(ttk.Frame):
-    """Handles AI Committee Consensus with color-coded results."""
+    """Handles AI Committee Consensus with professional diagnostic highlighting."""
     def __init__(self, parent):
         super().__init__(parent)
-        self.tree = ttk.Treeview(self, columns=("m", "d", "r", "s"), show="headings")
+        self.tree: ttk.Treeview = None # type: ignore
+        self._create_widgets()
+
+    def _create_widgets(self):
+        # Container for Tree and Scrollbar
+        container = ttk.Frame(self)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        self.tree = ttk.Treeview(container, columns=("m", "d", "r", "s"), show="headings")
         for c, h in zip(("m", "d", "r", "s"), ("ALGORITHM", "DECISION", "RISK ESTIMATE", "BATCH STATUS")):
             self.tree.heading(c, text=h)
-        self.tree.pack(fill=tk.BOTH, expand=True)
+            self.tree.column(c, anchor=tk.CENTER)
         
-        # Color configuration
-        self.tree.tag_configure('pos', background="#FEE2E2", foreground="#991B1B") # Light Red
-        self.tree.tag_configure('neg', background="#DCFCE7", foreground="#166534") # Light Green
+        vsb = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=vsb.set)
+        
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Color configuration: High Contrast for diagnostics
+        self.tree.tag_configure('pos', background="#FEE2E2", foreground="#991B1B") # CRITICAL: Soft Red alert
+        self.tree.tag_configure('neg', foreground="#059669") # STABLE: Emerald Green text
+        self.tree.tag_configure('summary', foreground="#64748B") # INFO: Slate Grey for batch counts
 
     def clear(self):
         self.tree.delete(*self.tree.get_children())
 
     def update_comparison(self, data):
+        """Individual Patient View: Highlight Positive detection in Red."""
         self.clear()
         results = data.get('individual_results', [])
         for res in results:
@@ -244,14 +273,18 @@ class ValidationTab(ttk.Frame):
             self.tree.insert("", tk.END, values=(res['model'], decision, f"{res['risk']:.1%}", status), tags=(tag,))
 
     def update_batch_comparison(self, summaries, total_records):
+        """Batch View: Neutral rows with detection counts, no 'All Red' alarm unless justified."""
         self.clear()
         if not summaries: return
         for s in summaries:
-            rate = f"{s['positives']/total_records:.1%}" if total_records > 0 else "0%"
+            rate_val = (s['positives']/total_records) if total_records > 0 else 0
+            rate_str = f"{rate_val:.1%}"
             status = f"{s['positives']} DETECTIONS"
-            # Highlight models with detections
-            tag = 'pos' if s['positives'] > 0 else 'neg'
-            self.tree.insert("", tk.END, values=(s['model'], rate, f"{s['risk']:.1%}", status), tags=(tag,))
+            
+            # We only use 'pos' (Red) for batch if detection rate is unusually high (>50%)
+            # Otherwise we use 'summary' (Neutral Slate) to avoid panic (all red screen)
+            tag = 'pos' if rate_val > 0.5 else 'summary'
+            self.tree.insert("", tk.END, values=(s['model'], rate_str, f"{s['risk']:.1%}", status), tags=(tag,))
 
 class LeaderboardTab(ttk.Frame):
     """
@@ -259,8 +292,8 @@ class LeaderboardTab(ttk.Frame):
     """
     def __init__(self, parent):
         super().__init__(parent)
-        self.lb_tree = None
-        self.audit_tree = None
+        self.lb_tree: ttk.Treeview = None # type: ignore
+        self.audit_tree: ttk.Treeview = None # type: ignore
         self._create_widgets()
 
     def _create_widgets(self):
@@ -268,22 +301,36 @@ class LeaderboardTab(ttk.Frame):
         container.pack(fill=tk.BOTH, expand=True)
 
         ttk.Label(container, text="◈ CLINICAL ALGORITHM COMPETITION LEADERBOARD", font=('Inter', 12, 'bold')).pack(anchor=tk.W, pady=(0, 10))
-        self.lb_tree = ttk.Treeview(container, columns=("r", "m", "a", "f", "s", "p"), show="headings", height=8)
+        
+        # Leaderboard Table (Fixed height usually, but let's wrap just in case)
+        lb_frame = ttk.Frame(container)
+        lb_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        self.lb_tree = ttk.Treeview(lb_frame, columns=("r", "m", "a", "f", "s", "p"), show="headings", height=8)
         headers = ("RANK", "AI ALGORITHM", "ACCURACY", "F1 SCORE", "PRECISION", "RECALL")
         for c, h in zip(("r", "m", "a", "f", "s", "p"), headers):
             self.lb_tree.heading(c, text=h)
-            self.lb_tree.column(c, width=100, anchor=tk.CENTER)
-        self.lb_tree.column("m", width=220, anchor=tk.W)
-        self.lb_tree.pack(fill=tk.X, pady=(0, 20))
-        self.lb_tree.tag_configure('gold', background="#FEF3C7") # Highlight Top Model
+            self.lb_tree.column(c, width=120, anchor=tk.CENTER)
+        self.lb_tree.pack(fill=tk.BOTH, expand=True)
+        
+        self.lb_tree.tag_configure('gold', background="#FEF3C7") 
 
         ttk.Label(container, text="◈ INDIVIDUAL PATIENT AUDIT & TRIAGE LOG", font=('Inter', 12, 'bold')).pack(anchor=tk.W, pady=(0, 10))
-        self.audit_tree = ttk.Treeview(container, columns=("id", "lead", "risk", "consensus", "psa", "afp"), show="headings", height=10)
+        
+        # Audit Table with Scrollbar
+        audit_container = ttk.Frame(container)
+        audit_container.pack(fill=tk.BOTH, expand=True)
+        
+        self.audit_tree = ttk.Treeview(audit_container, columns=("id", "lead", "risk", "consensus", "psa", "afp"), show="headings", height=10)
         for c, h in zip(("id", "lead", "risk", "consensus", "psa", "afp"), ("ID", "PRIMARY DETECTOR", "RISK %", "CONSENSUS", "PSA", "AFP")):
             self.audit_tree.heading(c, text=h)
-            self.audit_tree.column(c, width=100, anchor=tk.CENTER)
-        self.audit_tree.column("lead", width=180)
-        self.audit_tree.pack(fill=tk.BOTH, expand=True)
+            self.audit_tree.column(c, width=120, anchor=tk.CENTER)
+        
+        a_vsb = ttk.Scrollbar(audit_container, orient=tk.VERTICAL, command=self.audit_tree.yview)
+        self.audit_tree.configure(yscrollcommand=a_vsb.set)
+        
+        self.audit_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        a_vsb.pack(side=tk.RIGHT, fill=tk.Y)
         
         # Tags for Audit highlighting
         self.audit_tree.tag_configure('high_risk', background="#FEE2E2", foreground="#991B1B")

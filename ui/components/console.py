@@ -7,6 +7,7 @@ class ConsoleTab(ttk.Frame):
     
     def __init__(self, parent):
         super().__init__(parent)
+        self.text: tk.Text = None # type: ignore
         self._create_widgets()
         
     def _create_widgets(self):

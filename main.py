@@ -37,20 +37,35 @@ warnings.filterwarnings('ignore', message='.*use_label_encoder.*')
 warnings.filterwarnings('ignore', category=UserWarning, module='joblib')
 warnings.filterwarnings('ignore', message='.*X has feature names, but SVC was fitted without feature names.*')
 
-# ── Logging: writes to app.log in the script folder ───────────────────────────
+# ── Persistent Path Management ────────────────────────────────────────────────
+def get_app_home():
+    """Identify the consistent home directory for logs and models."""
+    if getattr(sys, 'frozen', False):
+        # Running as a bundled EXE (PyInstaller)
+        return os.path.dirname(sys.executable)
+    # Running as a normal script
+    return os.path.dirname(os.path.abspath(__file__))
+
+APP_HOME = get_app_home()
+
+# ── Logging: writes to app.log in the APP_HOME folder ────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     handlers=[
-        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app.log'), encoding='utf-8')
+        logging.FileHandler(os.path.join(APP_HOME, 'app.log'), encoding='utf-8')
     ]
 )
+
+# ── Global Metadata ──────────────────────────────────────────────────────────
+# Change the version here to reflect across the entire application interface.
+VERSION = "1.0.2"
 
 
 class CancerDetectionApp:
     def __init__(self, root):
         self.root = root
-        self.version = "1.0.1"
+        self.version = VERSION
         self.root.title(f"Cancer Detection XAI Dashboard v{self.version}")
         self.root.geometry("1280x850")
         self.root.minsize(1100, 700)
@@ -61,13 +76,13 @@ class CancerDetectionApp:
 
         # Initialize Core Managers
         self.data_manager = DataManager()
-        self.model_manager = ModelManager(os.path.dirname(__file__))
+        self.model_manager = ModelManager(APP_HOME)
 
         # Core utilities
         self.async_runner = AsyncRunner(self.root)
         self.error_handler = ErrorHandler(self.root)
         # UI Management (initialized with empty callbacks first)
-        self.layout_manager = LayoutManager(self.root, self.model_manager, self.data_manager, {})
+        self.layout_manager = LayoutManager(self.root, self.model_manager, self.data_manager, {}, version=self.version)
         self.update_manager = UpdateManager(self.root, self.layout_manager.update_status, current_version=self.version)
 
         # Link ErrorHandler to UI for internal notifications (Item #2: "not come out of app")
@@ -80,7 +95,8 @@ class CancerDetectionApp:
             self.data_manager,
             self.layout_manager,
             self.error_handler,
-            model_manager=self.model_manager
+            model_manager=self.model_manager,
+            version=self.version
         )
 
         self.model_controller = ModelController(
