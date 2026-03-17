@@ -58,6 +58,15 @@ def build():
     ]
     for imp in hidden_imports:
         args.extend(['--hidden-import', imp])
+        
+    # EXCLUDE huge unnecessary frameworks that get dragged in by data science libs
+    # This prevents [WinError 32] file locks on things we don't even use (like django)
+    excludes = [
+        'django', 'IPython', 'notebook', 'jedi', 'sphinx', 'pytest', 
+        'PySide6', 'PyQt5', 'PyQt6', 'matplotlib.tests'
+    ]
+    for exc in excludes:
+        args.extend(['--exclude-module', exc])
 
     print(f"Running PyInstaller with args: {' '.join(args)}")
     
