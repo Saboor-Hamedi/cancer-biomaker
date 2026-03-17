@@ -591,7 +591,8 @@ class LeaderboardTab(ttk.Frame):
         widths = (50, 160, 90, 90, 90, 90, 100, 100, 100)
 
         lb_vsb = ttk.Scrollbar(lb_frame, orient=tk.VERTICAL)
-        self.lb_tree = ttk.Treeview(lb_frame, columns=cols, show="headings", height=6, yscrollcommand=lb_vsb.set)
+        # Give more height since we have extra space now
+        self.lb_tree = ttk.Treeview(lb_frame, columns=cols, show="headings", height=15, yscrollcommand=lb_vsb.set)
         lb_vsb.config(command=self.lb_tree.yview)
 
         for c, h, w in zip(cols, headers, widths):
@@ -613,39 +614,9 @@ class LeaderboardTab(ttk.Frame):
                                       padx=15, pady=8, wraplength=900, justify=tk.LEFT)
         self.insight_label.pack(fill=tk.X, padx=15, pady=(0,8))
 
-        # ── Audit Section ──────────────────────────────────────────────
-        mid = ttk.Frame(outer, padding=(15, 6, 15, 4))
-        mid.pack(fill=tk.X)
-        ttk.Label(mid, text="INDIVIDUAL PATIENT FORENSIC AUDIT & TRIAGE LOG",
-                  font=('Inter', 12, 'bold'), foreground="#0F172A").pack(anchor=tk.W)
-        ttk.Label(mid, text="Flagged patients with highest biomarker signal intensities",
-                  font=('Inter', 9), foreground="#94A3B8").pack(anchor=tk.W)
-
-        audit_container = ttk.Frame(outer, padding=(15, 0, 15, 10))
-        audit_container.pack(fill=tk.BOTH, expand=True)
-
-        a_cols  = ("id", "lead", "risk", "consensus", "psa", "afp", "ca125", "verdict")
-        a_heads = ("PATIENT ID", "PRIMARY DETECTOR", "RISK %", "CONSENSUS", "PSA (pg/mL)", "AFP (pg/mL)", "CA125 (U/mL)", "CLINICAL VERDICT")
-        a_widths = (120, 140, 80, 100, 110, 110, 110, 140)
-
-        a_vsb = ttk.Scrollbar(audit_container, orient=tk.VERTICAL)
-        self.audit_tree = ttk.Treeview(audit_container, columns=a_cols, show="headings", height=10, yscrollcommand=a_vsb.set)
-        a_vsb.config(command=self.audit_tree.yview)
-
-        for c, h, w in zip(a_cols, a_heads, a_widths):
-            self.audit_tree.heading(c, text=h)
-            self.audit_tree.column(c, width=w, anchor=tk.CENTER)
-
-        self.audit_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        a_vsb.pack(side=tk.RIGHT, fill=tk.Y)
-
-        self.audit_tree.tag_configure('critical',  background="#FEE2E2", foreground="#991B1B")
-        self.audit_tree.tag_configure('high_risk', background="#FEF3C7", foreground="#92400E")
-        self.audit_tree.tag_configure('stable',    foreground="#059669")
-
     def clear(self):
-        if self.lb_tree:   self.lb_tree.delete(*self.lb_tree.get_children())
-        if self.audit_tree: self.audit_tree.delete(*self.audit_tree.get_children())
+        if self.lb_tree:   
+            self.lb_tree.delete(*self.lb_tree.get_children())
 
     # ── CLINICAL LEADERBOARD INSIGHTS (hardcoded from real data analysis) ──────
     _INSIGHTS = {
@@ -714,47 +685,3 @@ class LeaderboardTab(ttk.Frame):
         if top_model and self.insight_label:
             insight = self._INSIGHTS.get(top_model, f"Model '{top_model}' achieved highest clinical ranking based on F1 and Recall metrics.")
             self.insight_label.config(text=insight)
-
-    def update_audit(self, detailed_audit):
-        """Populate forensic audit triage log with patient-level biomarker verdicts."""
-        if not self.audit_tree: return
-        self.audit_tree.delete(*self.audit_tree.get_children())
-
-        # Clinical thresholds derived from real data analysis
-        PSA_CANCER_THRESHOLD = 28224  # Max PSA in healthy class
-        AFP_HIGH = 100
-        CA125_HIGH = 35
-
-        for r in detailed_audit:
-            risk_val = r.get('risk', 0)
-            psa = r.get('psa', 0)
-            afp = r.get('afp', 0)
-            ca125 = r.get('ca125', 0)
-
-            # Determine primary driver
-            if psa > PSA_CANCER_THRESHOLD:
-                verdict = f"PSA SURGE ↑ ({psa:,.0f} pg/mL)"
-                tag = 'critical'
-            elif afp > AFP_HIGH:
-                verdict = f"AFP ELEVATED ({afp:.1f} pg/mL)"
-                tag = 'high_risk'
-            elif ca125 > CA125_HIGH:
-                verdict = f"CA125 ELEVATED ({ca125:.1f} U/mL)"
-                tag = 'high_risk'
-            elif risk_val > 0.7:
-                verdict = "MULTI-MARKER SIGNAL"
-                tag = 'critical'
-            else:
-                verdict = "MONITOR — BORDERLINE"
-                tag = 'high_risk'
-
-            self.audit_tree.insert("", tk.END, values=(
-                r.get('id', '?'),
-                r.get('lead_model', 'N/A'),
-                f"{risk_val:.1%}",
-                r.get('consensus', '0/4'),
-                f"{psa:,.1f}",
-                f"{afp:.2f}",
-                f"{ca125:.2f}",
-                verdict
-            ), tags=(tag,))
