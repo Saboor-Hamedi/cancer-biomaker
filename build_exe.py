@@ -37,6 +37,7 @@ def build():
         '--name=CancerDetectionDashboard', # Name of the folder/exe
         '--clean',                        # Clean cache
         '--noconfirm',                    # Overwrite existing
+        '--noupx',                        # No UPX (faster startup for AI libs)
     ]
 
     # Add all data folders
@@ -46,6 +47,7 @@ def build():
     # AI-Specific: Collect all metadata for these heavy packages
     args.extend(['--collect-all', 'sklearn'])
     args.extend(['--collect-all', 'xgboost'])
+    args.extend(['--collect-all', 'shap'])
     
     # Hidden imports missed by hooks
     hidden_imports = [

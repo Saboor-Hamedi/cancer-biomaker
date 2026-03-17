@@ -8,6 +8,7 @@ import os
 import sys
 import subprocess
 import re
+import shutil
 
 def run_cmd(cmd):
     """Utility to run shell commands and return output."""
@@ -49,8 +50,8 @@ def publish():
     # 2. Check for Assets
     # Priority: ZIP Bundle -> Inno Installer -> Standalone EXE
     portable_zip = "CancerDetectionDashboard_Portable.zip"
-    exe_path = os.path.join("dist", "CancerDetectionDashboard.exe") # fallback for old builds
     onedir_exe = os.path.join("dist", "CancerDetectionDashboard", "CancerDetectionDashboard.exe")
+    exe_path = os.path.join("dist", "CancerDetectionDashboard.exe")
     
     installer_path = None
     for file in os.listdir("."):
@@ -77,8 +78,13 @@ def publish():
 
     # 3. Git Operations
     print("🔄 Syncing with GitHub...")
-    run_cmd("git add .")
-    run_cmd(f'git commit -m "Release {tag}"')
+    run_cmd("git config core.autocrlf true")
+    run_cmd("git add main.py publish.py build_exe.py DOCUMENTATION.md README.md requirements.txt")
+    # Selective add for folders to keep git clean
+    run_cmd("git add controllers/ handlers/ logic/ ui/ utils/ views/ styles.py")
+    
+    run_cmd(f'git commit -m "Release {tag} - Optimized Clinical Build"')
+    print("🚀 Pushing to origin/main...")
     run_cmd("git push origin main")
 
     # 4. Create Tag

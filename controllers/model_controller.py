@@ -260,11 +260,18 @@ class ModelController:
             if batch_results_summary:
                 leader_model = max(batch_results_summary, key=lambda x: x['risk'])['model']
             
+            # Identify clinical markers present in this batch
+            present_markers = [c for c in df.columns if any(k in str(c).lower() for k in ['psa', 'afp', 'ca125', 'peak', 'slope'])]
+            top_markers = present_markers[:3] if present_markers else ["Global Distribution"]
+
             summary_metadata = {
                 'avg_consensus': avg_consensus,
                 'total_committee': total_models,
                 'scoreboard': batch_results_summary,
-                'champion': leader_model
+                'champion': leader_model,
+                'top_markers': top_markers,
+                'clinical_status': "ALERT" if pos_count > 0 else "STABLE",
+                'rate': det_rate if 'det_rate' in locals() else (pos_count/len(df)*100 if len(df)>0 else 0)
             }
 
             # Identify detecting models for EACH positive case

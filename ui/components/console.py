@@ -27,7 +27,8 @@ class ConsoleTab(ttk.Frame):
         
         self.text = tk.Text(container, font=("Consolas", 10), wrap=tk.WORD, 
                             state=tk.DISABLED, undo=True, borderwidth=1, relief="flat",
-                            background="#F8FAFC", foreground="#1E293B")
+                            background="#F8FAFC", foreground="#1E293B",
+                            selectbackground="#E2E8F0", selectforeground="#0F172A")
         scrollbar = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.text.yview)
         self.text.configure(yscrollcommand=scrollbar.set)
         

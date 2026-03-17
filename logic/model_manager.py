@@ -28,7 +28,7 @@ try:
     from torch_geometric.nn import GCNConv, global_mean_pool
     HAS_TORCH = True
     torch_base = torch.nn.Module
-except ImportError:
+except Exception as e:
     HAS_TORCH = False
     class torch_base:
         def __init__(self, *args, **kwargs): pass
@@ -51,7 +51,9 @@ except ImportError:
     class GCNConv:
         def __init__(self, *args, **kwargs): pass
         def __call__(self, *args, **kwargs): return None
-    log.warning("PyTorch or Torch-Geometric not found. GNN models will be disabled.")
+    # log is defined below, so we use a local print or wait until log is ready
+    # However, since log is defined at line 57, we can just move it up or use a simple msg
+    HAS_TORCH_ERROR = str(e)
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
 log = logging.getLogger(__name__)

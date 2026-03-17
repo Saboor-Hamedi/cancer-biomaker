@@ -72,7 +72,7 @@ def apply_styles():
                     background="#F1F5F9", 
                     foreground=TEXT_MAIN,
                     relief='flat')
-    style.map("Treeview", background=[('selected', '#DBEAFE')], foreground=[('selected', '#1E40AF')])
+    style.map("Treeview", background=[('selected', '#1e202e')], foreground=[('selected', '#FFFFFF')])
 
     # Custom Header Style
     style.configure('Header.TLabel', font=('Inter', 16, 'bold'), background=CARD_BG, foreground=ACCENT_DARK)

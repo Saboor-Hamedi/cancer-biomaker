@@ -176,6 +176,7 @@ class MenuHandler:
         
         text = tk.Text(txt_frame, wrap=tk.WORD, font=("Inter", 11), padx=30, pady=30, 
                        bg="#F8FAFC", fg="#1E293B", borderwidth=0, highlightthickness=0,
+                       selectbackground="#E2E8F0", selectforeground="#0F172A",
                        yscrollcommand=sb.set)
         text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.config(command=text.yview)
@@ -206,38 +207,58 @@ class MenuHandler:
         if not content:
             content = "# Help & Documentation\nDataset guide and troubleshooting."
 
-        # Simple Premium Markdown Parser
+        # Better Markdown Parser
         text.config(state=tk.NORMAL)
         lines = content.split('\n')
         in_code_block = False
         
         for line in lines:
+            line = line.rstrip()
             if line.startswith('```'):
                 in_code_block = not in_code_block
                 continue
             
             if in_code_block:
-                text.insert(tk.END, line + "\n", "code_block")
+                text.insert(tk.END, "  " + line + "\n", "code_block")
                 continue
 
+            if not line:
+                text.insert(tk.END, "\n")
+                continue
+
+            # Headers
             if line.startswith('# '):
-                text.insert(tk.END, line[2:] + "\n", "h1")
+                text.insert(tk.END, line[2:].upper() + "\n", "h1")
             elif line.startswith('## '):
                 text.insert(tk.END, line[3:] + "\n", "h2")
             elif line.startswith('### '):
                 text.insert(tk.END, line[4:] + "\n", "h3")
             elif line.startswith('---'):
                 text.insert(tk.END, " " * 200 + "\n", "rule")
-            elif line.startswith('* ') or line.startswith('- ') or line.strip().isdigit() and line.strip().endswith('.'):
-                text.insert(tk.END, "  • " + line.lstrip('* -').strip() + "\n", "bullet")
-            elif '|' in line and (line.count('|') > 2): # Very basic table handling
-                text.insert(tk.END, line.replace('|', '  ').strip() + "\n", "code_block")
+            
+            # Lists
+            elif line.strip().startswith('* ') or line.strip().startswith('- '):
+                clean_line = line.strip().lstrip('* -').replace('**', '')
+                text.insert(tk.END, "  • " + clean_line + "\n", "bullet")
+            elif line.strip() and line.strip()[0].isdigit() and '. ' in line:
+                clean_line = line.strip().split('. ', 1)[1].replace('**', '')
+                text.insert(tk.END, f"  {line.strip().split('. ', 1)[0]}. " + clean_line + "\n", "bullet")
+            
+            # Table handling - Columnar spacing
+            elif '|' in line:
+                if '---' in line: continue
+                cols = [c.strip() for c in line.split('|') if c.strip()]
+                if not cols: continue
+                # Professional padding for 2-column architecture table
+                if len(cols) == 2:
+                    formatted = f"{cols[0]:<18} │ {cols[1]}"
+                    text.insert(tk.END, "  " + formatted + "\n", "code_block")
+                else:
+                    text.insert(tk.END, "  " + "   ".join(cols) + "\n", "code_block")
+            
             else:
-                # Handle basic inline bolding **text**
-                parts = line.split('**')
-                for i, part in enumerate(parts):
-                    tag = "bold" if i % 2 == 1 else "normal"
-                    text.insert(tk.END, part, tag)
-                text.insert(tk.END, "\n", "normal")
+                # Handle inline bolding **text** by cleaning it for the app view
+                clean_line = line.replace('**', '')
+                text.insert(tk.END, clean_line + "\n", "normal")
 
         text.config(state=tk.DISABLED)

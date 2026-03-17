@@ -84,7 +84,8 @@ class Dashboard(ttk.Frame):
         
         self.narrative_text = tk.Text(
             analysis_frame, height=3, bg="white", fg="#475569",
-            font=("Inter", 10), wrap=tk.WORD, borderwidth=0, highlightthickness=0
+            font=("Inter", 10), wrap=tk.WORD, borderwidth=0, highlightthickness=0,
+            selectbackground="#E2E8F0", selectforeground="#0F172A"
         )
         self.narrative_text.pack(fill=tk.X, expand=True)
         self.narrative_text.insert(tk.END, "Awaiting clinical data... The AI will provide a qualitative analysis here once training and prediction are complete.")
