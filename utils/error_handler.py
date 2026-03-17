@@ -13,6 +13,8 @@ class ErrorHandler:
         self.root = root
         self.log = log_instance or logging.getLogger(__name__)
         self.console_callback = None
+        self.status_callback = None
+        self.narrative_callback = None
 
     def log_and_notify(self, operation, error, title="Error", show_dialog=True):
         error_msg = f"{operation} failed: {str(error)}"
@@ -25,25 +27,30 @@ class ErrorHandler:
             self.notify(error_msg, type='error')
 
     def notify(self, message, type='info'):
-        """Show a non-intrusive toast notification."""
-        if self.root:
-            try:
-                from ui.components.toast import show_toast
-                show_toast(self.root, message, type=type)
-                
-                # Also log to system console if available
-                if self.console_callback:
-                    self.console_callback(message, level=type.upper())
-            except Exception as e:
-                self.log.error(f"Failed to show toast: {e}")
-                # Fallback to standard messagebox for critical errors if toast fails
-                if type == 'error':
-                    messagebox.showerror("Error", message)
-        else:
+        """Show a non-intrusive internal notification."""
+        # 1. Internal Status Bar (Primary)
+        if self.status_callback:
+            color = "#10B981" if type == 'success' else "#EF4444" if type == 'error' else "#3B82F6"
+            self.status_callback(message, color)
+
+        # 2. Clinical Narrative Engine (For important updates)
+        if self.narrative_callback and type in ('error', 'warning', 'success'):
+            level = "SUCCESS" if type == 'success' else "DANGER" if type == 'error' else "WARNING"
+            self.narrative_callback(message, level)
+
+        # 3. Floating Toast (Only if requested and root exists, otherwise redundant)
+        # We skip toast by default now to keep things "inside" as requested.
+        
+        # 4. Console Logic
+        if self.console_callback:
+            self.console_callback(message, level=type.upper())
+
+        # 5. Last resort fallback for critical errors if no UI callbacks exist
+        if not self.status_callback and not self.narrative_callback:
             if type == 'error':
-                messagebox.showerror("Error", message)
-            else:
-                messagebox.showinfo("Information", message)
+                messagebox.showerror("Clinical Error", message)
+            elif type == 'warning':
+                messagebox.showwarning("Clinical Warning", message)
 
     def require_data(self, context, data_path=None):
         """

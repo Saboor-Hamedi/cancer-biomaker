@@ -22,12 +22,13 @@ from handlers.event_handler import EventHandler
 from handlers.menu_handler import MenuHandler
 from logic.data_manager import DataManager
 from logic.model_manager import ModelManager
-from styles import apply_styles
+# Local imports removed: from styles import apply_styles
 from ui.display_formatter import DisplayFormatter
 from ui.layout_manager import LayoutManager
 from ui.styles import StyleManager
 from utils.async_runner import AsyncRunner
 from utils.error_handler import ErrorHandler
+from utils.update_manager import UpdateManager
 from views.dialogs import PreprocessingDialog
 from views.visualizations import Visualizer
 import numpy as np
@@ -49,7 +50,8 @@ logging.basicConfig(
 class CancerDetectionApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Cancer Detection XAI Dashboard v3.0")
+        self.version = "1.0.1"
+        self.root.title(f"Cancer Detection XAI Dashboard v{self.version}")
         self.root.geometry("1280x850")
         self.root.minsize(1100, 700)
         self.root.configure(bg="#F8FAFC")
@@ -64,9 +66,14 @@ class CancerDetectionApp:
         # Core utilities
         self.async_runner = AsyncRunner(self.root)
         self.error_handler = ErrorHandler(self.root)
-
         # UI Management (initialized with empty callbacks first)
         self.layout_manager = LayoutManager(self.root, self.model_manager, self.data_manager, {})
+        self.update_manager = UpdateManager(self.root, self.layout_manager.update_status, current_version=self.version)
+
+        # Link ErrorHandler to UI for internal notifications (Item #2: "not come out of app")
+        self.error_handler.console_callback = self.layout_manager.log_message
+        self.error_handler.status_callback = self.layout_manager.update_status
+        self.error_handler.narrative_callback = lambda t, l="INFO": self.layout_manager.dashboard.update_narrative(t, l)
 
         # Controllers
         self.data_controller = DataController(
@@ -111,13 +118,12 @@ class CancerDetectionApp:
         )
 
         # Connect console to error handler
-        self.error_handler.console_callback = self.layout_manager.log
+        self.error_handler.console_callback = self.layout_manager.log_message
         
         # Initial welcome log
-        self.layout_manager.log("System initialization complete. Monitoring clinical diagnostics.", level="SUCCESS")
+        self.layout_manager.log_message("System initialization complete. Monitoring clinical diagnostics.", level="SUCCESS")
 
-        # Apply Styles
-        apply_styles()
+        # Legacy Apply Styles removed
 
         # Define callbacks for LayoutManager
         callbacks = {
@@ -134,7 +140,11 @@ class CancerDetectionApp:
             'viz_robust': self.visualization_controller.show_model_robustness_benchmark,
             'viz_leadership': self.visualization_controller.show_model_leadership_report,
             'viz_pr_thresh': self.visualization_controller.show_pr_threshold,
-            'edit_input_value': self.event_handler.handle_tree_double_click
+            'edit_input_value': self.event_handler.handle_tree_double_click,
+            'upload': self.data_controller.handle_upload,
+            'train_all': self.model_controller.handle_train_models,
+            'system_reset': self.model_controller.handle_system_reset,
+            'check_updates': lambda: self.update_manager.check_for_updates(silent=False)
         }
         self.layout_manager.callbacks.update(callbacks)
 
@@ -147,15 +157,28 @@ class CancerDetectionApp:
         # Build Menu Bar
         self.menu_handler.build_menubar()
 
+        # Professor's Requirement: Fresh Start
+        # Delete any existing models from previous sessions on startup
+        self.model_manager.delete_all_models()
+
         # Auto-check and train models if missing
         self._check_models_on_startup()
+
+        # Live Update Check (GitHub Releases)
+        self.update_manager.check_for_updates(silent=True)
 
         # Handle proper closing
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def on_close(self):
-        """Clean shutdown of the application"""
+        """Clean shutdown of the application - deletes models per professor's requirement"""
         try:
+            # Inform user
+            self.layout_manager.update_status("Cleaning clinical environment...", "orange")
+            
+            # Delete all model files for a fresh start next time
+            self.model_manager.delete_all_models()
+            
             # Close all modal windows first
             Visualizer.close_all_modals()
             self.root.destroy()
@@ -164,15 +187,17 @@ class CancerDetectionApp:
         os._exit(0)  # Force kill all threads and processes
 
     def _check_models_on_startup(self):
-        """Check models on startup."""
+        """Check models on startup and prompt for training."""
         def check_task():
-            # Only check if models already exist, don't auto-train
+            # Check if models exist (they shouldn't because we delete on start/close)
             success, msg = self.model_manager.check_and_train_models("", self.layout_manager.update_status, force=False)
+            
             if success:
                 self.root.after(0, lambda: self.layout_manager.refresh_input_features(self.model_manager.feature_names))
                 self.root.after(0, lambda: self.layout_manager.update_status("System Ready - Models Verified", "#10B981"))
             else:
-                self.root.after(0, lambda: self.layout_manager.update_status("Ready - Upload dataset to enable analytics", "#3B82F6"))
+                # Prompt user to train
+                self.layout_manager.update_status("Action Required: Upload dataset to train AI models", "#EF4444")
 
         threading.Thread(target=check_task, daemon=True).start()
 

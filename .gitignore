@@ -3,3 +3,6 @@ models/
 __pycache__/
 app.log
 doc.md
+build/
+dist/
+*.spec

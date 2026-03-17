@@ -4,11 +4,33 @@ from tkinter import ttk
 class Dashboard(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
+        
+        # Explicitly declare all UI component members for linter and runtime clarity
+        self.status_frame = None
+        self.rows_label = None
+        self.cols_label = None
+        self.samples_label = None
+        self.risk_card_val = None
+        self.conf_card_val = None
+        self.triage_card_val = None
+        self.consensus_card_val = None
+        self.narrative_text = None
+        self.notebook = None
+        self.input_tab = None
+        self.data_tab = None
+        self.validation_tab = None
+        self.leaderboard_tab = None
+        self.analysis_tab = None
+        self.log_tab_frame = None
+        self.console = None
+        self.metrics_frame = None
+        self.status_label = None
+        
         self._create_widgets()
 
     def _create_widgets(self):
         # Header Main Title
-        header_frame = ttk.Frame(self, style='Card.TFrame', padding=[20, 15])
+        header_frame = ttk.Frame(self, style='Card.TFrame', padding=(20, 15))
         header_frame.pack(fill=tk.X, padx=15, pady=(15, 5))
         
         title_container = ttk.Frame(header_frame, style='Card.TFrame')
@@ -17,43 +39,56 @@ class Dashboard(ttk.Frame):
         ttk.Label(title_container, text="Cancer Biomarker AI", style='Header.TLabel').pack(anchor=tk.W)
         ttk.Label(title_container, text="Predictive diagnostics & explainable clinical analysis", style='SubHeader.TLabel').pack(anchor=tk.W)
 
-        # Status Bar with Data Info Labels
-        self.status_frame = ttk.Frame(self, style='Card.TFrame', padding=[15, 5])
+        # Status Bar with Grid Layout (Item #6 Fix: "labels messes up")
+        self.status_frame = ttk.Frame(self, style='Card.TFrame', padding=(15, 8))
         self.status_frame.pack(fill=tk.X, padx=15, pady=5)
+        self.status_frame.columnconfigure(0, weight=1) # Status side
+        self.status_frame.columnconfigure(1, weight=0) # Stats side
         
         # Left side: Message Status
         status_inner = ttk.Frame(self.status_frame, style='Card.TFrame')
-        status_inner.pack(side=tk.LEFT)
+        status_inner.grid(row=0, column=0, sticky='w')
         ttk.Label(status_inner, text="System Status:", font=("Inter", 9, "bold"), foreground="#64748B", background="#FFFFFF").pack(side=tk.LEFT, padx=5)
         self.status_label = ttk.Label(status_inner, text="System Ready", font=("Inter", 9, "bold"), foreground="#3B82F6", background="#FFFFFF")
         self.status_label.pack(side=tk.LEFT)
 
         # Right side: Data Stats labels
         stats_outer = ttk.Frame(self.status_frame, style='Card.TFrame')
-        stats_outer.pack(side=tk.RIGHT)
+        stats_outer.grid(row=0, column=1, sticky='e')
         
         def add_stat(label, value_attr):
             container = ttk.Frame(stats_outer, style='Card.TFrame')
             container.pack(side=tk.LEFT, padx=10)
-            ttk.Label(container, text=f"{label}:", font=("Inter", 9), foreground="#64748B", background="#FFFFFF").pack(side=tk.LEFT)
-            val_lb = ttk.Label(container, text="0", font=("Inter", 9, "bold"), foreground="#1E293B", background="#FFFFFF")
+            ttk.Label(container, text=f"{label}:", font=("Inter", 8), foreground="#94A3B8", background="#FFFFFF").pack(side=tk.LEFT)
+            val_lb = ttk.Label(container, text="0", font=("Inter", 8, "bold"), foreground="#1E293B", background="#FFFFFF")
             val_lb.pack(side=tk.LEFT, padx=2)
             setattr(self, value_attr, val_lb)
 
-        add_stat("Number of Rows", "rows_label")
-        add_stat("Number of Columns", "cols_label")
-        add_stat("Row Samples", "samples_label")
+        add_stat("Rows", "rows_label")
+        add_stat("Cols", "cols_label")
+        add_stat("Samples", "samples_label")
 
         # Metric Cards Row
         self.metrics_frame = ttk.Frame(self)
         self.metrics_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        # Use more modern colors from palette
+        # Intelligence Cards
         self.risk_card_val    = self._create_metric_card(self.metrics_frame, "Avg Risk", "0.0%", "#EF4444")
         self.conf_card_val    = self._create_metric_card(self.metrics_frame, "Confidence", "0.0%", "#10B981")
-        self.triage_card_val  = self._create_metric_card(self.metrics_frame, "Triage Priority", "Pending", "#F59E0B")
-        self.consensus_card_val = self._create_metric_card(self.metrics_frame, "AI Consensus", "N/A", "#6366F1")
-        self.insight_card_val = self._create_metric_card(self.metrics_frame, "Result Insight", "Ready", "#3B82F6")
+        self.triage_card_val  = self._create_metric_card(self.metrics_frame, "Triage", "Pending", "#F59E0B")
+        self.consensus_card_val = self._create_metric_card(self.metrics_frame, "Consensus", "N/A", "#6366F1")
+
+        # ── NEW: Clinical Analysis Narrative (More Analysis, Less Statistics) ──
+        analysis_frame = ttk.LabelFrame(self, text="CLINICAL NARRATIVE & BIOMARKER INTERPRETATION", style='Card.TFrame', padding=15)
+        analysis_frame.pack(fill=tk.X, padx=15, pady=5)
+        
+        self.narrative_text = tk.Text(
+            analysis_frame, height=3, bg="white", fg="#475569",
+            font=("Inter", 10), wrap=tk.WORD, borderwidth=0, highlightthickness=0
+        )
+        self.narrative_text.pack(fill=tk.X, expand=True)
+        self.narrative_text.insert(tk.END, "Awaiting clinical data... The AI will provide a qualitative analysis here once training and prediction are complete.")
+        self.narrative_text.config(state=tk.DISABLED)
 
         # Notebook for content
         self.notebook = ttk.Notebook(self)
@@ -61,11 +96,15 @@ class Dashboard(ttk.Frame):
 
         self.input_tab = ttk.Frame(self.notebook)
         self.data_tab = ttk.Frame(self.notebook)
+        self.validation_tab = ttk.Frame(self.notebook)
+        self.leaderboard_tab = ttk.Frame(self.notebook)
         self.analysis_tab = ttk.Frame(self.notebook)
         self.log_tab_frame = ttk.Frame(self.notebook)
 
         self.notebook.add(self.input_tab, text="Input Features", sticky='nsew')
         self.notebook.add(self.data_tab, text="Data View", sticky='nsew')
+        self.notebook.add(self.validation_tab, text="AI Consensus", sticky='nsew')
+        self.notebook.add(self.leaderboard_tab, text="Algorithm Leaderboard", sticky='nsew')
         self.notebook.add(self.analysis_tab, text="Performance Analysis", sticky='nsew')
         self.notebook.add(self.log_tab_frame, text="System Logs", sticky='nsew')
 
@@ -79,22 +118,41 @@ class Dashboard(ttk.Frame):
         return val_label
 
     def update_data_info(self, rows=None, cols=None, samples=None):
-        if rows is not None: self.rows_label.config(text=str(rows))
-        if cols is not None: self.cols_label.config(text=str(cols))
-        if samples is not None: self.samples_label.config(text=str(samples))
+        if self.rows_label and rows is not None: self.rows_label.config(text=str(rows))
+        if self.cols_label and cols is not None: self.cols_label.config(text=str(cols))
+        if self.samples_label and samples is not None: self.samples_label.config(text=str(samples))
 
     def update_metrics(self, risk=None, confidence=None, insight=None, triage=None, consensus=None):
-        if risk is not None: self.risk_card_val.config(text=f"{risk:.1f}%")
-        if confidence is not None: self.conf_card_val.config(text=f"{confidence:.1f}%")
-        if triage is not None: self.triage_card_val.config(text=str(triage))
-        if consensus is not None: self.consensus_card_val.config(text=str(consensus))
-        if insight is not None: self.insight_card_val.config(text=str(insight))
+        if self.risk_card_val and risk is not None: self.risk_card_val.config(text=f"{risk:.1f}%")
+        if self.conf_card_val and confidence is not None: self.conf_card_val.config(text=f"{confidence:.1f}%")
+        if self.triage_card_val and triage is not None: self.triage_card_val.config(text=str(triage))
+        if self.consensus_card_val and consensus is not None: self.consensus_card_val.config(text=str(consensus))
+
+    def update_narrative(self, text, level="INFO"):
+        """Updates the clinical narrative analysis engine with qualitative insights."""
+        if not self.narrative_text: return
+        self.narrative_text.config(state=tk.NORMAL)
+        self.narrative_text.delete("1.0", tk.END)
+        
+        # Color mapping for narrative
+        color = "#1E293B" # Default slate
+        if level == "DANGER": color = "#EF4444"
+        elif level == "SUCCESS": color = "#059669"
+        elif level == "WARNING": color = "#D97706"
+        
+        self.narrative_text.tag_configure("level", foreground=color, font=("Inter", 10, "bold"))
+        
+        prefix = f"[{level}] CLINICAL ANALYSIS: "
+        self.narrative_text.insert(tk.END, prefix, "level")
+        self.narrative_text.insert(tk.END, text)
+        
+        self.narrative_text.config(state=tk.DISABLED)
 
     def update_status(self, text, color="#3B82F6"):
-        # Map simple color names to hex if needed or pass directly
-        self.status_label.config(text=text, foreground=color)
+        if self.status_label:
+            self.status_label.config(text=text, foreground=color)
 
     def log_message(self, message, level="INFO"):
         """Log a message to the internal console tab."""
-        if hasattr(self, 'console'):
+        if self.console:
             self.console.log(message, level)

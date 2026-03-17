@@ -3,8 +3,8 @@ Menu Handler - Handles menu bar actions and commands.
 """
 
 import tkinter as tk
-from tkinter import messagebox
-
+from tkinter import messagebox, ttk
+import os
 
 class MenuHandler:
     """Handler for menu bar actions and keyboard shortcuts."""
@@ -102,7 +102,6 @@ class MenuHandler:
     def _build_features_menu(self, menubar):
         """Build the Features menu."""
         features_menu = tk.Menu(menubar, tearoff=0)
-        # Use common clinical biomarkers for the menu
         biomarkers = [
             'PSA_peak_height', 'min_slope', 'PSA_concentration_pg_per_ml',
             'max_slope', 'current_at_-0.46V', 'min_current',
@@ -116,6 +115,8 @@ class MenuHandler:
     def _build_help_menu(self, menubar):
         """Build the Help menu."""
         help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="Check for Updates", command=lambda: self.layout_manager.callbacks.get('check_updates', lambda: None)())
+        help_menu.add_separator()
         help_menu.add_command(label="Help & Documentation", command=self._show_help, accelerator="F1")
         menubar.add_cascade(label="Help", menu=help_menu)
 
@@ -125,17 +126,13 @@ class MenuHandler:
         self.root.bind_all("<Control-s>", lambda e: self.data_controller.handle_export())
         self.root.bind_all("<F1>", lambda e: self._show_help())
 
-    # Menu action handlers
     def _handle_report(self):
-        """Delegate report generation to DataController."""
         self.data_controller.handle_report()
 
     def _handle_clear_all(self):
-        """Delegate data clearing to DataController."""
         self.data_controller.handle_clear_data()
 
     def _handle_exit(self):
-        """Handle application exit."""
         from views.visualizations import Visualizer
         try:
             Visualizer.close_all_modals()
@@ -146,18 +143,57 @@ class MenuHandler:
         os._exit(0)
 
     def _show_help(self):
-        """Show application help."""
-        help_text = """
-        How to Use the Cancer Detection AI Dashboard v3.0:
+        """Show a professional scrollable modal with detailed documentation."""
+        help_win = tk.Toplevel(self.root)
+        help_win.title("SYSTEM DOCUMENTATION & CLINICAL GUIDE")
+        help_win.geometry("850x700")
+        help_win.configure(bg="#FFFFFF")
+        help_win.transient(self.root)
+        help_win.grab_set()
 
-        1. Upload Data: Go to File -> Upload Dataset (.xlsx).
-        2. Dashboard: View clinical risk metrics and population summaries.
-        3. Input Tab: Manually edit clinical biomarkers to perform "What-If" analysis.
-        4. Analytics Tab:
-            - Local XAI Diagnosis: Explain individual patient results via SHAP.
-            - Patient Radar Profile: Compare patient against healthy averages.
-            - Model Diagnostics: ROC, Precision-Recall, Confusion Matrix.
-            - Comparison: Compare performance across all 4 built-in models.
-        5. Export: Save results back to Excel for clinical review.
-        """
-        messagebox.showinfo("System Help & Documentation", help_text)
+        # Center
+        help_win.update_idletasks()
+        w, h = help_win.winfo_width(), help_win.winfo_height()
+        x = (help_win.winfo_screenwidth() // 2) - (w // 2)
+        y = (help_win.winfo_screenheight() // 2) - (h // 2)
+        help_win.geometry(f"+{x}+{y}")
+
+        main = ttk.Frame(help_win, style='Card.TFrame', padding=25)
+        main.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(main, text="BIOMARKER AI CLINICAL DOCUMENTATION", font=("Inter", 15, "bold"), foreground="#0F172A").pack(anchor=tk.W, pady=(0, 15))
+
+        txt_frame = ttk.Frame(main)
+        txt_frame.pack(fill=tk.BOTH, expand=True)
+        sb = ttk.Scrollbar(txt_frame)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        text = tk.Text(txt_frame, wrap=tk.WORD, font=("Inter", 11), padx=25, pady=25, 
+                       bg="#F8FAFC", fg="#1E293B", borderwidth=0, highlightthickness=0,
+                       yscrollcommand=sb.set)
+        text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sb.config(command=text.yview)
+
+        # Robust content loading
+        content = ""
+        paths = [
+            os.path.join(os.getcwd(), "DOCUMENTATION.md"),
+            os.path.join(os.path.dirname(__file__), "..", "DOCUMENTATION.md")
+        ]
+        for p in paths:
+            if os.path.exists(p):
+                with open(p, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    break
+        
+        if content:
+            text.insert(tk.END, content)
+        else:
+            text.insert(tk.END, "DETAILED DOCUMENTATION GUIDE\n" + "="*30 + "\n\n")
+            text.insert(tk.END, "1. UPLOAD: Use File -> Upload Dataset (.xlsx)\n")
+            text.insert(tk.END, "2. TRAINING: Go to Data -> Re-Train All Models\n")
+            text.insert(tk.END, "3. DIAGNOSIS: Select Analytics to view SHAP/ROC results.")
+
+        text.config(state=tk.DISABLED)
+        
+        ttk.Button(main, text="CLOSE GUIDE", style='Primary.TButton', command=help_win.destroy).pack(side=tk.RIGHT, pady=(20, 0))

@@ -16,15 +16,42 @@ try:
     HAS_XGB = True
 except ImportError:
     HAS_XGB = False
+    class XGBClassifier:
+        def __init__(self, *args, **kwargs):
+            raise ImportError("XGBoost is not installed.")
 
 try:
     import torch
     import torch.nn.functional as F
-    from torch_geometric.data import Data, DataLoader
+    from torch_geometric.data import Data
+    from torch_geometric.loader import DataLoader
     from torch_geometric.nn import GCNConv, global_mean_pool
     HAS_TORCH = True
+    torch_base = torch.nn.Module
 except ImportError:
     HAS_TORCH = False
+    class torch_base:
+        def __init__(self, *args, **kwargs): pass
+        def parameters(self): return []
+        def train(self): pass
+        def eval(self): pass
+        def __call__(self, *args, **kwargs): pass
+        def to(self, device): return self
+        def state_dict(self): return {}
+        def load_state_dict(self, sd): pass
+        
+    class Data:
+        y = None
+        def __init__(self, *args, **kwargs):
+            for k, v in kwargs.items(): setattr(self, k, v)
+    class DataLoader:
+        def __init__(self, *args, **kwargs): pass
+        def __iter__(self): return iter([])
+    def global_mean_pool(*args, **kwargs): pass
+    class GCNConv:
+        def __init__(self, *args, **kwargs): pass
+        def __call__(self, *args, **kwargs): return None
+    log.warning("PyTorch or Torch-Geometric not found. GNN models will be disabled.")
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
 log = logging.getLogger(__name__)
@@ -44,12 +71,12 @@ class GNNClassifier:
         self.num_features = num_features
         self.hidden_channels = hidden_channels
         self.num_classes = num_classes
-        self.model = None
+        self.model: torch_base = None
         self.edge_index = None
         self.feature_names = None
 
     def _build_graph(self, X):
-        """Build graph from correlation matrix."""
+        """Build graph from correlation matrix with dimensionality safety."""
         if self.feature_names is None:
             self.feature_names = X.columns.tolist()
 
@@ -57,11 +84,15 @@ class GNNClassifier:
         edges = []
         for i in range(len(corr_matrix.columns)):
             for j in range(i+1, len(corr_matrix.columns)):
-                if abs(corr_matrix.iloc[i, j]) > 0.5:  # Lower threshold for more connections
+                if abs(corr_matrix.iloc[i, j]) > 0.5:
                     edges.append([i, j])
                     edges.append([j, i])
 
-        self.edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
+        if not edges:
+            # Dimension safety: PyG requires [2, E] shape. tensor([]) would be [0].
+            self.edge_index = torch.zeros((2, 0), dtype=torch.long)
+        else:
+            self.edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
 
     def _create_graph_data(self, X, y=None):
         """Create PyG Data objects."""
@@ -70,7 +101,8 @@ class GNNClassifier:
             x = torch.tensor(X.loc[idx].values, dtype=torch.float).view(-1, 1)
             data = Data(x=x, edge_index=self.edge_index)
             if y is not None:
-                data.y = torch.tensor(y.loc[idx], dtype=torch.long)
+                # Use unsqueeze to ensure labels are treatable as 1D tensors during batching
+                data.y = torch.tensor(y.loc[idx], dtype=torch.long).unsqueeze(0)
             data_list.append(data)
         return data_list
 
@@ -109,8 +141,9 @@ class GNNClassifier:
         with torch.no_grad():
             for data in test_loader:
                 out = self.model(data.x, data.edge_index, data.batch)
-                pred = out.argmax(dim=1)
-                preds.extend(pred.cpu().numpy())
+                if out is not None:
+                    pred = out.argmax(dim=1)
+                    preds.extend(pred.cpu().numpy())
 
         return np.array(preds)
 
@@ -124,15 +157,19 @@ class GNNClassifier:
         with torch.no_grad():
             for data in test_loader:
                 out = self.model(data.x, data.edge_index, data.batch)
-                prob = F.softmax(out, dim=1)
-                probs.extend(prob.cpu().numpy())
+                if out is not None:
+                    prob = F.softmax(out, dim=1)
+                    probs.extend(prob.cpu().numpy())
 
         return np.array(probs)
 
 
-class GNN(torch.nn.Module):
-    """PyTorch GNN model."""
+class GNN(torch_base):
+    """PyTorch GNN model definition."""
     def __init__(self, num_features, hidden_channels, num_classes):
+        if not HAS_TORCH:
+            super().__init__()
+            return
         super(GNN, self).__init__()
         self.conv1 = GCNConv(num_features, hidden_channels)
         self.conv2 = GCNConv(hidden_channels, hidden_channels)
@@ -146,6 +183,52 @@ class GNN(torch.nn.Module):
         x = global_mean_pool(x, batch)
         x = self.lin(x)
         return x
+
+
+class EnsembleProxy:
+    """Proxy object that makes the AI Ensemble look like a standard sklearn model."""
+    def __init__(self, manager):
+        self.manager = manager
+        # Mirror attributes needed for some visualization logic
+        self.feature_names = manager.feature_names
+        self.classes_ = [0, 1]
+
+    @property
+    def feature_importances_(self):
+        """Aggregate feature importance from constituent models."""
+        importances = []
+        # Use RF and XGBoost as the primary sources of global importance for the ensemble
+        for name in ["Random Forest", "XGBoost"]:
+            try:
+                m = self.manager.load_model(name)
+                if m and hasattr(m, 'feature_importances_'):
+                    importances.append(m.feature_importances_)
+            except:
+                continue
+        
+        if importances:
+            return np.mean(importances, axis=0)
+        # Uniform fallback if no importance sources found
+        return np.ones(len(self.manager.feature_names)) / len(self.manager.feature_names)
+
+    @property
+    def coef_(self):
+        """Aggregate coefficients if applicable (fallback to importance)."""
+        return np.array([self.feature_importances_])
+
+    def predict(self, X):
+        # Ensure input is a DataFrame with correct columns
+        if not isinstance(X, pd.DataFrame):
+            X = pd.DataFrame(X, columns=self.manager.feature_names)
+        res, _, _ = self.manager.predict_ensemble(X, is_single=False)
+        return res
+
+    def predict_proba(self, X):
+        if not isinstance(X, pd.DataFrame):
+            X = pd.DataFrame(X, columns=self.manager.feature_names)
+        _, _, risks = self.manager.predict_ensemble(X, is_single=False)
+        # risks contains p(1) -> [p(0), p(1)]
+        return np.column_stack([1 - risks, risks])
 
 
 class ModelManager:
@@ -180,6 +263,29 @@ class ModelManager:
         }
         self.cached_train_df = None
         self.rf_model = self.lr_model = self.svm_model = self.xgb_model = self.gnn_model = None
+
+    def delete_all_models(self):
+        """Permanently deletes all trained model files and feature metadata from the disk."""
+        import shutil
+        if os.path.exists(self.script_dir):
+            for filename in os.listdir(self.script_dir):
+                if filename.endswith('.pkl'):
+                    try:
+                        os.remove(os.path.join(self.script_dir, filename))
+                    except:
+                        pass
+        
+        # Also definitely remove feature names to force a fresh sync next time
+        feature_path = os.path.join(self.script_dir, 'feature_names.pkl')
+        if os.path.exists(feature_path):
+            try:
+                os.remove(feature_path)
+            except:
+                pass
+                
+        self.feature_names = []
+        self._feature_hash = 0
+        self.reset_analytics()
 
     @property
     def features(self):
@@ -249,6 +355,10 @@ class ModelManager:
                                  XGBClassifier(eval_metric='logloss', random_state=42)))
         if HAS_TORCH:
             models_data.append(('gnn_model.pkl', 'GNN', GNNClassifier()))
+        
+        # Add MLP (Neural Network) to the suite
+        from sklearn.neural_network import MLPClassifier
+        models_data.append(('mlp_model.pkl', 'MLP', MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=1000, random_state=42)))
 
         missing = [m for m in models_data
                    if not os.path.exists(os.path.join(self.script_dir, m[0]))]
@@ -269,12 +379,18 @@ class ModelManager:
 
             for pkl, name, model_obj in models_data:
                 target_path = os.path.join(self.script_dir, pkl)
-                if not os.path.exists(target_path) or force:
-                    if status_callback:
-                        status_callback(f"Training {name}…", "orange")
-                    model_obj.fit(X_train, y_train)
-                    joblib.dump(model_obj, target_path)
-                    log.info("Trained and saved: %s", name)
+                
+                # CLINICAL SKIP: If the .pkl exists, we jump to the next one to save time
+                if os.path.exists(target_path):
+                    log.info("Forensic artifact found: Skipping training for %s", name)
+                    continue
+
+                if status_callback:
+                    status_callback(f"Training {name} (Please wait)…", "orange")
+                
+                model_obj.fit(X_train, y_train)
+                joblib.dump(model_obj, target_path)
+                log.info("Trained and saved artifact: %s", name)
 
             self.reset_analytics()
             return True, "Training process finished."
@@ -302,14 +418,36 @@ class ModelManager:
         return df
 
     def _prepare_df(self, df):
-        """Auto-label, split X/y, drop metadata columns."""
+        """Auto-label, split X/y, and restrict to the 3 Diagnostic Peaks (Item #11)."""
         if "cancer_risk_class" not in df.columns:
+            # We must use numeric columns for K-Means to find the biology
+            numeric_data = df.select_dtypes(include=[np.number])
             kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
             df = df.copy()
-            df["cancer_risk_class"] = kmeans.fit_predict(
-                df.select_dtypes(include=[np.number])
-            )
-        X = df.drop(["sample_id", "cancer_risk_class"], axis=1, errors='ignore')
+            df["cancer_risk_class"] = kmeans.fit_predict(numeric_data)
+
+        # We exclusively select the 3 clinical biomarker peaks as requested by the user
+        primary_markers = ['PSA_concentration', 'AFP_concentration', 'CA125_concentration']
+        selected_features = []
+        for marker in primary_markers:
+            match = [c for c in df.columns if marker.lower() in str(c).lower()]
+            if match:
+                selected_features.append(match[0])
+        
+        # Fallback to height peaks if concentration is unavailable
+        if not selected_features:
+            height_markers = ['PSA_peak_height', 'AFP_peak_height', 'CA125_peak_height']
+            for marker in height_markers:
+                match = [c for c in df.columns if marker.lower() in str(c).lower()]
+                if match:
+                    selected_features.append(match[0])
+
+        # If we failed to find specifically the 3 peaks, we fallback to all biomarkers
+        if not selected_features:
+            X = df.drop(["sample_id", "cancer_risk_class"], axis=1, errors='ignore')
+        else:
+            X = df[selected_features]
+
         y = df["cancer_risk_class"]
         return X, y
 
@@ -544,6 +682,9 @@ class ModelManager:
 
     def load_model(self, model_name):
         """Load a model by name, using in-memory cache to avoid repeated disk reads."""
+        if "AI Ensemble" in model_name:
+            return EnsembleProxy(self)
+
         _map = {
             "Random Forest":       ('rf_model',  'random_forest_model.pkl'),
             "Logistic Regression": ('lr_model',  'logistic_regression_model.pkl'),
@@ -551,6 +692,9 @@ class ModelManager:
             "XGBoost":             ('xgb_model', 'xgboost_model.pkl'),
             "MLP":                 ('mlp_model', 'mlp_model.pkl'),
             "GNN":                 ('gnn_model', 'gnn_model.pkl'),
+            # Aliases for UI consistency
+            "MLP Model":           ('mlp_model', 'mlp_model.pkl'),
+            "GNN Model":           ('gnn_model', 'gnn_model.pkl')
         }
         if model_name not in _map:
             return None
@@ -560,13 +704,29 @@ class ModelManager:
                 path = os.path.join(self.script_dir, fname)
                 if os.path.exists(path):
                     if model_name == "GNN":
-                        # Load PyTorch model
-                        model_data = joblib.load(path)
-                        model = GNNClassifier()
-                        model.model = model_data['model']
-                        model.edge_index = model_data['edge_index']
-                        model.feature_names = model_data['feature_names']
-                        setattr(self, attr, model)
+                        if not HAS_TORCH:
+                            log.warning("GNN artifact exists but PyTorch is not available for loading.")
+                            return None
+                        # Load PyTorch GNN model
+                        loaded = joblib.load(path)
+                        if isinstance(loaded, GNNClassifier):
+                            setattr(self, attr, loaded)
+                        elif isinstance(loaded, dict):
+                            # Fallback for dict-style saves
+                            model_instance = GNNClassifier()
+                            model_instance.model = loaded.get('model')
+                            model_instance.edge_index = loaded.get('edge_index')
+                            model_instance.feature_names = loaded.get('feature_names')
+                            setattr(self, attr, model_instance)
+                        else:
+                            # Direct state_dict or other fallback
+                            try:
+                                model_instance = GNNClassifier()
+                                model_instance.model = loaded
+                                setattr(self, attr, model_instance)
+                            except Exception:
+                                log.error("Unsupported GNN load format.")
+                                return None
                     else:
                         setattr(self, attr, joblib.load(path))
                 else:
@@ -631,21 +791,24 @@ class ModelManager:
         AI Clinical Ensemble: Performs majority voting across all trained models.
         Returns prediction, confidence (agreement level), and risk (mean probability).
         """
-        available_models = ["Random Forest", "Logistic Regression", "SVM"]
-        if HAS_XGB:
-            available_models.append("XGBoost")
+        available_models = ["Random Forest", "Logistic Regression", "SVM", "XGBoost"]
 
         all_preds = []
         all_probs = []
+        model_names_loaded = []
 
         for name in available_models:
             try:
                 model = self.load_model(name)
                 if model is not None:
                     if is_single:
-                        # Normalize single input for consistency
+                        # Normalize single input for consistency and robustness (Zero-Fill safety)
                         if isinstance(X_input, dict):
-                            X_test = pd.DataFrame([X_input])[self.feature_names]
+                            full_input = {feat: 0.0 for feat in self.feature_names}
+                            for k, v in X_input.items():
+                                if k in full_input:
+                                    full_input[k] = float(v)
+                            X_test = pd.DataFrame([full_input])[self.feature_names]
                         else:
                             X_test = pd.DataFrame([X_input]).iloc[:, :len(self.feature_names)]
                             X_test.columns = self.feature_names
@@ -659,6 +822,7 @@ class ModelManager:
                     
                     all_preds.append(pred)
                     all_probs.append(prob)
+                    model_names_loaded.append(name)
             except:
                 continue
 
@@ -673,7 +837,23 @@ class ModelManager:
             confidence = all_preds.count(final_pred) / len(all_preds)
             # Risk = Mean of all 'Detected' probabilities
             risk = np.mean([p[1] for p in all_probs])
-            return final_pred, confidence, risk
+
+            # Bundle individual results for the forensic validation tab
+            individual_results = []
+            for name, p, pr in zip(model_names_loaded, all_preds, all_probs):
+                individual_results.append({
+                    'model': name,
+                    'prediction': int(p),
+                    'risk': float(pr[1])
+                })
+
+            return {
+                'prediction': int(final_pred),
+                'confidence': float(confidence),
+                'risk': float(risk),
+                'individual_results': individual_results,
+                'consensus': f"{all_preds.count(final_pred)}/{len(all_preds)} AI agreement"
+            }
         else:
             # Batch Voting
             stacked_preds = np.array(all_preds) # (models, samples)

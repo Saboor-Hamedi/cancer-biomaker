@@ -31,7 +31,7 @@ class PreprocessingDialog:
 
         ttk.Checkbutton(self.modal, text="Normalize features (0-1)", variable=self.normalize_var).pack(anchor=tk.W, padx=50, pady=5)
         ttk.Checkbutton(self.modal, text="Standard scaling (z-score)", variable=self.scale_var).pack(anchor=tk.W, padx=50, pady=5)
-        ttk.Checkbutton(self.modal, text="Remove outliers (IQR)", variable=self.outlier_var).pack(anchor=tk.W, padx=50, pady=5)
+        ttk.Checkbutton(self.modal, text="Handle outliers (IQR Clipping)", variable=self.outlier_var).pack(anchor=tk.W, padx=50, pady=5)
 
         ttk.Button(self.modal, text="Apply Changes", command=self._apply).pack(pady=20)
 

@@ -66,7 +66,7 @@ class VisualizationController:
         # Switch to the analysis tab
         try:
             notebook = self.layout_manager.dashboard.notebook
-            notebook.select(self.layout_manager.tab_analysis)
+            notebook.select(self.layout_manager.dashboard.analysis_tab)
         except:
             pass
 

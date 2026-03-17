@@ -91,16 +91,33 @@ class DataManager:
                     new_df[col] = (new_df[col] - mean_v) / std_v
         return new_df
 
-    def remove_outliers(self, df):
+    def remove_outliers(self, df, factor=3.0, preserve_positives=True):
+        """
+        Refined outlier handling for clinical data. 
+        Instead of dropping rows (which removes patients), we use Winsorization (clipping)
+        to preserve the records while suppressing extreme measurement noise.
+        """
         if df is None: return None
         new_df = df.copy()
         numeric_cols = new_df.select_dtypes(include=[np.number]).columns
         
+        # Clinical biomarkers often have 'peaks' that are the signal, not noise.
+        # We use a higher factor (3.0 vs standard 1.5) to avoid cutting these.
         for col in numeric_cols:
+            # Skip ID columns if they were detected as numeric
+            if any(term in str(col).lower() for term in ['id', 'sample', 'class']):
+                continue
+                
             Q1 = new_df[col].quantile(0.25)
             Q3 = new_df[col].quantile(0.75)
             IQR = Q3 - Q1
-            lower = Q1 - 1.5 * IQR
-            upper = Q3 + 1.5 * IQR
-            new_df = new_df[(new_df[col] >= lower) & (new_df[col] <= upper)]
+            
+            # Use factor 3.0 for extreme outliers only
+            lower = Q1 - factor * IQR
+            upper = Q3 + factor * IQR
+            
+            # Winsorization: Clip extreme values instead of dropping rows.
+            # This ensures positive cases (who HAVE high biomarker values) stay in the dataset.
+            new_df[col] = new_df[col].clip(lower=lower, upper=upper)
+            
         return new_df
