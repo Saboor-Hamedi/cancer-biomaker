@@ -74,6 +74,9 @@ class DataController:
 
         self.data_manager.uploaded_df = df
 
+        # Persist data path for next session (so Analytics work on relaunch)
+        self.data_manager.save_session()
+
         # Update UI with both total and sampled counts, and full context for audit
         self.update_ui_after_load(total_count=full_row_count, full_context_df=full_df)
 
@@ -167,40 +170,55 @@ class DataController:
         self.sync_row_to_input(df.iloc[0])
 
     def sync_row_to_input(self, row_data):
-        """Sync a specific row dictionary/Series to input tab."""
+        """Sync a specific row dict/Series to input tab (handles new 3-column layout)."""
         tree = self.layout_manager.tab_input.tree
+        display_to_raw = getattr(self.layout_manager.tab_input, '_display_to_raw', {})
         found_count = 0
-        
-        # Create mapping for fuzzy column matching
+
+        # Build normalised lookup from dataset row
         col_map = {str(c).lower().strip(): c for c in row_data.index}
 
         for item in tree.get_children():
             values = list(tree.item(item, "values"))
-            feature_name = values[0] if values else ""
-            
-            # Try exact match first, then fuzzy match
-            if feature_name in row_data.index:
-                matched_col = feature_name
-            elif feature_name.lower().strip() in col_map:
-                matched_col = col_map[feature_name.lower().strip()]
+            if len(values) < 3:
+                continue
+
+            display_name = str(values[0])
+            # Map display name back to raw feature name
+            raw_feature = display_to_raw.get(display_name, display_name)
+
+            # Try raw name first, then display name, then fuzzy
+            matched_col = None
+            if raw_feature in row_data.index:
+                matched_col = raw_feature
+            elif display_name in row_data.index:
+                matched_col = display_name
             else:
+                rk = raw_feature.lower().strip()
+                dk = display_name.lower().strip()
+                for k, col in col_map.items():
+                    if k == rk or k == dk or (len(rk) > 4 and (k in rk or rk in k)):
+                        matched_col = col
+                        break
+
+            if matched_col is None:
                 continue
 
             try:
                 val = row_data[matched_col]
                 if pd.notna(val):
-                    # Format float values for better readability
                     if isinstance(val, (float, np.float64, np.float32)):
-                        values[1] = f"{val:.4f}"
+                        values[2] = f"{val:.4f}"
                     else:
-                        values[1] = str(val)
+                        values[2] = str(val)
                     tree.item(item, values=values)
                     found_count += 1
             except (KeyError, IndexError):
                 continue
-        
+
         if found_count > 0:
             self.layout_manager.update_status(f"Synced {found_count} features from patient record", "#10B981")
+
 
     def _update_analysis_summary(self, df):
         """Update analysis tab with comprehensive dataset summary using premium narrative tags."""

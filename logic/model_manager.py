@@ -876,31 +876,67 @@ class ModelManager:
 
     def get_model_leaderboard(self, data_path):
         """
-        Analyzes all models and returns a ranked leaderboard based on accuracy and stability.
+        Deep clinical leaderboard: Ranks all models by F1 and returns
+        Accuracy, F1, Precision, Recall, Specificity, CV Mean +/- Std.
+        Ranked by F1-Score - the most meaningful metric for imbalanced cancer data.
         """
-        from sklearn.metrics import accuracy_score, f1_score
-        # Use load_training_data to get test split for evaluation
+        from sklearn.metrics import (
+            accuracy_score, f1_score, precision_score,
+            recall_score, confusion_matrix
+        )
+        from sklearn.model_selection import StratifiedKFold, cross_val_score
+
+        X_all, y_all = self.get_raw_training_set(data_path)
         _, X_test, _, y_test, _ = self._load_training_data(data_path)
-        
+
         available_models = ["Random Forest", "Logistic Regression", "SVM"]
         if HAS_XGB:
             available_models.append("XGBoost")
-            
+        available_models.append("MLP")
+
+        cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
         leaderboard = []
         for name in available_models:
             model = self.load_model(name)
-            if model:
-                y_pred = model.predict(X_test[self.feature_names])
-                acc = accuracy_score(y_test, y_pred)
-                f1 = f1_score(y_test, y_pred)
+            if model is None:
+                continue
+            try:
+                X_pred = X_test[self.feature_names]
+                y_pred = model.predict(X_pred)
+                acc  = accuracy_score(y_test, y_pred)
+                f1   = f1_score(y_test, y_pred, zero_division=0)
+                prec = precision_score(y_test, y_pred, zero_division=0)
+                rec  = recall_score(y_test, y_pred, zero_division=0)
+
+                try:
+                    tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
+                    spec = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+                except ValueError:
+                    spec = 0.0
+
+                try:
+                    cv_scores = cross_val_score(model, X_all[self.feature_names], y_all, cv=cv, scoring='accuracy', n_jobs=1)
+                    cv_mean = float(cv_scores.mean())
+                    cv_std  = float(cv_scores.std())
+                except Exception:
+                    cv_mean, cv_std = acc, 0.0
+
                 leaderboard.append({
-                    'model': name,
-                    'accuracy': acc,
-                    'f1': f1,
-                    'rank_score': (acc + f1) / 2
+                    'model':       name,
+                    'accuracy':    acc,
+                    'f1':          f1,
+                    'precision':   prec,
+                    'recall':      rec,
+                    'specificity': spec,
+                    'cv_mean':     cv_mean,
+                    'cv_std':      cv_std,
+                    'rank_score':  f1,
                 })
-        
-        # Sort by rank score
+            except Exception as e:
+                log.warning("Leaderboard: skipped %s - %s", name, e)
+                continue
+
         leaderboard.sort(key=lambda x: x['rank_score'], reverse=True)
         return leaderboard
 

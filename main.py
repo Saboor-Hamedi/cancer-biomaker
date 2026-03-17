@@ -3,11 +3,13 @@ import os
 import sys
 import threading
 import tkinter as tk
+import pandas as pd
+import numpy as np
 import warnings
+import ctypes
+from PIL import Image, ImageTk
 from datetime import datetime
 from tkinter import filedialog, messagebox
-
-import pandas as pd
 
 # Local imports
 from ui.components.dashboard import Dashboard
@@ -70,6 +72,9 @@ class CancerDetectionApp:
         self.root.geometry("1280x850")
         self.root.minsize(1100, 700)
         self.root.configure(bg="#F8FAFC")
+        
+        # Set Window Icon
+        self._setup_window_icon()
 
         # Apply Global Styles
         StyleManager.apply_styles(self.root)
@@ -173,11 +178,8 @@ class CancerDetectionApp:
         # Build Menu Bar
         self.menu_handler.build_menubar()
 
-        # Professor's Requirement: Fresh Start
-        # Delete any existing models from previous sessions on startup
-        self.model_manager.delete_all_models()
-
         # Auto-check and train models if missing
+        # NOTE: Models are preserved between sessions and only cleared on application close.
         self._check_models_on_startup()
 
         # Live Update Check (GitHub Releases)
@@ -187,33 +189,58 @@ class CancerDetectionApp:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def on_close(self):
-        """Clean shutdown of the application - deletes models per professor's requirement"""
+        """Clean shutdown of the application - deletes models per professor's requirement."""
         try:
-            # Inform user
-            self.layout_manager.update_status("Cleaning clinical environment...", "orange")
-            
+            self.layout_manager.update_status("Saving session & cleaning environment...", "orange")
+            # Save the data path so Analytics works on next launch
+            self.data_manager.save_session()
             # Delete all model files for a fresh start next time
             self.model_manager.delete_all_models()
-            
-            # Close all modal windows first
             Visualizer.close_all_modals()
             self.root.destroy()
-        except:
-            pass
-        os._exit(0)  # Force kill all threads and processes
+        except Exception as e:
+            print(f"Error during shutdown: {e}")
+        finally:
+            import os
+            os._exit(0)
+
+    def _setup_window_icon(self):
+        """Setup the window and taskbar icon."""
+        try:
+            # Fix taskbar icon on Windows
+            if sys.platform == "win32":
+                myappid = f'clinical.xai.dashboard.{self.version}'
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
+            icon_path = os.path.join(APP_HOME, "logo.png")
+            if os.path.exists(icon_path):
+                # Using PIL for better scaling
+                img = Image.open(icon_path)
+                self.icon_photo = ImageTk.PhotoImage(img)
+                self.root.iconphoto(True, self.icon_photo)
+        except Exception as e:
+            print(f"Warning: Could not load window icon: {e}")
 
     def _check_models_on_startup(self):
-        """Check models on startup and prompt for training."""
+        """Check models on startup. If models exist, load features. If not, prompt user to upload data."""
         def check_task():
-            # Check if models exist (they shouldn't because we delete on start/close)
             success, msg = self.model_manager.check_and_train_models("", self.layout_manager.update_status, force=False)
             
             if success:
+                # Models exist on disk — restore session & load feature names
+                self.data_manager.restore_session()
+                self.data_controller.data_path = self.data_manager.data_path
                 self.root.after(0, lambda: self.layout_manager.refresh_input_features(self.model_manager.feature_names))
-                self.root.after(0, lambda: self.layout_manager.update_status("System Ready - Models Verified", "#10B981"))
+                self.root.after(0, lambda: self.layout_manager.update_status("System Ready — Models Loaded", "#10B981"))
+                self.root.after(0, lambda: self.error_handler.notify("Clinical models loaded and ready.", type='success'))
             else:
-                # Prompt user to train
-                self.layout_manager.update_status("Action Required: Upload dataset to train AI models", "#EF4444")
+                # No models found — inform user of the required workflow
+                self.root.after(0, lambda: self.layout_manager.update_status(
+                    "Welcome! Upload a dataset via the sidebar to train the AI models.", "#3B82F6"
+                ))
+                self.root.after(0, lambda: self.error_handler.notify(
+                    "No trained models found. Upload your Excel dataset and click Train Models to begin.", type='info'
+                ))
 
         threading.Thread(target=check_task, daemon=True).start()
 

@@ -175,3 +175,21 @@ This means we ensure the 80/20 split has the same percentage of "Healthy" vs "De
 
 
 
+
+----
+The Core Tri-Biomarker Signal
+During our extraction pipeline, we specifically isolate and weigh three primary oncological biomarkers out of the 61-feature panel. These form the biological "core" of the AI's diagnostic fingerprint:
+
+1. PSA Concentration (Prostate-Specific Antigen)
+   - Clinical Role: The dominant signal in the dataset. Elevated levels (>28,224 pg/mL in our cohort) act as the primary trigger for a "Detected" classification.
+   - AI Weight: Accounts for ~86.0% of the ensemble's decision-making mass. The severe skew between healthy (~1,742 pg/mL) and detected cases (~58,205 pg/mL) is exactly why non-linear models like Random Forest excel here.
+
+2. AFP Concentration (Alpha-Fetoprotein)
+   - Clinical Role: A protein indicating potential hepatocellular or germ cell involvement. 
+   - AI Weight: Contributes ~7.4% to the decision. While its average distribution between healthy and detected cases is similar, extreme outliers act as a secondary "co-signal" to confirm positive diagnoses.
+
+3. CA125 Concentration (Cancer Antigen 125)
+   - Clinical Role: Widely used for detecting ovarian/peritoneal pathology.
+   - AI Weight: Contributes ~6.6%. Elevated levels topically correlate with the Detected cluster in our t-SNE mapping.
+
+The AI Ensemble does not treat these markers in isolation. It looks for "Co-Biomarker Synergy" — for example, if PSA surges while AFP and CA125 also show abnormal peaks, the clinical confidence of the prediction exponentially increases.

@@ -20,3 +20,4 @@ openpyxl
 # Note: For CPU-only installation use: pip install torch --index-url https://download.pytorch.org/whl/cpu
 torch
 torch-geometric
+Pillow

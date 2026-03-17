@@ -9,6 +9,10 @@
 ![SHAP](https://img.shields.io/badge/SHAP-XAI-green?style=flat)
 ![Status](https://img.shields.io/badge/Status-Deployment--Ready-success?style=flat)
 
+### Remove Cache
+`rm -rf build/ dist/ __pycache__ .pytest_cache *.spec`
+`find . -type d -name "__pycache__" -exec rm -rf {} +`
+
 ## Overview
 This application is a professional clinical decision support system designed for high-dimensional cancer risk classification using biomarker panels. It integrates advanced machine learning algorithms with explainable AI (XAI) and topological data analysis to provide clinicians with a robust, real-time diagnostic auditing tool.
 

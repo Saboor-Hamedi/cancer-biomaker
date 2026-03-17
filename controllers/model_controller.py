@@ -365,6 +365,7 @@ class ModelController:
             # 3. Professional Reporting & Tab Sync
             # Update Dashboard & Console with metadata for scoreboard
             # Update specialized tabs
+            summary_metadata['audit_registry'] = detailed_audit_data
             self.layout_manager.tab_analysis.display_batch_report(df, metadata=summary_metadata)
             self.layout_manager.tab_leaderboard.update_audit(detailed_audit_data)
             

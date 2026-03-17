@@ -6,3 +6,4 @@ doc.md
 build/
 dist/
 *.spec
+session_config.json

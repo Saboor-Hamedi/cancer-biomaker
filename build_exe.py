@@ -19,6 +19,7 @@ def build():
     
     added_data = [
         f"background.png{sep}.",
+        f"logo.png{sep}.",
         f"styles.py{sep}.",
         f"controllers{sep}controllers",
         f"handlers{sep}handlers",

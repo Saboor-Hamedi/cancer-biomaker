@@ -1,4 +1,5 @@
 import os
+import json
 import pandas as pd
 import numpy as np
 
@@ -8,6 +9,30 @@ class DataManager:
         self.uploaded_df = None
         self.prediction_results = None
         self.mean_values = None
+        self._config_path = os.path.join(os.path.dirname(__file__), '..', 'session_config.json')
+
+    def save_session(self):
+        """Persist session state (last data path)."""
+        try:
+            cfg = {'last_data_path': self.data_path or ''}
+            with open(self._config_path, 'w') as f:
+                json.dump(cfg, f)
+        except Exception:
+            pass
+
+    def restore_session(self):
+        """Restore last session's data path so Analytics work on relaunch."""
+        try:
+            if os.path.exists(self._config_path):
+                with open(self._config_path) as f:
+                    cfg = json.load(f)
+                path = cfg.get('last_data_path', '')
+                if path and os.path.exists(path):
+                    self.data_path = path
+                    return True
+        except Exception:
+            pass
+        return False
 
     def load_excel(self, file_path, sheet_name=None):
         try:
