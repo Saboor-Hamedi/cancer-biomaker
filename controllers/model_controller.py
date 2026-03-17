@@ -13,11 +13,12 @@ from utils.error_handler import ErrorHandler
 class ModelController:
     """Controller for model training, predictions, and analytics operations."""
 
-    def __init__(self, model_manager, data_manager, layout_manager, error_handler=None):
+    def __init__(self, model_manager, data_manager, layout_manager, error_handler=None, velocity_manager=None):
         self.model_manager = model_manager
         self.data_manager = data_manager
         self.layout_manager = layout_manager
         self.error_handler = error_handler or ErrorHandler()
+        self.velocity_manager = velocity_manager
         self.current_prediction_data = None
         self.CORE_MODELS = ["Random Forest", "Logistic Regression", "SVM", "XGBoost"]
 
@@ -112,6 +113,10 @@ class ModelController:
             if not silent:
                 self._update_ui_with_prediction(result)
 
+            # Phase 1: Real-world Validation Logging
+            if hasattr(self.data_manager, 'save_prospective_audit'):
+                self.data_manager.save_prospective_audit(result)
+
             return result
 
         except Exception as e:
@@ -171,6 +176,26 @@ class ModelController:
 
         # ── Update Analysis Tab (Professional Report) ──
         self.layout_manager.tab_analysis.display_prediction_results(result)
+
+        # ── Update Velocity Trajectory Tab ──
+        if hasattr(self, 'velocity_manager') and self.velocity_manager:
+            inputs = result.get('inputs', {})
+            patient_id = inputs.get('sample_id', "Current_Patient")
+            
+            # Fuzzy match biomarker keys
+            def get_val(keyword):
+                for k, v in inputs.items():
+                    if keyword.lower() in str(k).lower(): return float(v)
+                return 0.0
+                
+            v_data = self.velocity_manager.get_patient_velocity(patient_id, current_metrics={
+                'psa': get_val('psa'),
+                'afp': get_val('afp'),
+                'ca125': get_val('ca125'),
+                'risk': risk
+            })
+            if v_data and hasattr(self.layout_manager, 'tab_velocity'):
+                self.layout_manager.tab_velocity.update_velocity_data(patient_id, v_data)
 
         # Update status
         risk_color = "#EF4444" if risk > 0.7 else "#F59E0B" if risk > 0.3 else "#10B981"
@@ -337,6 +362,10 @@ class ModelController:
 
             self.data_manager.prediction_results = df
 
+            # Phase 1: Real-world Validation Logging
+            if hasattr(self.data_manager, 'save_prospective_audit_batch'):
+                self.data_manager.save_prospective_audit_batch(df, model_name)
+
             # Update UI
             pos_count = int(np.sum(predictions))
             total_count = len(predictions)
@@ -367,7 +396,6 @@ class ModelController:
             # Update specialized tabs
             summary_metadata['audit_registry'] = detailed_audit_data
             self.layout_manager.tab_analysis.display_batch_report(df, metadata=summary_metadata)
-            self.layout_manager.tab_leaderboard.update_audit(detailed_audit_data)
             
             # Fix TclError: Select the managed parent frame instead of the child tab object
             self.layout_manager.root.after(100, lambda: self.layout_manager.dashboard.notebook.select(self.layout_manager.dashboard.analysis_tab))

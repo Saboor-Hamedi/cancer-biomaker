@@ -5,7 +5,7 @@ This document contains the *absolute ground truth* and master context for the **
 
 ---
 
-## 🔬 1. PROJECT ESSENCE & CLINICAL PURPOSE
+##  1. PROJECT ESSENCE & CLINICAL PURPOSE
 This is a **Desktop application (Tkinter)** designed for **Explainable AI (XAI) in Oncology**. It takes biosensor data (electrochemical sensor readings) and predicts the presence of cancer using an ensemble of Machine Learning models. 
 
 It is NOT just a toy machine learning app. It is designed to look, feel, and operate like a **premium clinical diagnostic tool** with a massive emphasis on *explainability* (Why did the AI make this decision?) and *medical precision*.

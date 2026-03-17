@@ -24,6 +24,7 @@ from handlers.event_handler import EventHandler
 from handlers.menu_handler import MenuHandler
 from logic.data_manager import DataManager
 from logic.model_manager import ModelManager
+from logic.velocity_manager import VelocityManager
 # Local imports removed: from styles import apply_styles
 from ui.display_formatter import DisplayFormatter
 from ui.layout_manager import LayoutManager
@@ -49,6 +50,10 @@ def get_app_home():
     return os.path.dirname(os.path.abspath(__file__))
 
 APP_HOME = get_app_home()
+
+# Ensure APP_HOME is in sys.path for robust local imports
+if APP_HOME not in sys.path:
+    sys.path.insert(0, APP_HOME)
 
 # ── Logging: writes to app.log in the APP_HOME folder ────────────────────────
 logging.basicConfig(
@@ -82,6 +87,7 @@ class CancerDetectionApp:
         # Initialize Core Managers
         self.data_manager = DataManager()
         self.model_manager = ModelManager(APP_HOME)
+        self.velocity_manager = VelocityManager()
 
         # Core utilities
         self.async_runner = AsyncRunner(self.root)
@@ -101,6 +107,7 @@ class CancerDetectionApp:
             self.layout_manager,
             self.error_handler,
             model_manager=self.model_manager,
+            velocity_manager=self.velocity_manager,
             version=self.version
         )
 
@@ -108,7 +115,8 @@ class CancerDetectionApp:
             self.model_manager,
             self.data_manager,
             self.layout_manager,
-            self.error_handler
+            self.error_handler,
+            velocity_manager=self.velocity_manager
         )
 
         self.visualization_controller = VisualizationController(
@@ -165,6 +173,8 @@ class CancerDetectionApp:
             'upload': self.data_controller.handle_upload,
             'train_all': self.model_controller.handle_train_models,
             'system_reset': self.model_controller.handle_system_reset,
+            'show_counterfactual': self.visualization_controller.show_counterfactual_analysis,
+            'show_biomarker_network': self.visualization_controller.show_biomarker_network,
             'check_updates': lambda: self.update_manager.check_for_updates(silent=False)
         }
         self.layout_manager.callbacks.update(callbacks)

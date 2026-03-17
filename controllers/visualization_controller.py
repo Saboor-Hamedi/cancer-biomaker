@@ -214,6 +214,86 @@ class VisualizationController:
 
         self.layout_manager.tab_analysis.text.config(state=tk.DISABLED)
 
+    def show_counterfactual_analysis(self):
+        """Show What-If Counterfactual analysis for current prediction."""
+        pred_data = None
+        if self.model_controller and self.model_controller.current_prediction_data:
+            pred_data = self.model_controller.current_prediction_data
+            
+        if not pred_data:
+            from tkinter import messagebox
+            messagebox.showwarning("No Prediction", "Please make a prediction first to see counterfactual recommendations.")
+            return
+
+        model_name = pred_data.get('model', 'Active Model')
+        inputs = pred_data.get('inputs', {})
+        
+        if not inputs:
+            from tkinter import messagebox
+            messagebox.showwarning("No Inputs", "No biomarker input values found for this prediction.")
+            return
+
+        self.layout_manager.update_status("Calculating Counterfactual Scenarios...", "orange")
+
+        def task():
+            return self.model_manager.get_counterfactual_recommendations(
+                model_name,
+                inputs,
+                data_path=self.data_manager.data_path
+            )
+
+        def finish(data):
+            if not data:
+                self.layout_manager.update_status("Counterfactual generation failed", "red")
+                return
+
+            # Format analysis text
+            content = "═" * 60 + "\n"
+            content += f"  WHAT-IF COUNTERFACTUAL ANALYSIS: {model_name}\n"
+            content += "═" * 60 + "\n\n"
+            
+            content += f"  Status: {data['status']}\n"
+            content += f"  Current Risk: {data['current_risk']:.2%}\n"
+            content += f"  Projected Risk: {data['new_risk']:.2%}\n\n"
+            
+            if not data['changes']:
+                content += "  No actionable risk reduction identified or patient is already healthy.\n"
+            else:
+                content += "  RECOMMENDED BIOMARKER REDUCTIONS:\n"
+                for c in data['changes']:
+                    content += f"  • {c['feature']:<15}: {c['original']:.2f} ➔ {c['new']:.2f} (-{c['reduction']:.0f}%)\n"
+                    
+            content += "\n  CLINICAL NOTE: These are hypothetical changes identified by the AI \n"
+            content += "  to lower the predicted risk profile. Actionability depends on \n"
+            content += "  clinical context and specific patient factors.\n"
+            
+            self._update_analysis_text("Counterfactual Trajectory Audit", content)
+
+            fig = Visualizer.plot_counterfactual_analysis(data, model_name)
+            Visualizer.show_modal(self.layout_manager.root, f"Counterfactual What-If Profiler — {model_name}", fig)
+            
+            self.layout_manager.update_status("Counterfactuals ready", "#10B981")
+
+        self._run_async_task("Counterfactual Analysis", task, on_finish=finish)
+
+    def show_biomarker_network(self):
+        """Show the GNN-mapped Biomarker Interaction Network."""
+        self.layout_manager.update_status("Mapping Biomarker Clinical Network...", "orange")
+
+        def task():
+            return self.model_manager.get_biomarker_network_data(self.data_manager.data_path)
+
+        def finish(data):
+            if not data:
+                self.layout_manager.update_status("Network mapping failed", "red")
+                return
+
+            fig = Visualizer.plot_biomarker_network(data)
+            Visualizer.show_modal(self.layout_manager.root, "GNN Biomarker Pathway Analysis", fig)
+            self.layout_manager.update_status("Biological Network Mapped", "#10B981")
+
+        self._run_async_task("Network Mapping", task, on_finish=finish)
+
     def show_roc_curve(self):
         """Show ROC curve."""
         if not self._require_data_and_model("ROC Curve"):

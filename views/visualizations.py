@@ -797,6 +797,96 @@ class Visualizer:
         return fig
 
     @staticmethod
+    def plot_counterfactual_analysis(data, model_name):
+        """Plot the before/after counterfactual biomarker scenarios."""
+        fig = Figure(figsize=(9, 5), facecolor=DESIGN_PALETTE['bg'])
+        ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
+
+        if not data.get('changes'):
+            ax.text(0.5, 0.5, "No significant risk reduction changes identified\nor patient is already classified as Healthy.",
+                    ha='center', va='center', fontsize=STYLE_CONFIG['title_size'], color=DESIGN_PALETTE['neutral'])
+            ax.axis('off')
+            return fig
+
+        features = [c['feature'] for c in data['changes']]
+        originals = [c['original'] for c in data['changes']]
+        news = [c['new'] for c in data['changes']]
+
+        x = np.arange(len(features))
+        width = 0.35
+
+        ax.bar(x - width/2, originals, width, label='Current State', color=DESIGN_PALETTE['danger'], alpha=0.8)
+        ax.bar(x + width/2, news, width, label='Target State (Lower Risk)', color=DESIGN_PALETTE['success'], alpha=0.9)
+
+        ax.set_ylabel('Biomarker Scale', fontsize=STYLE_CONFIG['label_size'], fontfamily=STYLE_CONFIG['font_family'])
+        ax.set_title(f"Counterfactual Trajectory — {model_name}", fontsize=STYLE_CONFIG['title_size']+2,
+                     fontweight='bold', pad=20, fontfamily=STYLE_CONFIG['font_family'], color=DESIGN_PALETTE['text'])
+        ax.set_xticks(x)
+        ax.set_xticklabels(features, fontsize=STYLE_CONFIG['label_size']+2, rotation=15, ha='right')
+        ax.legend(frameon=True)
+        ax.grid(axis='y', linestyle='--', alpha=0.3)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        Visualizer._add_explanatory_note(fig, "What-If Scenario Risk Reductions", 
+            "The chart visualizes the minimal biomarker reductions required to transition the patient's AI diagnosis "
+            f"from High Risk ({data['current_risk']:.1%}) to Lower Risk ({data['new_risk']:.1%}). Focus clinical "
+            "interventions on these specific primary drivers.")
+
+    @staticmethod
+    def plot_biomarker_network(data, model_name="Graph Neural Network"):
+        """Visualize the GNN-mapped biological network of biomarkers."""
+        fig = Figure(figsize=(9, 7), facecolor=DESIGN_PALETTE['bg'])
+        ax = fig.add_subplot(111)
+        ax.set_facecolor(DESIGN_PALETTE['bg'])
+
+        if not data or not data.get('nodes'):
+            ax.text(0.5, 0.5, "Insufficient data to map biomarker network.",
+                    ha='center', va='center', color=DESIGN_PALETTE['neutral'])
+            ax.axis('off')
+            return fig
+
+        import networkx as nx
+        G = nx.Graph()
+
+        # Add nodes with importance scaling
+        for node in data['nodes']:
+            G.add_node(node['id'], size=node['importance'] * 1000)
+
+        # Add edges with weight visibility
+        for edge in data['edges']:
+            G.add_edge(edge['source'], edge['target'], weight=edge['weight'])
+
+        pos = nx.spring_layout(G, k=1.5, seed=42)
+        
+        # Draw edges
+        edge_list = list(G.edges())
+        if edge_list:
+            weights = [G[u][v]['weight'] * 5 for u, v in edge_list]
+            nx.draw_networkx_edges(G, pos, ax=ax, width=weights, edge_color=DESIGN_PALETTE['secondary'], alpha=0.3)
+
+        # Draw nodes
+        node_sizes = [G.nodes[n]['size'] for n in G.nodes()]
+        nx.draw_networkx_nodes(G, pos, ax=ax, node_size=node_sizes, 
+                             node_color=DESIGN_PALETTE['primary'], alpha=0.9)
+
+        # Draw labels
+        nx.draw_networkx_labels(G, pos, ax=ax, font_size=STYLE_CONFIG['label_size']+2,
+                              font_family=STYLE_CONFIG['font_family'], font_color=DESIGN_PALETTE['text'])
+
+        ax.set_title(f"GNN Biomarker Interaction Network — {model_name}", 
+                     fontsize=STYLE_CONFIG['title_size'], fontweight='bold', 
+                     color=DESIGN_PALETTE['text'], pad=20)
+        ax.axis('off')
+
+        Visualizer._add_explanatory_note(fig, "Graph Neural Pathway Mapping", 
+            "Nodes represent clinical biomarkers. Edges indicate strong biological correlations (>0.4) "
+            "detected by the GNN. Node size reflects the biomarker's calculated diagnostic importance.")
+
+        fig.tight_layout()
+        return fig
+
+    @staticmethod
     def plot_shap_summary(data, model_name):
         fig = Figure(figsize=(10, 6))
         ax = fig.add_subplot(111)

@@ -66,6 +66,8 @@ class MenuHandler:
         """Build the Analytics menu."""
         analytics_menu = tk.Menu(menubar, tearoff=0)
         analytics_menu.add_command(label="Local Patient Diagnosis", command=self.visualization_controller.show_local_explanation)
+        analytics_menu.add_command(label="What-If Counterfactuals", command=self.visualization_controller.show_counterfactual_analysis)
+        analytics_menu.add_command(label="Biomarker Interaction Network", command=self.visualization_controller.show_biomarker_network)
         analytics_menu.add_command(label="Patient Radar Profile", command=self.visualization_controller.show_patient_radar)
         analytics_menu.add_command(label="Detailed Clinical Metrics", command=self.visualization_controller.show_detailed_metrics)
         analytics_menu.add_command(label="Cross-Model Comparison", command=self.visualization_controller.show_model_comparison)

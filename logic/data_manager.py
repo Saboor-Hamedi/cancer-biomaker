@@ -34,6 +34,48 @@ class DataManager:
             pass
         return False
 
+    def save_prospective_audit(self, prediction_data):
+        """Save a newly run live prediction to the real-world prospective audit log."""
+        try:
+            audit_path = os.path.join(os.path.dirname(self._config_path), 'prospective_audit_log.csv')
+            
+            record = {
+                'timestamp': pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'model': prediction_data.get('model', 'Unknown'),
+                'prediction': prediction_data.get('prediction', -1),
+                'risk': prediction_data.get('risk', 0.0),
+                'confidence': prediction_data.get('confidence', 0.0),
+                'consensus': str(prediction_data.get('consensus', 'N/A'))
+            }
+            
+            # Incorporate biomarker inputs into the log trace
+            inputs = prediction_data.get('inputs', {})
+            for k, v in inputs.items():
+                record[f"feature_{k}"] = v
+                
+            df = pd.DataFrame([record])
+            if os.path.exists(audit_path):
+                df.to_csv(audit_path, mode='a', header=False, index=False)
+            else:
+                df.to_csv(audit_path, mode='w', header=True, index=False)
+        except Exception as e:
+            print(f"Failed to write prospective audit: {e}")
+
+    def save_prospective_audit_batch(self, df, model_name):
+        """Save batch evaluation to prospective audit log."""
+        try:
+            audit_path = os.path.join(os.path.dirname(self._config_path), 'prospective_audit_log.csv')
+            log_df = df.copy()
+            log_df['timestamp'] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_df['model_run'] = model_name
+            
+            if os.path.exists(audit_path):
+                log_df.to_csv(audit_path, mode='a', header=False, index=False)
+            else:
+                log_df.to_csv(audit_path, mode='w', header=True, index=False)
+        except Exception as e:
+            print(f"Failed to save prospective batch audit: {e}")
+
     def load_excel(self, file_path, sheet_name=None):
         try:
             if sheet_name:

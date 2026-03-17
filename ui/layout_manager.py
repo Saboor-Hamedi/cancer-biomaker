@@ -8,6 +8,7 @@ from ui.components.dashboard import Dashboard
 from ui.components.sidebar import Sidebar
 from ui.components.model_explorer import ModelExplorer
 from ui.components.tabs import AnalysisTab, DataTab, InputTab, ValidationTab, LeaderboardTab
+from ui.components.velocity_tab import VelocityTab
 from ui.components.console import ConsoleTab
 from logic.model_manager import HAS_XGB
 
@@ -30,15 +31,20 @@ class LayoutManager:
         self.tab_analysis = None
         self.tab_validation = None
         self.tab_leaderboard = None
+        self.tab_velocity = None
         self.tab_console = None
         self.model_explorer = None
 
     def setup_layout(self):
         """Set up the main application layout."""
         # Create Sidebar (Right side)
-        model_list = ["Random Forest", "Logistic Regression", "SVM", "MLP", "GNN"]
+        model_list = ["Random Forest", "Logistic Regression", "SVM", "MLP"]
         if HAS_XGB:
             model_list.append("XGBoost")
+        
+        from logic.model_manager import HAS_TORCH
+        if HAS_TORCH:
+            model_list.append("Graph Neural Network")
         
         # Add Ensemble Mode
         model_list.append("AI Ensemble")
@@ -73,6 +79,9 @@ class LayoutManager:
         self.tab_leaderboard = LeaderboardTab(self.dashboard.leaderboard_tab)
         self.tab_leaderboard.pack(fill=tk.BOTH, expand=True)
 
+        self.tab_velocity = VelocityTab(self.dashboard.velocity_tab, self.callbacks)
+        self.tab_velocity.pack(fill=tk.BOTH, expand=True)
+
         self.tab_console = ConsoleTab(self.dashboard.log_tab_frame)
         self.tab_console.pack(fill=tk.BOTH, expand=True)
         
@@ -92,6 +101,7 @@ class LayoutManager:
             'tab_data': self.tab_data,
             'tab_validation': self.tab_validation,
             'tab_leaderboard': self.tab_leaderboard,
+            'tab_velocity': self.tab_velocity,
             'tab_console': self.tab_console,
             'model_explorer': self.model_explorer
         }
@@ -148,6 +158,7 @@ class LayoutManager:
         if self.tab_analysis: self.tab_analysis.clear()
         if self.tab_validation: self.tab_validation.clear()
         if self.tab_leaderboard: self.tab_leaderboard.clear()
+        if self.tab_velocity: self.tab_velocity.clear()
         
         # Reset Metric Cards
         self.update_metrics(risk=0.0, confidence=0.0, triage="Pending", consensus="N/A")

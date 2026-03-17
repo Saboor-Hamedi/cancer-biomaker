@@ -134,8 +134,11 @@ class GNNClassifier:
         return self
 
     def predict(self, X):
-        """Predict class labels."""
+        """Predict class labels with robust data conversion."""
         self.model.eval()
+        if not isinstance(X, pd.DataFrame):
+            X = pd.DataFrame(X, columns=self.feature_names)
+            
         test_data = self._create_graph_data(X)
         test_loader = DataLoader(test_data, batch_size=32, shuffle=False)
 
@@ -150,8 +153,11 @@ class GNNClassifier:
         return np.array(preds)
 
     def predict_proba(self, X):
-        """Predict class probabilities."""
+        """Predict class probabilities with robust data conversion."""
         self.model.eval()
+        if not isinstance(X, pd.DataFrame):
+            X = pd.DataFrame(X, columns=self.feature_names)
+
         test_data = self._create_graph_data(X)
         test_loader = DataLoader(test_data, batch_size=32, shuffle=False)
 
@@ -356,7 +362,7 @@ class ModelManager:
             models_data.append(('xgboost_model.pkl', 'XGBoost',
                                  XGBClassifier(eval_metric='logloss', random_state=42)))
         if HAS_TORCH:
-            models_data.append(('gnn_model.pkl', 'GNN', GNNClassifier()))
+            models_data.append(('gnn_model.pkl', 'Graph Neural Network', GNNClassifier()))
         
         # Add MLP (Neural Network) to the suite
         from sklearn.neural_network import MLPClassifier
@@ -693,9 +699,10 @@ class ModelManager:
             "SVM":                 ('svm_model', 'svm_model.pkl'),
             "XGBoost":             ('xgb_model', 'xgboost_model.pkl'),
             "MLP":                 ('mlp_model', 'mlp_model.pkl'),
-            "GNN":                 ('gnn_model', 'gnn_model.pkl'),
+            "Graph Neural Network":('gnn_model', 'gnn_model.pkl'),
             # Aliases for UI consistency
             "MLP Model":           ('mlp_model', 'mlp_model.pkl'),
+            "GNN":                 ('gnn_model', 'gnn_model.pkl'),
             "GNN Model":           ('gnn_model', 'gnn_model.pkl')
         }
         if model_name not in _map:
@@ -705,7 +712,7 @@ class ModelManager:
             if getattr(self, attr) is None:
                 path = os.path.join(self.script_dir, fname)
                 if os.path.exists(path):
-                    if model_name == "GNN":
+                    if attr == 'gnn_model':
                         if not HAS_TORCH:
                             log.warning("GNN artifact exists but PyTorch is not available for loading.")
                             return None
@@ -980,6 +987,90 @@ class ModelManager:
         explanation.sort(key=lambda x: abs(x[1]), reverse=True)
         return explanation[:10]
 
+    def get_counterfactual_recommendations(self, model_name, inputs, data_path=None):
+        """
+        Generate What-If counterfactuals: Determine the minimal biomarker changes 
+        required to shift a high-risk prediction to a low-risk prediction.
+        """
+        model = self.load_model(model_name)
+        if model is None:
+            return None
+
+        # Prepare base input
+        normalized_inputs = {str(k).lower().strip(): float(v) for k, v in inputs.items()}
+        
+        full_input = {feat: 0.0 for feat in self.feature_names}
+        for k in full_input:
+            key_lower = str(k).lower().strip()
+            if key_lower in normalized_inputs:
+                full_input[k] = normalized_inputs[key_lower]
+                
+        base_df = pd.DataFrame([full_input])[self.feature_names]
+        
+        # Check current prediction
+        base_pred = model.predict(base_df)[0]
+        base_prob = model.predict_proba(base_df)[0][1]
+        
+        if base_pred == 0:
+            return {
+                "status": "Healthy",
+                "message": "Patient is currently classified as Low Risk.",
+                "current_risk": base_prob,
+                "changes": []
+            }
+            
+        # If high risk, find top contributing features
+        explanation = self.get_local_explanation(model_name, inputs, data_path)
+        if not explanation:
+            return None
+            
+        # Try perturbing the top 3 risk drivers
+        best_cf_df = base_df.copy()
+        changes_applied = []
+        
+        # Determine direction: we want to lower the probability of class 1.
+        # We incrementally reduce the top positive contributors.
+        for feat, score in explanation[:3]:
+            if score <= 0:
+                continue # Only reduce features that contribute to risk
+                
+            orig_val = best_cf_df.at[0, feat]
+            
+            # Iteratively reduce by 10% steps up to 50%
+            for step in [0.9, 0.8, 0.7, 0.6, 0.5]:
+                new_val = orig_val * step
+                temp_df = best_cf_df.copy()
+                temp_df.at[0, feat] = new_val
+                
+                new_prob = model.predict_proba(temp_df)[0][1]
+                
+                # If risk drops significantly or flips, accept this change
+                if new_prob < base_prob - 0.05 or model.predict(temp_df)[0] == 0:
+                    best_cf_df = temp_df
+                    base_prob = new_prob
+                    changes_applied.append({
+                        "feature": feat,
+                        "original": orig_val,
+                        "new": new_val,
+                        "reduction": (1 - step) * 100
+                    })
+                    break
+                    
+            # Stop early if we flipped the prediction
+            if model.predict(best_cf_df)[0] == 0:
+                break
+                
+        final_pred = model.predict(best_cf_df)[0]
+        final_prob = model.predict_proba(best_cf_df)[0][1]
+        
+        return {
+            "status": "Actionable" if final_pred == 0 else "High Resistance",
+            "message": "Found actionable biomarker targets" if final_pred == 0 else "Note: Significant changes required for this profile.",
+            "current_risk": float(model.predict_proba(base_df)[0][1]),
+            "new_risk": float(final_prob),
+            "changes": changes_applied
+        }
+
     def get_biomarker_separation_stats(self, data_path):
         """Calculate mean values for Healthy vs Detected patients for each biomarker."""
         X, y = self.get_raw_training_set(data_path)
@@ -991,8 +1082,35 @@ class ModelManager:
                 stats[feat] = (h_mean, d_mean)
         return stats
 
-    def get_dataset_summary(self, data_path):
-        """Get summarized dataset for visualization."""
+    def get_biomarker_network_data(self, data_path):
+        """Extract graph structure (nodes & edges) for network visualization."""
         if not data_path or not os.path.exists(data_path):
             return None
-        return self._read_excel_safe(data_path)
+
+        # Load data to compute correlations if needed, or use the GNN's edge_index
+        X, _ = self.get_training_data(data_path)
+        if X is None or X.empty:
+            return None
+
+        features = X.columns.tolist()
+        corr_matrix = X.corr()
+        
+        nodes = []
+        for feat in features:
+            nodes.append({
+                "id": feat,
+                "importance": float(corr_matrix[feat].abs().mean()) # Proxy for node importance
+            })
+
+        edges = []
+        for i in range(len(features)):
+            for j in range(i + 1, len(features)):
+                weight = corr_matrix.iloc[i, j]
+                if abs(weight) > 0.4: # Clinical threshold for "connected" biomarkers
+                    edges.append({
+                        "source": features[i],
+                        "target": features[j],
+                        "weight": float(weight)
+                    })
+
+        return {"nodes": nodes, "edges": edges}

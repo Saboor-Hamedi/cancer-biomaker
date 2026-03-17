@@ -14,9 +14,10 @@ from utils.error_handler import ErrorHandler
 class DataController:
     """Controller for data loading, preprocessing, and export operations."""
 
-    def __init__(self, data_manager, layout_manager, error_handler=None, model_manager=None, version="1.0.1"):
+    def __init__(self, data_manager, layout_manager, error_handler=None, model_manager=None, velocity_manager=None, version="1.0.1"):
         self.data_manager = data_manager
         self.model_manager = model_manager  # Optional — used for analytics cache reset
+        self.velocity_manager = velocity_manager
         self.layout_manager = layout_manager
         self.error_handler = error_handler or ErrorHandler()
         self.version = version
@@ -137,6 +138,10 @@ class DataController:
 
         # Refresh data tree
         self.layout_manager.refresh_data_tree()
+
+        # Populate longitudinal patient history
+        if self.velocity_manager:
+            self.velocity_manager.load_historical_data(full_context_df)
 
         # Build feature list for Input Tab: All numeric columns except sample IDs and targets
         features = [str(c) for c in df.select_dtypes(include=[np.number]).columns 

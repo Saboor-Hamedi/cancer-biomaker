@@ -104,6 +104,34 @@ class Sidebar(ttk.Frame):
             command=self.callbacks.get('sample')
         ).pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
+        # ── Advanced Clinical XAI ────────────────────────────────
+        analytics_frame = ttk.LabelFrame(self.scroll_content, text="CLINICAL XAI", style='Sidebar.TLabelframe')
+        analytics_frame.pack(fill=tk.X, padx=15, pady=10)
+
+        _btn_style = {
+            "bg": "#1E293B",
+            "fg": "#F8FAFC",
+            "font": ("Inter", 9, "bold"),
+            "relief": "flat",
+            "activebackground": "#3B82F6",
+            "activeforeground": "white",
+            "borderwidth": 0,
+            "highlightthickness": 0,
+            "pady": 6
+        }
+
+        tk.Button(
+            analytics_frame, text="🔍 What-If Analysis", 
+            command=lambda: self.callbacks.get('show_counterfactual', lambda: None)(),
+            **_btn_style
+        ).pack(fill=tk.X, pady=2, padx=10)
+
+        tk.Button(
+            analytics_frame, text="🕸️ Biomarker Network", 
+            command=lambda: self.callbacks.get('show_biomarker_network', lambda: None)(),
+            **_btn_style
+        ).pack(fill=tk.X, pady=2, padx=10)
+
         # ── System Maintenance ──────────────────────────────────
         reset_frame = ttk.Frame(self.scroll_content, style='Sidebar.TFrame')
         reset_frame.pack(fill=tk.X, padx=15, pady=(20, 10))
