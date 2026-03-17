@@ -1,6 +1,7 @@
 
 # publish.py
 #  script for you. This is your Python-equivalent of npm run dist:publish.
+# python build_exe.py
 # python publish.py
 
 import os
@@ -24,7 +25,10 @@ def get_version():
     try:
         with open('main.py', 'r', encoding='utf-8') as f:
             content = f.read()
-            match = re.search(r'self\.version\s*=\s*["\']([^"\']+)["\']', content)
+            # Look for global VERSION or self.version assignment
+            match = re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', content)
+            if not match:
+                match = re.search(r'self\.version\s*=\s*["\']([^"\']+)["\']', content)
             if match:
                 return match.group(1)
     except Exception as e:
