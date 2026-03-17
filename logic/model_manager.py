@@ -1015,7 +1015,8 @@ class ModelManager:
             return {
                 "status": "Healthy",
                 "message": "Patient is currently classified as Low Risk.",
-                "current_risk": base_prob,
+                "current_risk": float(base_prob),
+                "new_risk": float(base_prob),
                 "changes": []
             }
             
