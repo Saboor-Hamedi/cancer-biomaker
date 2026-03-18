@@ -281,14 +281,16 @@ class VisualizationController:
         self.layout_manager.update_status("Mapping Biomarker Clinical Network...", "orange")
 
         def task():
-            return self.model_manager.get_biomarker_network_data(self.data_manager.data_path)
+            data = self.model_manager.get_biomarker_network_data(self.data_manager.data_path)
+            if not data: return None
+            # Move PLOTTING to background thread to avoid UI freeze
+            return Visualizer.plot_biomarker_network(data)
 
-        def finish(data):
-            if not data:
+        def finish(fig):
+            if not fig:
                 self.layout_manager.update_status("Network mapping failed", "red")
                 return
 
-            fig = Visualizer.plot_biomarker_network(data)
             Visualizer.show_modal(self.layout_manager.root, "GNN Biomarker Pathway Analysis", fig)
             self.layout_manager.update_status("Biological Network Mapped", "#10B981")
 
@@ -512,9 +514,16 @@ class VisualizationController:
         if not self._require_data("Patient Mapping"):
             return
 
-        def finish(data):
-            if not data:
-                return
+        def task():
+            data = self.model_manager.get_tsne_data(self.data_manager.data_path)
+            if not data: return None
+            # Heavy plotting in background
+            fig = Visualizer.plot_tsne_map(data)
+            return (data, fig)
+
+        def finish(payload):
+            if not payload: return
+            data, fig = payload
             
             # Calculate counts for analysis tab
             n_samples = len(data['x'])
@@ -539,12 +548,11 @@ class VisualizationController:
             self._update_analysis_text("Patient Similarity Audit", content)
             
             # Show visual modal
-            fig = Visualizer.plot_tsne_map(data)
             Visualizer.show_modal(self.layout_manager.root, "Patient Similarity Map (t-SNE)", fig)
 
         self._run_async_task(
             "Patient Map (t-SNE)",
-            lambda: self.model_manager.get_tsne_data(self.data_manager.data_path),
+            task,
             on_finish=finish
         )
 

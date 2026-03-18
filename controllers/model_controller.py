@@ -13,12 +13,13 @@ from utils.error_handler import ErrorHandler
 class ModelController:
     """Controller for model training, predictions, and analytics operations."""
 
-    def __init__(self, model_manager, data_manager, layout_manager, error_handler=None, velocity_manager=None):
+    def __init__(self, model_manager, data_manager, layout_manager, error_handler=None, velocity_manager=None, async_runner=None):
         self.model_manager = model_manager
         self.data_manager = data_manager
         self.layout_manager = layout_manager
         self.error_handler = error_handler or ErrorHandler()
         self.velocity_manager = velocity_manager
+        self.async_runner = async_runner
         self.current_prediction_data = None
         self.CORE_MODELS = ["Random Forest", "Logistic Regression", "SVM", "XGBoost"]
 
@@ -210,30 +211,25 @@ class ModelController:
 
         model_name = self.layout_manager.sidebar.model_var.get()
         is_ensemble = "AI Ensemble" in model_name
-        
-        # 1. Validation: Ensure models are available
-        if not is_ensemble:
-            model = self.model_manager.load_model(model_name)
-            if not self.error_handler.require_model(model, model_name):
-                return
-        else:
-            # For Ensemble, check if the basic set of models exists
-            success, _ = self.model_manager.check_and_train_models("", force=False)
-            if not success:
-                messagebox.showwarning("Training Required", "Please train individual models before using the AI Ensemble.")
-                return
 
-        try:
-            self.layout_manager.update_status(f"Predicting with {model_name}...", "orange")
+        def _batch_task():
+            # Validation & Loading inside the background task
+            if not is_ensemble:
+                model = self.model_manager.load_model(model_name)
+                if model is None:
+                    return None, "Model file missing", "N/A"
+            else:
+                success, _ = self.model_manager.check_and_train_models("", force=False)
+                if not success:
+                    return None, "Committee models not trained", "N/A"
 
+            # All heavy lifting moved to background task
             df = self.data_manager.uploaded_df.copy()
             models_list = self.layout_manager.callbacks.get('models', ["Random Forest", "Logistic Regression", "SVM"])
-            is_ensemble = "AI Ensemble" in model_name
             
             # 1. Prediction routing
             if is_ensemble:
                 predictions, confidences, risks = self.model_manager.predict_ensemble(df, is_single=False)
-                # total individual models (excluding ensemble entry)
                 total_indiv = len([m for m in models_list if "AI Ensemble" not in m])
                 agreement_counts = confidences * total_indiv
             else:
@@ -242,11 +238,9 @@ class ModelController:
             # 2. Consensus Calculation & Per-Model Batch Summary
             batch_results_summary = []
             batch_votes = [] 
-            
-            # Record-level tracking for 'Detailed Audit'
-            all_model_risks = {} # {model_name: risk_array}
-            
+            all_model_risks = {} 
             successfully_run_models = []
+            
             for m_name in self.CORE_MODELS:
                 try:
                     p, _, r = self.model_manager.predict_batch(m_name, df)
@@ -256,17 +250,12 @@ class ModelController:
                     
                     pos_count = int(np.sum(p))
                     avg_risk = float(np.mean(r))
-                    # Detection rate relative to batch size
-                    det_rate = (pos_count / len(df)) * 100
+                    det_rate = (pos_count / len(df)) * 100 if len(df) > 0 else 0
                     
                     batch_results_summary.append({
-                        'model': m_name,
-                        'positives': pos_count,
-                        'risk': avg_risk,
-                        'rate': det_rate
+                        'model': m_name, 'positives': pos_count, 'risk': avg_risk, 'rate': det_rate
                     })
-                except:
-                    continue
+                except: continue
 
             # 3. Calculate Agreement/Consensus across CORE models
             total_models = len(batch_votes)
@@ -278,12 +267,7 @@ class ModelController:
             avg_consensus = np.mean(agreement_counts) if len(agreement_counts) > 0 else 0
             consensus_str = f"{avg_consensus:.2f}/{total_models}"
             
-            # Identify the "Committee Leader" (Outperformer) based on highest average confidence (risk)
-            leader_model = "N/A"
-            if batch_results_summary:
-                leader_model = max(batch_results_summary, key=lambda x: x['risk'])['model']
-            
-            # Identify clinical markers present in this batch
+            leader_model = max(batch_results_summary, key=lambda x: x['risk'])['model'] if batch_results_summary else "N/A"
             present_markers = [c for c in df.columns if any(k in str(c).lower() for k in ['psa', 'afp', 'ca125', 'peak', 'slope'])]
             top_markers = present_markers[:3] if present_markers else ["Global Distribution"]
 
@@ -293,113 +277,97 @@ class ModelController:
                 'scoreboard': batch_results_summary,
                 'champion': leader_model,
                 'top_markers': top_markers,
-                'clinical_status': "ALERT" if pos_count > 0 else "STABLE",
-                'rate': det_rate if 'det_rate' in locals() else (pos_count/len(df)*100 if len(df)>0 else 0)
+                'clinical_status': "ALERT" if np.sum(predictions) > 0 else "STABLE",
+                'rate': (np.sum(predictions)/len(df)*100 if len(df)>0 else 0)
             }
 
-            # Identify detecting models for EACH positive case
-            # We look at all patients the ensemble marked as POSITIVE (Triage focus)
+            # Detailed Audit Data
             pos_indices = np.where(predictions == 1)[0]
-            if len(pos_indices) == 0: # Fallback to top risks if no one is positive
-                pos_indices = np.where(risks > 0.5)[0]
-            
-            target_audit_indices = pos_indices[:10] # Display first 10 clinical positives
+            if len(pos_indices) == 0: pos_indices = np.where(risks > 0.5)[0]
+            target_audit_indices = pos_indices[:10]
             detailed_audit_data = []
             
             for array_idx in target_audit_indices:
                 array_idx_int = int(array_idx)
                 df_idx = df.index[array_idx_int]
-                
-                # Identify exactly which models in the committee flagged this patient
                 flagging_models = []
-                lead_model = "N/A"
                 max_r = -1.0
+                lead_m = "N/A"
                 
                 for m_idx, m_name in enumerate(successfully_run_models):
                     if batch_votes[m_idx][array_idx_int] == 1:
-                        # Map to short names for clean UI display
                         short_name = m_name.replace("Logistic Regression", "LR").replace("Random Forest", "RF").replace("SVM", "SVM").replace("XGBoost", "XGB")
                         flagging_models.append(short_name)
-                    
-                    # Track lead model by risk
                     r_val = float(all_model_risks[m_name][array_idx_int])
                     if r_val > max_r:
                         max_r = r_val
-                        lead_model = m_name
+                        lead_m = m_name
                 
-                # Fuzzy biomarker matching
-                def get_marker_val(keyword):
+                def get_m_val(keyword):
                     match = [c for c in df.columns if keyword.lower() in str(c).lower()]
-                    if match:
-                        v = df.loc[df_idx, match[0]]
-                        return float(v) if pd.notna(v) else 0.0
+                    if match: return float(df.loc[df_idx, match[0]]) if pd.notna(df.loc[df_idx, match[0]]) else 0.0
                     return 0.0
 
                 detailed_audit_data.append({
-                    'id': df_idx,
-                    'lead_model': lead_model,
-                    'detectors': ", ".join(flagging_models),
-                    'risk': float(risks[array_idx_int]),
-                    'consensus': f"{int(agreement_counts[array_idx_int])}/{total_models}",
-                    'psa': get_marker_val('PSA'),
-                    'afp': get_marker_val('AFP'),
-                    'ca125': get_marker_val('CA125')
+                    'id': df_idx, 'lead_model': lead_m, 'detectors': ", ".join(flagging_models),
+                    'risk': float(risks[array_idx_int]), 'consensus': f"{int(agreement_counts[array_idx_int])}/{total_models}",
+                    'psa': get_m_val('PSA'), 'afp': get_m_val('AFP'), 'ca125': get_m_val('CA125')
                 })
 
-            # Agreement already calculated above
-            pass
-
-            # Update Validation Tab
-            self.layout_manager.tab_validation.update_batch_comparison(batch_results_summary, len(df))
-
-            # Add results to dataframe
+            summary_metadata['audit_registry'] = detailed_audit_data
+            
+            # 4. Move Leaderboard Calculation to Background
+            # This is extremely heavy due to Cross-Validation and was causing UI freezing
+            leaderboard = self.model_manager.get_model_leaderboard(self.data_manager.data_path)
+            
+            # Prepare final DF
             df['Prediction'] = ['POSITIVE' if p == 1 else 'NEGATIVE' for p in predictions]
             df['Confidence'] = confidences
             df['Risk_Score'] = risks
             df['Consensus_Count'] = agreement_counts
+            
+            return df, summary_metadata, consensus_str, leaderboard
 
+        def _on_finish(result):
+            df, summary_metadata, consensus_str, leaderboard = result
             self.data_manager.prediction_results = df
-
-            # Phase 1: Real-world Validation Logging
+            
+            pos_count = int(np.sum(df['Prediction'] == 'POSITIVE'))
+            total_count = len(df)
+            avg_risk = df['Risk_Score'].mean() * 100
+            avg_conf = df['Confidence'].mean() * 100
+            triage = "Action Required" if pos_count > 0 else "Monitoring"
+            
+            # Update Dashboard
+            self.layout_manager.update_metrics(
+                confidence=avg_conf, risk=avg_risk, triage=triage, consensus=consensus_str
+            )
+            
+            # Refresh Leaderboard (Fast UI update only)
+            self.layout_manager.tab_leaderboard.update_leaderboard(leaderboard)
+            
+            # Update Analysis
+            self.layout_manager.tab_analysis.display_batch_report(df, metadata=summary_metadata)
+            
+            # Switch view
+            try: self.layout_manager.dashboard.notebook.select(self.layout_manager.dashboard.analysis_tab)
+            except: pass
+            
+            # Audit log
             if hasattr(self.data_manager, 'save_prospective_audit_batch'):
                 self.data_manager.save_prospective_audit_batch(df, model_name)
 
-            # Update UI
-            pos_count = int(np.sum(predictions))
-            total_count = len(predictions)
-            
-            # Update Dashboard Metrics
-            avg_risk = np.mean(risks) * 100
-            avg_conf = np.mean(confidences) * 100
-            triage = "Action Required" if pos_count > 0 else "Monitoring"
-            batch_status = f"Batch: {pos_count} Detected" if pos_count > 0 else "Batch: All Stable"
-
-            self.layout_manager.update_metrics(
-                confidence=avg_conf, 
-                risk=avg_risk, 
-                triage=triage,
-                consensus=consensus_str
-            )
-            
-            # Refresh Leaderboard
-            leaderboard = self.model_manager.get_model_leaderboard(self.data_manager.data_path)
-            self.layout_manager.root.after(0, lambda: self.layout_manager.tab_leaderboard.update_leaderboard(leaderboard))
-
-            status_msg = f"Batch Complete: {pos_count} clinical positives identified in {total_count} records"
+            status_msg = f"Forensic Complete: {pos_count} clinical positives in {total_count} records"
             self.layout_manager.update_status(status_msg, "#10B981")
             self.error_handler.notify(status_msg, type='success')
 
-            # 3. Professional Reporting & Tab Sync
-            # Update Dashboard & Console with metadata for scoreboard
-            # Update specialized tabs
-            summary_metadata['audit_registry'] = detailed_audit_data
-            self.layout_manager.tab_analysis.display_batch_report(df, metadata=summary_metadata)
-            
-            # Fix TclError: Select the managed parent frame instead of the child tab object
-            self.layout_manager.root.after(100, lambda: self.layout_manager.dashboard.notebook.select(self.layout_manager.dashboard.analysis_tab))
-
-        except Exception as e:
-            self.error_handler.log_and_notify("Batch Prediction", e, "Batch Prediction Error")
+        # Start Async Task
+        self.layout_manager.update_status(f"Performing Forensic Audit with {model_name}...", "orange")
+        if self.async_runner:
+            self.async_runner.run_async("Batch Prediction", _batch_task, on_finish=_on_finish)
+        else:
+            # Fallback
+            _on_finish(_batch_task())
 
     def handle_system_reset(self):
         """Total system purge: deletes models, clears tables, and resets UI state."""

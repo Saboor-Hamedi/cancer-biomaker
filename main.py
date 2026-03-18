@@ -35,10 +35,12 @@ from utils.update_manager import UpdateManager
 from views.dialogs import PreprocessingDialog
 from views.visualizations import Visualizer
 import numpy as np
+# Suppress terminal noise
 warnings.filterwarnings('ignore', message='.*use_label_encoder.*')
-# Suppress terminal noise from background resource trackers and sklearn feature names
 warnings.filterwarnings('ignore', category=UserWarning, module='joblib')
 warnings.filterwarnings('ignore', message='.*X has feature names, but SVC was fitted without feature names.*')
+# Suppress Matplotlib font warnings that clutter the system log
+logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 
 # ── Persistent Path Management ────────────────────────────────────────────────
 def get_resource_path():
@@ -49,18 +51,31 @@ def get_resource_path():
     return os.path.dirname(os.path.abspath(__file__))
 
 def get_user_data_path():
-    """Identify the writable directory for logs, models, and sessions."""
+    """Identify the writable directory for logs, models, and sessions with failsafe."""
+    # Primary: %LOCALAPPDATA% (Windows) or ~/.config (Linux)
     if os.name == 'nt':
-        # Windows: %LOCALAPPDATA%/CancerDetectionDashboard
-        base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+        base = os.environ.get('LOCALAPPDATA', os.path.expandvars('%USERPROFILE%'))
     else:
-        # Linux/Mac: ~/.config/CancerDetectionDashboard
         base = os.path.expanduser('~/.config')
         
     path = os.path.join(base, "CancerDetectionDashboard")
-    if not os.path.exists(path):
-        try: os.makedirs(path)
-        except: pass
+    
+    # Try creating it
+    try:
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+        # Test write permission
+        test_file = os.path.join(path, '.perm_test')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+    except Exception:
+        # Failsafe: Use simple HOME directory if protected
+        path = os.path.join(os.path.expanduser('~'), ".cancer_detection_dashboard")
+        if not os.path.exists(path):
+            try: os.makedirs(path, exist_ok=True)
+            except: pass
+            
     return path
 
 STATIC_HOME = get_resource_path()
@@ -170,7 +185,8 @@ class CancerDetectionApp:
             self.data_manager,
             self.layout_manager,
             self.error_handler,
-            velocity_manager=self.velocity_manager
+            velocity_manager=self.velocity_manager,
+            async_runner=self.async_runner
         )
 
         self.visualization_controller = VisualizationController(
@@ -316,12 +332,50 @@ class CancerDetectionApp:
         threading.Thread(target=check_task, daemon=True).start()
 
 
+# ── Global Clinical Log Redirection ──────────────────────────────────────
+class ClinicalLogRedirector:
+    """Redirects stdout/stderr to the UI's Console."""
+    def __init__(self, console_callback, root=None, level="INFO"):
+        self.console_callback = console_callback
+        self.root = root
+        self.level = level
+
+    def write(self, message):
+        if message.strip():
+            # Use after() for thread-safety since libraries log from varied threads
+            try:
+                msg = message.strip()
+                if self.root:
+                    self.root.after(0, lambda: self.console_callback(msg, level=self.level))
+                else:
+                    self.console_callback(msg, level=self.level)
+            except: pass
+
+    def flush(self):
+        pass
+
 if __name__ == "__main__":
+    root = tk.Tk()
+    app = CancerDetectionApp(root)
+    
+    # 1. Redirect Stdout & Stderr to the Console Tab (Passing root for thread-safety)
+    sys.stdout = ClinicalLogRedirector(app.layout_manager.log_message, root=app.root, level="INFO")
+    sys.stderr = ClinicalLogRedirector(app.layout_manager.log_message, root=app.root, level="ERROR")
+    
+    # 2. Redirect standard 'logging' module as well
+    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+
     try:
-        root = tk.Tk()
-        app = CancerDetectionApp(root)
         root.mainloop()
     except KeyboardInterrupt:
-        # Silent exit on Ctrl+C
-        import os
-        os._exit(0)
+        # User Ctrl+C in terminal: Ensure clinical cleanup before exit
+        if 'app' in locals():
+            app.on_close()
+        else:
+            os._exit(0)
+    except Exception as e:
+        if 'app' in locals():
+            app.error_handler.log_and_notify("Emergency Shutdown", e, "System Failure")
+            app.on_close()
+        else:
+            os._exit(1)

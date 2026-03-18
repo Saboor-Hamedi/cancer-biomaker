@@ -34,7 +34,9 @@ class DataController:
         file_path = filedialog.askopenfilename(filetypes=file_types)
         if file_path:
             def _load_task():
-                return self.data_manager.load_data(file_path)
+                # Load full DF to get metadata
+                df, error = self.data_manager.load_data(file_path)
+                return df, error
 
             def _on_finish(result):
                 df, error = result
@@ -43,15 +45,34 @@ class DataController:
                     self.layout_manager.update_status(f"Import Failed: {error}", "red")
                 elif df is not None:
                     self.data_path = file_path
-                    self.layout_manager.refresh_data_tree()
-                    self.layout_manager.update_data_info(len(df), len(df.columns), len(df))
-                    self.layout_manager.update_status(f"Imported '{os.path.basename(file_path)}'", "#10B981")
+                    self.data_manager.data_path = file_path
+                    
+                    # Capture full count
+                    full_count = len(df)
+                    full_df = df.copy()
+                    
+                    # Apply 20-sample default as per professor's requirement
+                    try:
+                        qty = self.layout_manager.sidebar.sample_qty.get()
+                    except:
+                        qty = 20
+                    
+                    if full_count > qty:
+                        sampled_df = df.sample(n=qty, random_state=42).reset_index(drop=True)
+                        self.data_manager.uploaded_df = sampled_df
+                    else:
+                        self.data_manager.uploaded_df = df
+                    
+                    # Persist session
+                    self.data_manager.save_session()
+                    
+                    # Update everything including counts (20 samples, 1000 total)
+                    self.update_ui_after_load(total_count=full_count, full_context_df=full_df)
 
-            self.layout_manager.update_status("Loading dataset in background...", "orange")
+            self.layout_manager.update_status("Loading clinical dataset...", "orange")
             if self.async_runner:
                 self.async_runner.run_async("Loading data", _load_task, on_finish=_on_finish)
             else:
-                # Synchronous fallback if runner missing
                 _on_finish(_load_task())
 
     def load_excel(self, file_path):

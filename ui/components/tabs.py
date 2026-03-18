@@ -69,11 +69,11 @@ class InputTab(ttk.Frame):
         cols = ("feature", "unit", "value")
         self.tree = ttk.Treeview(container, columns=cols, show="headings", height=20)
 
-        self.tree.heading("feature", text="BIOMARKER / FEATURE NAME")
-        self.tree.heading("unit",    text="UNIT")
-        self.tree.heading("value",   text="MEASURED VALUE")
+        self.tree.heading("feature", text="BIOMARKER / FEATURE NAME", anchor=tk.CENTER)
+        self.tree.heading("unit",    text="UNIT", anchor=tk.CENTER)
+        self.tree.heading("value",   text="MEASURED VALUE", anchor=tk.CENTER)
 
-        self.tree.column("feature", width=310, anchor=tk.W,     stretch=True)
+        self.tree.column("feature", width=310, anchor=tk.CENTER, stretch=True)
         self.tree.column("unit",    width=110, anchor=tk.CENTER, stretch=False)
         self.tree.column("value",   width=160, anchor=tk.CENTER, stretch=False)
 
@@ -219,8 +219,11 @@ class DataTab(ttk.Frame):
         self.tree.delete(*self.tree.get_children())
         self.tree["columns"] = list(df.columns)
         for col in df.columns:
-            self.tree.heading(col, text=col.upper())
-            self.tree.column(col, width=120, anchor=tk.CENTER)
+            self.tree.heading(col, text=col.upper(), anchor=tk.CENTER)
+            self.tree.column(col, width=120, minwidth=100, anchor=tk.CENTER, stretch=True)
+        
+        # Force UI update to prevent "half-width" bug on tab switch
+        self.tree.update_idletasks()
         for _, row in df.iterrows():
             self.tree.insert("", tk.END, values=list(row))
 
@@ -301,31 +304,32 @@ class AnalysisTab(ttk.Frame):
 
         # Dynamic Patient-Specific Details
         if positives > 0 and metadata and 'audit_registry' in metadata:
-            self.text.insert(tk.END, "2. HIGH-RISK PATIENT REGISTRY (FLAGGED PROFILES)\n", "sub")
+            self.text.insert(tk.END, "2. HIGH-RISK CLINICAL REGISTRY (FLAGGED PATIENT PROFILES)\n", "sub")
+            
+            # Professional Table Header
+            h_line = f"  {'ID':<6} │ {'RISK':>8} │ {'COMMITTEE DETECTION':<20} │ {'PSA':>12} │ {'AFP':>10} │ {'CA125':>10} \n"
+            divider = "  " + "—" * 81 + "\n"
+            
+            self.text.insert(tk.END, h_line, "table_head")
+            self.text.insert(tk.END, divider, "dim")
+            
             registry = metadata['audit_registry']
             for patient in registry:
-                p_id = patient.get('id', 'N/A')
-                risk = patient.get('risk', 0) * 100
-                detectors = patient.get('detectors', 'Ensemble')
+                p_id = str(patient.get('id', 'N/A'))[:5]
+                risk = f"{patient.get('risk', 0) * 100:.1f}%"
+                detectors = str(patient.get('detectors', 'Ensemble'))[:19]
                 
-                self.text.insert(tk.END, f"  [+] Patient ID: {p_id} ", "crit")
-                self.text.insert(tk.END, f" | Risk: {risk:.1f}% | Models: {detectors}\n")
+                psa = f"{patient.get('psa', 0):.0f}"
+                afp = f"{patient.get('afp', 0):.2f}"
+                ca = f"{patient.get('ca125', 0):.2f}"
                 
-                # Show specific biomarker drivers for this specific patient
-                markers = []
-                # Map standardized keys to patient data
-                p_markers = {
-                    'PSA': patient.get('psa', 0),
-                    'AFP': patient.get('afp', 0),
-                    'CA125': patient.get('ca125', 0)
-                }
-                for label, val in p_markers.items():
-                    if val > 0:
-                        markers.append(f"{label}: {val:.2f}")
+                row_line = f"  {p_id:<6} │ {risk:>8} │ {detectors:<20} │ {psa:>12} │ {afp:>10} │ {ca:>10} \n"
                 
-                if markers:
-                    self.text.insert(tk.END, "      Diagnostic Signals: ", "dim")
-                    self.text.insert(tk.END, f"{' | '.join(markers)}\n")
+                # Highlight logic: Use 'crit' text for very high risk (>90%)
+                tag = "crit" if patient.get('risk', 0) > 0.9 else "table_row"
+                self.text.insert(tk.END, row_line, tag)
+            
+            self.text.insert(tk.END, divider, "dim")
             self.text.insert(tk.END, "\n")
 
         self.text.insert(tk.END, "3. ALGORITHMIC ARCHITECTURE & BIOMARKER SIGNAL ANALYSIS\n", "sub")
