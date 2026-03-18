@@ -110,7 +110,7 @@ def build():
         'PySide6', 'PyQt5', 'PyQt6', 'nbformat', 'nbconvert',
         'tensorboard', 'torch.distributed', 'torch.nn.modules.export', 'torch.testing',
         'matplotlib.tests', 'numpy.tests', 'expecttest', 'hypothesis',
-        'onnxscript', 'onnx', 'opt_einsum', 'triton', 'IPython.kernel'
+        'onnxscript', 'onnx', 'opt_einsum', 'triton', 'IPython.kernel','cupy'
     ]
     for exc in excludes:
         args.extend(['--exclude-module', exc])
