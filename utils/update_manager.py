@@ -17,12 +17,19 @@ class UpdateManager:
     GITHUB_REPO = "Saboor-Hamedi/cancer-biomaker"
     API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
     
-    def __init__(self, root, status_callback=None, current_version="3.0"):
+    def __init__(self, root, status_callback=None, current_version="1.0.0"):
         self.root = root
         self.status_callback = status_callback
         self.current_version = current_version
         self.latest_release = None
         self.download_url = None
+        
+        # Consistent folder path for updates
+        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.update_dir = os.path.join(self.base_dir, "updates")
+        
+        # Cleanup any stale updates from previous sessions on init
+        threading.Thread(target=self.clear_old_updates, daemon=True).start()
 
     def check_for_updates(self, silent=True):
         """Checks GitHub for a newer version."""
@@ -56,7 +63,8 @@ class UpdateManager:
                         # Always prompt if a new version is found, silent only affects initial check
                         self.root.after(0, lambda: self._prompt_update(tag_name))
                     elif not silent: # Only show "up to date" message if not silent
-                        self.root.after(0, lambda: messagebox.showinfo("Update Check", f"You are using the latest version (v{self.current_version})."))
+                        self.root.after(0, lambda: messagebox.showinfo("System Check", 
+                            f"Your clinical dashboard is up to date!\n\nCurrent Version: v{self.current_version}\nLatest Version: v{tag_name}"))
                         log.info("Application is up to date.")
             except urllib.error.HTTPError as e:
                 if e.code == 404:
@@ -89,10 +97,9 @@ class UpdateManager:
         if not self.download_url:
             messagebox.showwarning("Update Error", "No executable found in the release assets. Opening release page instead.")
             import webbrowser 
+            url = f"https://github.com/{self.GITHUB_REPO}/releases/latest"
             if self.latest_release:
-                url = self.latest_release.get('html_url', f"https://github.com/{self.GITHUB_REPO}/releases/latest")
-            else:
-                url = f"https://github.com/{self.GITHUB_REPO}/releases/latest"
+                url = self.latest_release.get('html_url', url)
             webbrowser.open(url)
             return
 
@@ -109,19 +116,24 @@ class UpdateManager:
         
         def _download_thread():
             try:
-                temp_file = os.path.join(os.environ['TEMP'], "cancer_dashboard_update.exe")
+                if not self.latest_release:
+                    raise ValueError("Release data not initialized")
+                
+                tag_name = self.latest_release.get('tag_name', 'latest')
+                temp_file = os.path.join(self.update_dir, f"CancerDetection_Update_{tag_name}.exe")
                 
                 if not self.download_url:
                     raise ValueError("Download URL is missing")
 
-                req = urllib.request.Request(self.download_url, headers={'User-Agent': 'Cancer-Detection-App'})
+                log.info("Starting download: %s", self.download_url)
+                req = urllib.request.Request(str(self.download_url), headers={'User-Agent': 'Cancer-Detection-App'})
                 with urllib.request.urlopen(req) as response:
                     total_size = int(response.info().get('Content-Length', 0))
                     downloaded = 0
                     
                     with open(temp_file, 'wb') as f:
                         while True:
-                            chunk = response.read(8192)
+                            chunk = response.read(16384) # Larger chunk for faster speed
                             if not chunk: break
                             f.write(chunk)
                             downloaded += len(chunk)
@@ -130,9 +142,11 @@ class UpdateManager:
                                 self.root.after(0, lambda p=percent: progress.configure(value=p))
                 
                 progress_win.destroy()
+                log.info("Download completed: %s", temp_file)
                 if messagebox.askyesno("Download Complete", "The update has been downloaded. The application will now restart to finish the installation."):
                     self._install_and_restart(temp_file)
             except Exception as e:
+                log.error("Download failed: %s", e)
                 self.root.after(0, lambda: messagebox.showerror("Download Error", f"Failed to download update: {e}"))
                 progress_win.destroy()
 
@@ -141,18 +155,32 @@ class UpdateManager:
     def _install_and_restart(self, temp_file):
         """Launches the new installer and exits the current app."""
         try:
-            # We use a batch script or just launch the exe. 
-            # If it's a SETUP.exe (Inno Setup), it handles overwriting the current app.
-            # If it's just the app.exe, we might need a small move command.
+            log.info("Launching installer: %s", temp_file)
             if getattr(sys, 'frozen', False):
                 # We are running as an EXE
-                # Assuming Inno Setup silent install for .exe
-                subprocess.Popen([temp_file, "/SILENT"], shell=True) 
+                # /SILENT for Inno Setup avoids repeated questions
+                subprocess.Popen([temp_file, "/SILENT", "/SP-"], shell=True) 
             else:
-                # We are running as a script (e.g., for development testing)
                 subprocess.Popen([temp_file], shell=True)
                 
             self.root.quit()
             sys.exit(0)
         except Exception as e:
+            log.error("Installation launch failed: %s", e)
             messagebox.showerror("Installation Error", f"Could not launch installer: {e}")
+
+    def clear_old_updates(self):
+        """Deletes any .exe files in the updates folder to save space."""
+        try:
+            if not os.path.exists(self.update_dir):
+                return
+            
+            for f in os.listdir(self.update_dir):
+                if f.endswith(".exe"):
+                    try:
+                        os.remove(os.path.join(self.update_dir, f))
+                    except:
+                        pass
+            log.info("Update cache cleared.")
+        except Exception as e:
+            log.warning("Could not clear update cache: %s", e)

@@ -142,8 +142,6 @@ class Sidebar(ttk.Frame):
             command=self.callbacks.get('system_reset')
         ).pack(fill=tk.X, padx=10)
 
-        ttk.Label(self.scroll_content, text="v3.0 Verified", style='SidebarCaption.TLabel').pack(pady=20)
-
     def _on_model_select(self, event):
         selection = self.model_listbox.curselection()
         if selection:

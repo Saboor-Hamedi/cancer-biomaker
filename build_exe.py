@@ -4,8 +4,20 @@ import sys
 import shutil
 import zipfile
 
+def get_version():
+    """Extract version from main.py to keep in sync."""
+    try:
+        with open("main.py", "r") as f:
+            for line in f:
+                if 'VERSION =' in line:
+                    return line.split('=')[1].strip().replace('"', '').replace("'", "")
+    except:
+        pass
+    return "1.0.0"
+
 def build():
-    print("--- Starting Production Build for Cancer Detection Dashboard ---")
+    version = get_version()
+    print(f"--- Starting Production Build for Cancer Detection Dashboard v{version} ---")
     
     # Define the entry point
     entry_point = "main.py"
@@ -45,25 +57,27 @@ def build():
     for data in added_data:
         args.extend(['--add-data', data])
 
-    # AI-Specific: Collect all metadata for these heavy packages
-    args.extend(['--collect-all', 'sklearn'])
-    args.extend(['--collect-all', 'xgboost'])
-    args.extend(['--collect-all', 'shap'])
+    # AI-Specific: Avoid --collect-all as it bloats the size with tests and docs
+    # Instead, we use specific hidden imports and excludes
     
-    # Hidden imports missed by hooks
     hidden_imports = [
         'openpyxl',                       # Crucial for Excel loading
         'sklearn.utils._typedefs',
         'torch',
+        'torch_geometric',
+        'networkx',
+        'scipy.special.cython_special',
     ]
     for imp in hidden_imports:
         args.extend(['--hidden-import', imp])
         
     # EXCLUDE huge unnecessary frameworks that get dragged in by data science libs
-    # This prevents [WinError 32] file locks on things we don't even use (like django)
+    # Aggressively prune to reduce size from >1GB to <600MB
     excludes = [
         'django', 'IPython', 'notebook', 'jedi', 'sphinx', 'pytest', 
-        'PySide6', 'PyQt5', 'PyQt6', 'matplotlib.tests'
+        'PySide6', 'PyQt5', 'PyQt6', 'matplotlib.tests', 'numpy.tests',
+        'torch.testing', 'torch.distributions', 'scipy.stats.tests',
+        'unittest', 'test'
     ]
     for exc in excludes:
         args.extend(['--exclude-module', exc])
@@ -85,12 +99,40 @@ def build():
                     arcname = os.path.relpath(file_path, os.path.dirname(dist_path))
                     zipf.write(file_path, arcname)
 
+        # NEW: Automated Inno Setup Installer Creation
+        print("\n--- Attempting to create Windows Installer (.exe) ---")
+        inno_compiler = r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        iss_script = "installer.iss"
+        
+        # Sync version in .iss file before compiling
+        if os.path.exists(iss_script):
+            with open(iss_script, "r") as f:
+                lines = f.readlines()
+            with open(iss_script, "w") as f:
+                for line in lines:
+                    if line.startswith("#define MyAppVersion"):
+                        f.write(f'#define MyAppVersion "{version}"\n')
+                    else:
+                        f.write(line)
+            print(f"Synced {iss_script} to v{version}")
+
+        if os.path.exists(inno_compiler) and os.path.exists(iss_script):
+            print(f"Compiling installer: {iss_script}...")
+            import subprocess
+            subprocess.run([inno_compiler, iss_script], check=True)
+            print("Installer created successfully in 'dist/' folder.")
+        else:
+            print("Note: Inno Setup (ISCC.exe) not found. Skipping installer creation.")
+            print("Please install Inno Setup 6 to generate the 'Next-Next' installer.")
+
         print("\n" + "="*50)
         print("BUILD SUCCESSFUL!")
         print(f"1. App Folder: {os.path.abspath(dist_path)}")
         print(f"2. Distribution ZIP: {os.path.abspath(zip_name)}")
+        if os.path.exists(os.path.join('dist', 'CancerDetectionDashboard_Installer.exe')):
+            print(f"3. Installer EXE: {os.path.abspath(os.path.join('dist', 'CancerDetectionDashboard_Installer.exe'))}")
         print("="*50)
-        print("💡 Share the ZIP file. Users just need to extract and run the .exe inside.")
+        print("💡 Share the Installer or ZIP file. Users just need to run the installer.")
     except Exception as e:
         print(f"Build failed: {e}")
 
