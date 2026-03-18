@@ -14,40 +14,54 @@ from utils.error_handler import ErrorHandler
 class DataController:
     """Controller for data loading, preprocessing, and export operations."""
 
-    def __init__(self, data_manager, layout_manager, error_handler=None, model_manager=None, velocity_manager=None, version="1.0.1"):
+    def __init__(self, data_manager, layout_manager, error_handler=None, model_manager=None, velocity_manager=None, version="1.0.1", async_runner=None):
         self.data_manager = data_manager
-        self.model_manager = model_manager  # Optional — used for analytics cache reset
+        self.model_manager = model_manager
         self.velocity_manager = velocity_manager
         self.layout_manager = layout_manager
         self.error_handler = error_handler or ErrorHandler()
         self.version = version
+        self.async_runner = async_runner
         self.data_path = None
 
     def handle_upload(self):
-        """Handle dataset upload."""
-        file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
+        """Handle dataset upload (Excel or CSV) in the background."""
+        file_types = [
+            ("All Data Files", "*.xlsx *.xls *.csv"),
+            ("Excel files", "*.xlsx *.xls"),
+            ("CSV files", "*.csv")
+        ]
+        file_path = filedialog.askopenfilename(filetypes=file_types)
         if file_path:
-            try:
-                self.layout_manager.update_status("Loading dataset...", "orange")
-                self.load_excel(file_path)
-            except Exception as e:
-                self.error_handler.log_and_notify("Dataset Upload", e, "Upload Error")
+            def _load_task():
+                return self.data_manager.load_data(file_path)
+
+            def _on_finish(result):
+                df, error = result
+                if error:
+                    self.error_handler.log_and_notify("Dataset Upload", Exception(error), "Upload Error")
+                    self.layout_manager.update_status(f"Import Failed: {error}", "red")
+                elif df is not None:
+                    self.data_path = file_path
+                    self.layout_manager.refresh_data_tree()
+                    self.layout_manager.update_data_info(len(df), len(df.columns), len(df))
+                    self.layout_manager.update_status(f"Imported '{os.path.basename(file_path)}'", "#10B981")
+
+            self.layout_manager.update_status("Loading dataset in background...", "orange")
+            if self.async_runner:
+                self.async_runner.run_async("Loading data", _load_task, on_finish=_on_finish)
+            else:
+                # Synchronous fallback if runner missing
+                _on_finish(_load_task())
 
     def load_excel(self, file_path):
-        """Load and validate Excel dataset."""
+        """Standardised data loader (Excel/CSV fallback)."""
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        try:
-            df = pd.read_excel(file_path, sheet_name='Training_Data')
-        except ValueError:
-            xl = pd.ExcelFile(file_path)
-            sheets = xl.sheet_names
-            raise ValueError(
-                f"Sheet 'Training_Data' not found in the Excel file.\n"
-                f"Available sheets: {', '.join(sheets)}\n"
-                f"Please rename your data sheet to 'Training_Data'."
-            )
+        df, error = self.data_manager.load_data(file_path)
+        if error:
+            raise ValueError(error)
 
         # Validate data
         issues = self.data_manager.validate_data(df)
@@ -81,24 +95,45 @@ class DataController:
         # Update UI with both total and sampled counts, and full context for audit
         self.update_ui_after_load(total_count=full_row_count, full_context_df=full_df)
 
-    def handle_sample(self, sample_size=20):
-        """Load a sample of the current dataset."""
+    def handle_sample(self, sample_size=None):
+        """Load a sample of the current dataset in the background."""
         if not self.data_path:
-            self.error_handler.require_data("Sample Loading")
+            self.error_handler.require_data("Data Sampling")
             return
 
-        try:
-            self.layout_manager.update_status("Loading samples...", "orange")
-            self.load_sample(sample_size)
-        except Exception as e:
-            self.error_handler.log_and_notify("Sample Loading", e, "Sample Error")
+        if sample_size is None:
+            try:
+                sample_size = self.layout_manager.sidebar.sample_qty.get()
+            except:
+                sample_size = 20
+
+        def _sample_task():
+            # load_sample logic moved here to run in thread
+            return self.load_sample(sample_size)
+
+        def _on_finish(_):
+            self.layout_manager.update_status(f"Generated {sample_size} clinical samples", "#10B981")
+
+        self.layout_manager.update_status(f"Sampling {sample_size} records...", "orange")
+        if self.async_runner:
+            self.async_runner.run_async("Sampling data", _sample_task, on_finish=_on_finish)
+        else:
+            _sample_task()
+            _on_finish(None)
 
     def load_sample(self, sample_size):
-        """Load a sample of the dataset."""
+        """Load a sample of the dataset with smart sheet detection."""
         if not os.path.exists(self.data_path):
             raise FileNotFoundError(f"Dataset not found: {self.data_path}")
 
-        full_df = pd.read_excel(self.data_path, sheet_name='Training_Data')
+        try:
+            full_df = pd.read_excel(self.data_path, sheet_name='Training_Data')
+        except ValueError:
+            xl = pd.ExcelFile(self.data_path)
+            sheets = xl.sheet_names
+            if not sheets:
+                raise ValueError("The dataset file appears to be empty.")
+            full_df = pd.read_excel(self.data_path, sheet_name=sheets[0])
         full_row_count = len(full_df)
 
         # Sample the data

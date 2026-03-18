@@ -4,12 +4,15 @@ import pandas as pd
 import numpy as np
 
 class DataManager:
-    def __init__(self, data_path=None):
+    def __init__(self, data_path=None, user_data_path=None):
         self.data_path = data_path
         self.uploaded_df = None
         self.prediction_results = None
         self.mean_values = None
-        self._config_path = os.path.join(os.path.dirname(__file__), '..', 'session_config.json')
+        
+        # Use provided user_data_path or fallback to script location
+        self.user_data_dir = user_data_path or os.path.join(os.path.dirname(__file__), '..')
+        self._config_path = os.path.join(self.user_data_dir, 'session_config.json')
 
     def save_session(self):
         """Persist session state (last data path)."""
@@ -76,12 +79,42 @@ class DataManager:
         except Exception as e:
             print(f"Failed to save prospective batch audit: {e}")
 
+    def load_data(self, file_path, sheet_name=None):
+        """Unified data loader for Excel and CSV."""
+        ext = str(file_path).lower().split('.')[-1]
+        if ext in ['xlsx', 'xls']:
+            return self.load_excel(file_path, sheet_name)
+        elif ext == 'csv':
+            return self.load_csv(file_path)
+        else:
+            return None, f"Unsupported file format: .{ext}"
+
+    def load_csv(self, file_path):
+        """Load and wash CSV dataset."""
+        try:
+            df = pd.read_csv(file_path)
+            # Wash columns
+            df.columns = [str(c).strip() for c in df.columns]
+            df.dropna(how='all', inplace=True)
+            df.dropna(axis=1, how='all', inplace=True)
+            self.uploaded_df = df
+            return df, None
+        except Exception as e:
+            return None, str(e)
+
     def load_excel(self, file_path, sheet_name=None):
         try:
             if sheet_name:
                 df = pd.read_excel(file_path, sheet_name=sheet_name)
             else:
-                df = pd.read_excel(file_path)
+                # Try standard clinical sheet first, fallback to index 0
+                try:
+                    df = pd.read_excel(file_path, sheet_name='Training_Data')
+                except ValueError:
+                    xl = pd.ExcelFile(file_path)
+                    if not xl.sheet_names:
+                        return None, "Excel file is empty."
+                    df = pd.read_excel(file_path, sheet_name=xl.sheet_names[0])
             
             # --- Robustness Improvements ---
             # 1. Clean Column Names (Strip whitespace)

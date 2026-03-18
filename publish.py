@@ -73,18 +73,19 @@ def publish():
 
     # 3. Git Operations
     print("🔄 Syncing with GitHub...")
-    run_cmd("git config core.autocrlf true")
-    run_cmd("git add main.py publish.py build_exe.py DOCUMENTATION.md README.md requirements.txt")
-    # Selective add for folders to keep git clean
-    run_cmd("git add controllers/ handlers/ logic/ ui/ utils/ views/ styles.py")
+    # Dynamically find current branch
+    branch = run_cmd("git rev-parse --abbrev-ref HEAD") or "main"
+    print(f"🌲 Active Branch: {branch}")
     
-    run_cmd(f'git commit -m "Release {tag} - Optimized Clinical Build"')
-    print("🚀 Pushing to origin/main...")
-    run_cmd("git push origin main")
+    run_cmd("git config core.autocrlf true")
+    run_cmd(f'git add .') # Add all tracked and new files (within reasons of .gitignore)
+    
+    run_cmd(f'git commit -m "Release {tag} - Clinical Dashboard Build"')
+    print(f"🚀 Pushing to origin/{branch}...")
+    run_cmd(f"git push origin {branch}")
 
     # 4. Create Tag
-    print(f"🏷️ Creating tag {tag}...")
-    # Delete local and remote tag if it exists (allows re-publishing)
+    print(f"🏷️ Tag Management: {tag}...")
     subprocess.run(f"git tag -d {tag}", shell=True, capture_output=True)
     subprocess.run(f"git push --delete origin {tag}", shell=True, capture_output=True)
     
@@ -92,21 +93,31 @@ def publish():
     run_cmd(f"git push origin {tag}")
 
     # 5. GitHub Release using 'gh' CLI
-    print(f"✨ Creating GitHub Release {tag}...")
-    release_cmd = f'gh release create {tag} "{asset_to_upload}" --title "Release {tag}" --notes "Automated clinical production build."'
+    print(f"✨ Orchestrating GitHub Release {tag}...")
     
-    # If release already exists, we might need to overwrite it
+    # We will upload BOTH the Installer and the Portable ZIP for professional distribution
+    assets = [f'"{installer_path}"' if os.path.exists(installer_path) else None,
+              f'"{portable_zip}"' if os.path.exists(portable_zip) else None]
+    assets_str = " ".join([a for a in assets if a])
+    
+    if not assets_str:
+        print("❌ Error: No release assets found (ZIP/Installer). Build failed?")
+        return
+
+    # Check if release exists
     check_release = run_cmd(f"gh release view {tag}")
     if check_release:
-        print(f"⚠️ Release {tag} already exists. Updating assets...")
-        run_cmd(f'gh release upload {tag} "{asset_to_upload}" --clobber')
+        print(f"⚠️ Release {tag} exists. Refreshing assets...")
+        run_cmd(f'gh release upload {tag} {assets_str} --clobber')
     else:
-        run_cmd(release_cmd)
+        print(f"🏗️ Creating New Release: {tag}")
+        run_cmd(f'gh release create {tag} {assets_str} --title "Clinical AI Dashboard {tag}" --notes "Automated clinical production build with multi-model forensic analysis."')
 
-    print("\n" + "="*50)
-    print("SUCCESS! Your update is now live on GitHub.")
-    print(f"Users running the app will now see the v{version} update.")
-    print("="*50)
+    print("\n" + "="*60)
+    print("PROFESSIONAL DEPLOYMENT SUCCESSFUL!")
+    print(f"🚀 Branch: {branch} | Tag: {tag}")
+    print(f"📦 Assets Deployed: {assets_str}")
+    print("="*60)
 
 if __name__ == "__main__":
     # Ensure gh is authenticated

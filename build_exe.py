@@ -99,8 +99,19 @@ def build():
         
     # COLLECT ALL: For complex AI libraries, we must collect everything to avoid runtime "ModuleNotFound"
     collect_all = ['torch', 'torch_geometric', 'xgboost', 'shap', 'sklearn', 'umap']
-    for lib in collect_all:
-        args.extend(['--collect-all', lib])
+    # 1. Create .ICO for professional Windows branding
+    try:
+        from PIL import Image
+        png_path = "logo.png"
+        ico_path = "logo.ico"
+        if os.path.exists(png_path):
+            img = Image.open(png_path)
+            # Create a professional multi-size ICO
+            img.save(ico_path, format='ICO', sizes=[(16,16), (32,32), (48,48), (64,64), (128,128), (256,256)])
+            print(f"✅ Generated professional icon: {ico_path}")
+            args.extend(['--icon', ico_path])
+    except Exception as e:
+        print(f"⚠️ Warning: Could not generate .ico file: {e}")
 
     # EXCLUDE only definitely unused, large third-party frameworks and heavy torch/geometric submodules
     # These often trigger ModuleNotFound errors during the build analysis because they are optional deps.

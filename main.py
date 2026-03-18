@@ -41,32 +41,48 @@ warnings.filterwarnings('ignore', category=UserWarning, module='joblib')
 warnings.filterwarnings('ignore', message='.*X has feature names, but SVC was fitted without feature names.*')
 
 # ── Persistent Path Management ────────────────────────────────────────────────
-def get_app_home():
-    """Identify the consistent home directory for logs and models."""
+def get_resource_path():
+    """Identify the directory for static assets (icons, etc)."""
     if getattr(sys, 'frozen', False):
-        # Running as a bundled EXE (PyInstaller)
+        # Running as PyInstaller Bundle
         return os.path.dirname(sys.executable)
-    # Running as a normal script
     return os.path.dirname(os.path.abspath(__file__))
 
-APP_HOME = get_app_home()
+def get_user_data_path():
+    """Identify the writable directory for logs, models, and sessions."""
+    if os.name == 'nt':
+        # Windows: %LOCALAPPDATA%/CancerDetectionDashboard
+        base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+    else:
+        # Linux/Mac: ~/.config/CancerDetectionDashboard
+        base = os.path.expanduser('~/.config')
+        
+    path = os.path.join(base, "CancerDetectionDashboard")
+    if not os.path.exists(path):
+        try: os.makedirs(path)
+        except: pass
+    return path
 
-# Ensure APP_HOME is in sys.path for robust local imports
-if APP_HOME not in sys.path:
-    sys.path.insert(0, APP_HOME)
+STATIC_HOME = get_resource_path()
+USER_DATA_HOME = get_user_data_path()
 
-# ── Logging: writes to app.log in the APP_HOME folder ────────────────────────
+# Ensure STATIC_HOME is in sys.path for robust local imports
+if STATIC_HOME not in sys.path:
+    sys.path.insert(0, STATIC_HOME)
+
+# ── Logging: writes to USER_DATA_HOME ─────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     handlers=[
-        logging.FileHandler(os.path.join(APP_HOME, 'app.log'), encoding='utf-8')
+        logging.FileHandler(os.path.join(USER_DATA_HOME, 'app.log'), encoding='utf-8'),
+        logging.StreamHandler(sys.stdout) # Also log to console for debugging
     ]
 )
 
 # ── Global Metadata ──────────────────────────────────────────────────────────
 # Change the version here to reflect across the entire application interface.
-VERSION = "1.0.5"
+VERSION = "1.0.1"
 
 # ── Global Crash Protection ──────────────────────────────────────────────────
 def setup_crash_protection(root, error_handler):
@@ -119,8 +135,8 @@ class CancerDetectionApp:
         StyleManager.apply_styles(self.root)
 
         # Initialize Core Managers
-        self.data_manager = DataManager()
-        self.model_manager = ModelManager(APP_HOME)
+        self.data_manager = DataManager(user_data_path=USER_DATA_HOME)
+        self.model_manager = ModelManager(USER_DATA_HOME)
         self.velocity_manager = VelocityManager()
 
         # Core utilities
@@ -131,7 +147,7 @@ class CancerDetectionApp:
         setup_crash_protection(self.root, self.error_handler)
         # UI Management (initialized with empty callbacks first)
         self.layout_manager = LayoutManager(self.root, self.model_manager, self.data_manager, {}, version=self.version)
-        self.update_manager = UpdateManager(self.root, self.layout_manager.update_status, current_version=self.version)
+        self.update_manager = UpdateManager(self.root, self.layout_manager.update_status, current_version=self.version, user_data_path=USER_DATA_HOME)
 
         # Link ErrorHandler to UI for internal notifications (Item #2: "not come out of app")
         self.error_handler.console_callback = self.layout_manager.log_message
@@ -145,7 +161,8 @@ class CancerDetectionApp:
             self.error_handler,
             model_manager=self.model_manager,
             velocity_manager=self.velocity_manager,
-            version=self.version
+            version=self.version,
+            async_runner=self.async_runner
         )
 
         self.model_controller = ModelController(
@@ -266,7 +283,7 @@ class CancerDetectionApp:
                 myappid = f'clinical.xai.dashboard.{self.version}'
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
-            icon_path = os.path.join(APP_HOME, "logo.png")
+            icon_path = os.path.join(STATIC_HOME, "logo.png")
             if os.path.exists(icon_path):
                 # Using PIL for better scaling
                 img = Image.open(icon_path)

@@ -31,9 +31,7 @@ class ModelController:
             messagebox.showwarning("Data Required", "Please upload a dataset first to train your models.")
             return
 
-        if not messagebox.askyesno("Confirm Training",
-                                 "This will retrain all models (RF, LR, SVM, XGBoost) using the current dataset. Proceed?"):
-            return
+        self.layout_manager.update_status("Initiating clinical model training...", "orange")
 
         def task():
             success, msg = self.model_manager.check_and_train_models(

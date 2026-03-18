@@ -3,6 +3,7 @@ UI Layout Manager - Assembles and manages the main application layout.
 """
 
 import tkinter as tk
+import numpy as np
 
 from ui.components.dashboard import Dashboard
 from ui.components.sidebar import Sidebar
@@ -112,39 +113,69 @@ class LayoutManager:
             self.tab_input.refresh_features(features, first_row=first_row)
 
     def refresh_data_tree(self):
-        """Refresh the data display tree - showing only the biological biomarker peaks."""
+        """Refresh the data display tree - showing all relevant clinical columns."""
         if self.tab_data and self.data_manager.uploaded_df is not None:
             tree = self.tab_data.tree
             df = self.data_manager.uploaded_df
             
-            # Identify the biomarker peaks (features the model actually uses)
-            # We filter for high-impact diagnostic columns to avoid 'Data Crowding' (Item #5)
-            important_patterns = ['peak', 'concentration', 'sample_id', 'cancer_risk_class']
-            display_cols = [str(c) for c in df.columns if any(p in str(c).lower() for p in important_patterns)]
+            # Use all columns by default, but prioritize ID/Class at start if they exist
+            all_cols = list(df.columns)
             
-            # If we still have too many (e.g. 62), take only the first 15 diagnostic markers
-            if len(display_cols) > 15:
-                # Keep ID and Class, and take top 13 peaks
-                metadata = [str(c) for c in display_cols if 'id' in str(c).lower() or 'class' in str(c).lower()]
-                others = [str(c) for c in display_cols if c not in metadata]
-                display_cols = list(metadata) + list(others[:13])
+            # Priority: ensure sample_id and results are visible first
+            priority = ['sample_id', 'cancer_risk_class', 'prediction', 'risk']
+            display_cols = []
+            for p in priority:
+                match = [c for c in all_cols if p in str(c).lower()]
+                if match: display_cols.append(match[0])
+            
+            # Add remaining columns
+            remaining = [c for c in all_cols if c not in display_cols]
+            display_cols.extend(remaining)
 
-            if not display_cols:
-                # Fallback if no specific biomarker columns found: show first 10
-                display_cols = list(df.columns[:10])
+            # Limit to 30 columns to prevent UI freeze (User can scroll)
+            display_cols = display_cols[:30]
 
             # Clear existing columns and rows
             tree.delete(*tree.get_children())
-            tree["columns"] = list(display_cols)
-            tree["show"] = "headings" # Hide the empty first column
-
+            
+            # Reconfigure columns
+            tree["columns"] = display_cols
+            tree["show"] = "headings"
+            
             for col in display_cols:
-                tree.heading(col, text=col)
-                tree.column(col, width=120, anchor=tk.CENTER)
+                # Clean name for display if it's too long
+                clean_name = str(col).replace('_', ' ').title()
+                tree.heading(col, text=clean_name, anchor='w')
+                
+                # Auto-width: wide for feature names, medium for numbers
+                if 'id' in str(col).lower():
+                    tree.column(col, width=120, anchor='w')
+                else:
+                    tree.column(col, width=140, anchor='center')
 
-            # Add data for the filtered columns
-            for _, row in df[display_cols].iterrows():
-                tree.insert("", tk.END, values=list(row))
+            # Chunker for background insertion
+            rows = list(df.iterrows())
+            total_rows = len(rows)
+            chunk_size = 50
+
+            def _insert_chunk(start_idx):
+                end_idx = min(start_idx + chunk_size, total_rows)
+                for i in range(start_idx, end_idx):
+                    _, row = rows[i]
+                    vals = [row[c] for c in display_cols]
+                    formatted_vals = []
+                    for v in vals:
+                        if isinstance(v, (float, np.float64, np.float32)):
+                            formatted_vals.append(f"{v:.4f}")
+                        else:
+                            formatted_vals.append(str(v))
+                    tree.insert("", tk.END, values=formatted_vals)
+                
+                if end_idx < total_rows:
+                    self.root.after(10, lambda: _insert_chunk(end_idx))
+
+            # Start chunked insertion
+            _insert_chunk(0)
 
     def update_data_info(self, rows, cols, samples):
         """Update the data information display."""

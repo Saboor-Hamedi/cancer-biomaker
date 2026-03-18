@@ -410,19 +410,23 @@ class ModelManager:
 
     def _read_excel_safe(self, data_path):
         """
-        Read 'Training_Data' sheet from Excel with a clean error message
-        if the sheet is missing (item #6).
+        Smart read from Excel: try 'Training_Data' first, fallback to the first
+        available sheet (Item #6 improvement).
         """
         try:
+            # Attempt 1: Look for clinical standard sheet name
             df = pd.read_excel(data_path, sheet_name='Training_Data')
         except ValueError:
+            # Attempt 2: Auto-fallback to the first available sheet
             xl = pd.ExcelFile(data_path)
             sheets = xl.sheet_names
-            raise ValueError(
-                f"Sheet 'Training_Data' not found in the Excel file.\n"
-                f"Available sheets: {', '.join(sheets)}\n"
-                f"Please rename your data sheet to 'Training_Data'."
-            )
+            if not sheets:
+                raise ValueError("The uploaded Excel file appears to be empty (no sheets found).")
+            
+            first_sheet = sheets[0]
+            df = pd.read_excel(data_path, sheet_name=first_sheet)
+            log.info("Fallback: Loading model training data from sheet '%s'", first_sheet)
+            
         return df
 
     def _prepare_df(self, df):
@@ -434,28 +438,23 @@ class ModelManager:
             df = df.copy()
             df["cancer_risk_class"] = kmeans.fit_predict(numeric_data)
 
-        # We exclusively select the 3 clinical biomarker peaks as requested by the user
-        primary_markers = ['PSA_concentration', 'AFP_concentration', 'CA125_concentration']
-        selected_features = []
-        for marker in primary_markers:
-            match = [c for c in df.columns if marker.lower() in str(c).lower()]
-            if match:
-                selected_features.append(match[0])
+        # Attempt to find standard biomarkers (concentrations or peaks)
+        standard_patterns = ['concentration', 'peak', 'psa', 'afp', 'ca125']
+        selected_cols = []
+        for pat in standard_patterns:
+            matches = [c for c in df.columns if pat.lower() in str(c).lower()]
+            selected_cols.extend(matches)
         
-        # Fallback to height peaks if concentration is unavailable
-        if not selected_features:
-            height_markers = ['PSA_peak_height', 'AFP_peak_height', 'CA125_peak_height']
-            for marker in height_markers:
-                match = [c for c in df.columns if marker.lower() in str(c).lower()]
-                if match:
-                    selected_features.append(match[0])
+        # Deduplicate and Clean (Exclude ID/Target)
+        forbidden = ["sample_id", "cancer_risk_class", "prediction", "risk"]
+        X_cols = sorted(list(set([c for c in selected_cols if str(c).lower() not in forbidden])))
 
-        # If we failed to find specifically the 3 peaks, we fallback to all biomarkers
-        if not selected_features:
-            X = df.drop(["sample_id", "cancer_risk_class"], axis=1, errors='ignore')
-        else:
-            X = df[selected_features]
+        # Dynamic Fallback: If no standard peaks detected, use ALL numeric columns minus metadata
+        if not X_cols:
+            all_num = df.select_dtypes(include=[np.number]).columns.tolist()
+            X_cols = [c for c in all_num if str(c).lower() not in forbidden]
 
+        X = df[X_cols]
         y = df["cancer_risk_class"]
         return X, y
 
