@@ -113,25 +113,32 @@ class ModelExplorer(ttk.Frame):
         ).pack(pady=2)
 
     def _start_monitoring(self):
-        def refresh():
-            try:
-                if not os.path.exists(self.model_dir):
-                    os.makedirs(self.model_dir, exist_ok=True)
+        def monitor():
+            self.refresh()
+            self.after(2000, monitor)
+        monitor()
+
+    def refresh(self):
+        """Public method to manually refresh the artifact list from disk."""
+        try:
+            if not os.path.exists(self.model_dir):
+                return
+            
+            files = [f for f in os.listdir(self.model_dir) if f.endswith('.pkl')]
+            files.sort()
+            
+            # Extract standard names for comparison
+            current_items = [self.file_listbox.get(i).replace(" ➤", "").strip() for i in range(self.file_listbox.size())]
+            
+            if set(files) != set(current_items):
+                self.file_listbox.delete(0, tk.END)
+                for f in files:
+                    self.file_listbox.insert(tk.END, f" {f} ➤")
                 
-                files = [f for f in os.listdir(self.model_dir) if f.endswith('.pkl')]
-                files.sort()
-                
-                current_items = [self.file_listbox.get(i).replace(" ➤", "").strip() for i in range(self.file_listbox.size())]
-                
-                if set(files) != set(current_items):
-                    self.file_listbox.delete(0, tk.END)
-                    for f in files:
-                        self.file_listbox.insert(tk.END, f" {f} ➤")
-                    
-                    count = len(files)
-                    self.status_label.config(text=f"Detected: {count} models")
-                    self.verify_icon.config(text="✓ VERIFIED" if count > 0 else "⚠ NO MODELS")
-            except:
-                pass
-            self.after(2000, refresh)
-        refresh()
+                count = len(files)
+                self.status_label.config(text=f"Detected: {count} models")
+                self.verify_icon.config(text="✓ VERIFIED" if count > 0 else "⚠ NO MODELS")
+                self.verify_icon.config(foreground="#10B981" if count > 0 else "#EF4444")
+        except Exception as e:
+            # Silent fallback for background thread safety
+            pass

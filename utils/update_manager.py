@@ -36,12 +36,12 @@ class UpdateManager:
         def _check():
             try:
                 log.info("Checking for updates at %s", self.API_URL)
-                # Removed initial status_callback for silent checks as per new logic
-                # if self.status_callback and not silent:
-                #     self.root.after(0, lambda: self.status_callback("Checking for updates...", "blue"))
+                # Feedback for manual checks
+                if self.status_callback and not silent:
+                    self.root.after(0, lambda: self.status_callback("Checking for updates...", "#3B82F6"))
 
                 req = urllib.request.Request(self.API_URL, headers={'User-Agent': 'Cancer-Detection-App'})
-                with urllib.request.urlopen(req, timeout=5) as response:
+                with urllib.request.urlopen(req, timeout=8) as response:
                     data = json.loads(response.read().decode())
                     
                     tag_name = data.get('tag_name', '0.0').replace('v', '')
@@ -63,17 +63,23 @@ class UpdateManager:
                         # Always prompt if a new version is found, silent only affects initial check
                         self.root.after(0, lambda: self._prompt_update(tag_name))
                     elif not silent: # Only show "up to date" message if not silent
+                        log.info("Application is up to date.")
+                        self.root.after(0, lambda: self.status_callback("System Up to Date", "#10B981"))
                         self.root.after(0, lambda: messagebox.showinfo("System Check", 
                             f"Your clinical dashboard is up to date!\n\nCurrent Version: v{self.current_version}\nLatest Version: v{tag_name}"))
-                        log.info("Application is up to date.")
             except urllib.error.HTTPError as e:
-                if e.code == 404:
-                    log.info("No releases found on GitHub (404).")
-                else:
-                    log.error("Update check HTTP error: %s", e)
+                log.error("Update check HTTP error: %s", e)
+                if not silent:
+                    if e.code == 404:
+                         self.root.after(0, lambda: self.status_callback("No Releases Found", "orange"))
+                         self.root.after(0, lambda: messagebox.showinfo("Update Check", 
+                            "No official releases found on GitHub yet.\n\nYou are running the initial development version."))
+                    else:
+                        self.root.after(0, lambda: messagebox.showerror("Update Error", f"Server error ({e.code}) while checking for updates."))
             except Exception as e:
                 log.error("Update check failed: %s", e)
                 if not silent:
+                    self.root.after(0, lambda: self.status_callback("Update Check Failed", "red"))
                     self.root.after(0, lambda: messagebox.showerror("Update Error", f"Could not check for updates:\n{str(e)}"))
 
         threading.Thread(target=_check, daemon=True).start()

@@ -3,6 +3,7 @@
 #  script for you. This is your Python-equivalent of npm run dist:publish.
 # python build_exe.py
 # python publish.py
+# set PRESERVE_MODELS=true
 
 import os
 import sys
@@ -48,30 +49,25 @@ def publish():
     print(f"📦 Target Version: {tag}")
 
     # 2. Check for Assets
-    # Priority: ZIP Bundle -> Inno Installer -> Standalone EXE
+    # Priority: Inno Installer -> ZIP Bundle -> Standalone EXE
+    dist_dir = "dist"
+    installer_path = os.path.join(dist_dir, "CancerDetectionDashboard_Installer.exe")
     portable_zip = "CancerDetectionDashboard_Portable.zip"
-    onedir_exe = os.path.join("dist", "CancerDetectionDashboard", "CancerDetectionDashboard.exe")
-    exe_path = os.path.join("dist", "CancerDetectionDashboard.exe")
+    onedir_exe = os.path.join(dist_dir, "CancerDetectionDashboard", "CancerDetectionDashboard.exe")
     
-    installer_path = None
-    for file in os.listdir("."):
-        if file.endswith(".exe") and ("setup" in file.lower() or "installer" in file.lower()):
-            installer_path = file
-            break
-            
-    if os.path.exists(portable_zip):
-        asset_to_upload = portable_zip
-    elif installer_path:
+    asset_to_upload = None
+    
+    # Try to find the installer first (most professional)
+    if os.path.exists(installer_path):
         asset_to_upload = installer_path
+    elif os.path.exists(portable_zip):
+        asset_to_upload = portable_zip
     elif os.path.exists(onedir_exe):
-        # We prefer to upload the sub-item direct if no zip, but zip is best
         asset_to_upload = onedir_exe
-    else:
-        asset_to_upload = exe_path
 
     if not asset_to_upload or not os.path.exists(asset_to_upload):
         print(f"❌ Error: Required assets not found.")
-        print("💡 Hint: Run 'python build_exe.py' first to generate the Portable ZIP!")
+        print("💡 Hint: Run 'python build_exe.py' first to generate the Installer and Portable ZIP!")
         return
     
     print(f"✅ Found asset to upload: {asset_to_upload}")

@@ -68,6 +68,40 @@ logging.basicConfig(
 # Change the version here to reflect across the entire application interface.
 VERSION = "1.0.4"
 
+# ── Global Crash Protection ──────────────────────────────────────────────────
+def setup_crash_protection(root, error_handler):
+    """
+    Hook into sys.excepthook and Tkinter callback exceptions 
+    to prevent the 'vanishing app' syndrome in production.
+    """
+    import traceback
+    
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+
+        error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        logging.error("Uncaught Clinical Exception:\n%s", error_msg)
+        
+        # Try to use the modern error handler if available
+        try:
+            if error_handler:
+                error_handler.log_and_notify("Critical System Error", exc_value, show_dialog=True)
+            else:
+                messagebox.showerror("Clinical Protection Error", 
+                                     f"An unexpected error occurred:\n{str(exc_value)}\n\nPlease check app.log for details.")
+        except:
+            # Absolute fallback if even the error handler fails (e.g. within TK loop)
+            messagebox.showerror("Fatal Recovery Error", f"A fatal error occurred: {str(exc_value)}")
+
+    # Standard python exception hook
+    sys.excepthook = handle_exception
+    
+    # Tkinter specific exception hook (for button callbacks, etc.)
+    if root:
+        root.report_callback_exception = handle_exception
+
 
 class CancerDetectionApp:
     def __init__(self, root):
@@ -92,6 +126,9 @@ class CancerDetectionApp:
         # Core utilities
         self.async_runner = AsyncRunner(self.root)
         self.error_handler = ErrorHandler(self.root)
+        
+        # Activate Crash Protection
+        setup_crash_protection(self.root, self.error_handler)
         # UI Management (initialized with empty callbacks first)
         self.layout_manager = LayoutManager(self.root, self.model_manager, self.data_manager, {}, version=self.version)
         self.update_manager = UpdateManager(self.root, self.layout_manager.update_status, current_version=self.version)
@@ -199,19 +236,26 @@ class CancerDetectionApp:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def on_close(self):
-        """Clean shutdown of the application - deletes models per professor's requirement."""
+        """Clean shutdown of the application - deletes models per professor's requirement,
+        unless PRESERVE_MODELS environment variable is set for building purposes."""
         try:
             self.layout_manager.update_status("Saving session & cleaning environment...", "orange")
             # Save the data path so Analytics works on next launch
             self.data_manager.save_session()
-            # Delete all model files for a fresh start next time
-            self.model_manager.delete_all_models()
+            
+            # Prof's requirement: Models must be deleted on close
+            # But we allow an escape hatch for the dev to build the EXE with models included
+            if os.environ.get('PRESERVE_MODELS', '').lower() != 'true':
+                self.model_manager.delete_all_models()
+                print("Models deleted per policy.")
+            else:
+                print("PRESERVE_MODELS=true: Keeping models for build.")
+
             Visualizer.close_all_modals()
             self.root.destroy()
         except Exception as e:
             print(f"Error during shutdown: {e}")
         finally:
-            import os
             os._exit(0)
 
     def _setup_window_icon(self):

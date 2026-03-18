@@ -40,42 +40,44 @@ class VelocityTab(ttk.Frame):
         self.metrics_frame = ttk.Frame(self.content_frame, padding=(0, 20, 0, 0))
         self.metrics_frame.pack(fill=tk.X, side=tk.BOTTOM)
         
-        # Initialize an empty plot
-        self._init_empty_plot()
-        
-    def _init_empty_plot(self):
+        # Initialize persistent plotting structures
         self.fig, self.ax = plt.subplots(figsize=(10, 4), dpi=100)
         self.fig.patch.set_facecolor('#ffffff')
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        # Initial display
+        self._render_empty_placeholder("Awaiting Patient History Data...")
+        
+    def _render_empty_placeholder(self, message):
+        """Internal helper to show a consistent centered message on the plot."""
+        # Clean current state
+        for widget in self.metrics_frame.winfo_children():
+            widget.destroy()
+            
+        self.ax.clear()
         self.ax.set_facecolor('#ffffff')
-        self.ax.text(0.5, 0.5, "Awaiting Patient History Data...", 
+        self.ax.text(0.5, 0.5, message, 
                     ha='center', va='center', color='#94A3B8', fontdict={'size': 14})
         self.ax.axis('off')
         
-        self.canvas = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
+        # Clean potential residual second axis from _render_plot
+        for other_ax in self.fig.axes:
+            if other_ax != self.ax:
+                other_ax.remove()
+                
         self.canvas.draw()
-        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
     def update_velocity_data(self, patient_id, velocity_data):
         self.current_patient_id = patient_id
         self.velocity_data = velocity_data
         
         if not velocity_data:
-            self._render_empty()
+            self._render_empty_placeholder("No historical data available for this patient.")
             return
             
         self._render_plot()
         self._render_metrics()
-
-    def _render_empty(self):
-        # Clear child widgets in metrics
-        for widget in self.metrics_frame.winfo_children():
-            widget.destroy()
-            
-        self.ax.clear()
-        self.ax.text(0.5, 0.5, "No historical data available for this patient.", 
-                    ha='center', va='center', color='#94A3B8', fontdict={'size': 14})
-        self.ax.axis('off')
-        self.canvas.draw()
 
     def _render_plot(self):
         history = self.velocity_data['history']
@@ -88,7 +90,13 @@ class VelocityTab(ttk.Frame):
         
         self.ax.clear()
         self.ax.axis('on')
+        self.ax.set_facecolor('#ffffff')
         
+        # Clear potential residual twin axes before creating a new one
+        for other_ax in self.fig.axes:
+            if other_ax != self.ax:
+                other_ax.remove()
+
         # Plot Biomarkers on left axis
         line1, = self.ax.plot(months, psa, marker='o', color='#3B82F6', label='PSA (pg/mL)', linewidth=2)
         line2, = self.ax.plot(months, afp, marker='s', color='#10B981', label='AFP (pg/mL)', linewidth=2)
@@ -130,7 +138,6 @@ class VelocityTab(ttk.Frame):
         
         def make_metric(parent, label, value, is_percentage=True):
             f = ttk.Frame(parent, padding=10, relief=tk.FLAT, borderwidth=1)
-            # Give it a background
             ttk.Label(f, text=label, font=('Inter', 9), foreground="#64748B").pack(anchor=tk.W)
             
             color = "#10B981" if value <= 0 else "#EF4444" 
@@ -150,6 +157,7 @@ class VelocityTab(ttk.Frame):
         m3.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     def clear(self):
-        self._init_empty_plot()
-        for widget in self.metrics_frame.winfo_children():
-            widget.destroy()
+        """Reset tab to its initial state."""
+        self.current_patient_id = None
+        self.velocity_data = None
+        self._render_empty_placeholder("Awaiting Patient History Data...")

@@ -26,9 +26,24 @@ def build():
         print(f"Error: {entry_point} not found!")
         return
 
+    # Check for models
+    models_path = os.path.join("views", "models")
+    model_files = [f for f in os.listdir(models_path) if f.endswith(".pkl")] if os.path.exists(models_path) else []
+    if not model_files:
+        print("⚠️  WARNING: No pre-trained models (.pkl) found in views/models!")
+        print("   If you want models included in the build, train them in the app first.")
+        print("   Use 'set PRESERVE_MODELS=true' before running the app to keep models on close.")
+    else:
+        print(f"✅ Found {len(model_files)} pre-trained models to include in the build.")
+
     # Assets and modules to include
     sep = ";" if sys.platform == "win32" else ":"
     
+    # Ensure views/models directory exists (even if empty)
+    models_dir = os.path.join("views", "models")
+    if not os.path.exists(models_dir):
+        os.makedirs(models_dir, exist_ok=True)
+
     added_data = [
         f"background.png{sep}.",
         f"logo.png{sep}.",
@@ -39,45 +54,63 @@ def build():
         f"ui{sep}ui",
         f"utils{sep}utils",
         f"views{sep}views",
+        # Explicitly make sure models are included if they exist
+        f"views/models{sep}views/models",
     ]
 
-    # PyInstaller arguments
-    # CHANGED TO --onedir: Much more stable for large AI libraries (sklearn/torch)
+    # PyInstaller arguments - using --onedir for stability with AI libs
     args = [
         entry_point,
-        '--onedir',                       # More reliable than onefile for heavy AI libs
-        '--windowed',                     # No console window
-        '--name=CancerDetectionDashboard', # Name of the folder/exe
-        '--clean',                        # Clean cache
-        '--noconfirm',                    # Overwrite existing
-        '--noupx',                        # No UPX (faster startup for AI libs)
+        '--onedir',
+        '--windowed',
+        '--name=CancerDetectionDashboard',
+        '--clean',
+        '--noconfirm',
+        '--noupx',
     ]
 
     # Add all data folders
     for data in added_data:
         args.extend(['--add-data', data])
 
-    # AI-Specific: Avoid --collect-all as it bloats the size with tests and docs
-    # Instead, we use specific hidden imports and excludes
-    
+    # HIDDEN IMPORTS: These are often missed by PyInstaller's analyzer
     hidden_imports = [
-        'openpyxl',                       # Crucial for Excel loading
+        'openpyxl',
         'sklearn.utils._typedefs',
+        'sklearn.neighbors._typedefs',
+        'sklearn.neighbors._partition_nodes',
+        'sklearn.ensemble._gradient_boosting',
+        'sklearn.utils._cython_blas',
         'torch',
         'torch_geometric',
         'networkx',
         'scipy.special.cython_special',
+        'PIL._tkinter_finder',
+        'defusedxml',
+        'unittest',
+        'packaging',
+        'pkg_resources',
+        'umap',
+        'shap',
+        'xgboost'
     ]
     for imp in hidden_imports:
         args.extend(['--hidden-import', imp])
         
-    # EXCLUDE huge unnecessary frameworks that get dragged in by data science libs
-    # Aggressively prune to reduce size from >1GB to <600MB
+    # COLLECT ALL: For complex AI libraries, we must collect everything to avoid runtime "ModuleNotFound"
+    collect_all = ['torch', 'torch_geometric', 'xgboost', 'shap', 'sklearn', 'umap']
+    for lib in collect_all:
+        args.extend(['--collect-all', lib])
+
+    # EXCLUDE only definitely unused, large third-party frameworks and heavy torch/geometric submodules
+    # These often trigger ModuleNotFound errors during the build analysis because they are optional deps.
+    # Aggressive collection of optional submodules by the torch/geometric libraries can cause issues.
     excludes = [
         'django', 'IPython', 'notebook', 'jedi', 'sphinx', 'pytest', 
-        'PySide6', 'PyQt5', 'PyQt6', 'matplotlib.tests', 'numpy.tests',
-        'torch.testing', 'torch.distributions', 'scipy.stats.tests',
-        'unittest', 'test'
+        'PySide6', 'PyQt5', 'PyQt6', 'nbformat', 'nbconvert',
+        'tensorboard', 'torch.distributed', 'torch.nn.modules.export', 'torch.testing',
+        'matplotlib.tests', 'numpy.tests', 'expecttest', 'hypothesis',
+        'onnxscript', 'onnx', 'opt_einsum', 'triton', 'IPython.kernel'
     ]
     for exc in excludes:
         args.extend(['--exclude-module', exc])
@@ -99,42 +132,62 @@ def build():
                     arcname = os.path.relpath(file_path, os.path.dirname(dist_path))
                     zipf.write(file_path, arcname)
 
-        # NEW: Automated Inno Setup Installer Creation
+        # Automated Inno Setup Installer Creation
         print("\n--- Attempting to create Windows Installer (.exe) ---")
-        inno_compiler = r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        
+        # Search for ISCC.exe in common locations
+        inno_locations = [
+            r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+            r"C:\Program Files\Inno Setup 6\ISCC.exe",
+            r"C:\Program Files (x86)\Inno Setup 5\ISCC.exe",
+            "ISCC.exe" # Path search
+        ]
+        
+        inno_compiler = None
+        for loc in inno_locations:
+            if os.path.exists(loc) or shutil.which(loc):
+                inno_compiler = loc
+                break
+
         iss_script = "installer.iss"
         
         # Sync version in .iss file before compiling
         if os.path.exists(iss_script):
             with open(iss_script, "r") as f:
-                lines = f.readlines()
+                iss_lines = f.readlines()
             with open(iss_script, "w") as f:
-                for line in lines:
-                    if line.startswith("#define MyAppVersion"):
+                for line in iss_lines:
+                    if line.strip().startswith("#define MyAppVersion"):
                         f.write(f'#define MyAppVersion "{version}"\n')
                     else:
                         f.write(line)
             print(f"Synced {iss_script} to v{version}")
 
-        if os.path.exists(inno_compiler) and os.path.exists(iss_script):
-            print(f"Compiling installer: {iss_script}...")
+        if inno_compiler and os.path.exists(iss_script):
+            print(f"Compiling installer using {inno_compiler}: {iss_script}...")
             import subprocess
             subprocess.run([inno_compiler, iss_script], check=True)
             print("Installer created successfully in 'dist/' folder.")
         else:
-            print("Note: Inno Setup (ISCC.exe) not found. Skipping installer creation.")
-            print("Please install Inno Setup 6 to generate the 'Next-Next' installer.")
+            if not inno_compiler:
+                print("Note: Inno Setup (ISCC.exe) not found on system PATH or default locations.")
+            if not os.path.exists(iss_script):
+                print(f"Note: {iss_script} not found in current directory.")
+            print("💡 Please install Inno Setup 6 and ensure ISCC.exe is in your PATH to generate the 'Next-Next' installer.")
 
         print("\n" + "="*50)
         print("BUILD SUCCESSFUL!")
         print(f"1. App Folder: {os.path.abspath(dist_path)}")
         print(f"2. Distribution ZIP: {os.path.abspath(zip_name)}")
-        if os.path.exists(os.path.join('dist', 'CancerDetectionDashboard_Installer.exe')):
-            print(f"3. Installer EXE: {os.path.abspath(os.path.join('dist', 'CancerDetectionDashboard_Installer.exe'))}")
+        installer_exe = os.path.join('dist', 'CancerDetectionDashboard_Installer.exe')
+        if os.path.exists(installer_exe):
+            print(f"3. Installer EXE: {os.path.abspath(installer_exe)}")
         print("="*50)
         print("💡 Share the Installer or ZIP file. Users just need to run the installer.")
     except Exception as e:
         print(f"Build failed: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     # Check for PyInstaller

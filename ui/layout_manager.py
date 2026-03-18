@@ -159,6 +159,8 @@ class LayoutManager:
         if self.tab_validation: self.tab_validation.clear()
         if self.tab_leaderboard: self.tab_leaderboard.clear()
         if self.tab_velocity: self.tab_velocity.clear()
+        if self.tab_console: self.tab_console.clear()
+        if self.model_explorer: self.model_explorer.refresh()
         
         # Reset Metric Cards
         self.update_metrics(risk=0.0, confidence=0.0, triage="Pending", consensus="N/A")
