@@ -66,7 +66,7 @@ logging.basicConfig(
 
 # ── Global Metadata ──────────────────────────────────────────────────────────
 # Change the version here to reflect across the entire application interface.
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 
 # ── Global Crash Protection ──────────────────────────────────────────────────
 def setup_crash_protection(root, error_handler):

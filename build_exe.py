@@ -135,17 +135,17 @@ def build():
         # Automated Inno Setup Installer Creation
         print("\n--- Attempting to create Windows Installer (.exe) ---")
         
-        # Search for ISCC.exe in common locations
+        # Search for ISCC.exe in common locations or local app data
         inno_locations = [
             r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
             r"C:\Program Files\Inno Setup 6\ISCC.exe",
-            r"C:\Program Files (x86)\Inno Setup 5\ISCC.exe",
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), r'Programs\Inno Setup 6\ISCC.exe'),
             "ISCC.exe" # Path search
         ]
         
         inno_compiler = None
         for loc in inno_locations:
-            if os.path.exists(loc) or shutil.which(loc):
+            if shutil.which(loc) or os.path.exists(loc):
                 inno_compiler = loc
                 break
 

@@ -48,29 +48,28 @@ def publish():
     tag = f"v{version}"
     print(f"📦 Target Version: {tag}")
 
-    # 2. Check for Assets
-    # Priority: Inno Installer -> ZIP Bundle -> Standalone EXE
+    # Priority: Inno Installer -> ZIP Bundle
+    # DO NOT upload just 'dist/App.exe' — it will fail (missing DLLs)
+    # The 'onedir' build requires the full folder to be zipped.
     dist_dir = "dist"
     installer_path = os.path.join(dist_dir, "CancerDetectionDashboard_Installer.exe")
     portable_zip = "CancerDetectionDashboard_Portable.zip"
-    onedir_exe = os.path.join(dist_dir, "CancerDetectionDashboard", "CancerDetectionDashboard.exe")
     
     asset_to_upload = None
     
-    # Try to find the installer first (most professional)
     if os.path.exists(installer_path):
         asset_to_upload = installer_path
+        print(f"📦 Ready: Found PROFESSIONAL INSTALLER ({asset_to_upload})")
     elif os.path.exists(portable_zip):
         asset_to_upload = portable_zip
-    elif os.path.exists(onedir_exe):
-        asset_to_upload = onedir_exe
+        print(f"📦 Ready: Found PORTABLE ZIP BUNDLE ({asset_to_upload})")
 
-    if not asset_to_upload or not os.path.exists(asset_to_upload):
-        print(f"❌ Error: Required assets not found.")
-        print("💡 Hint: Run 'python build_exe.py' first to generate the Installer and Portable ZIP!")
+    if not asset_to_upload:
+        print(f"❌ Error: Required assets (Installer or ZIP) NOT FOUND.")
+        print("💡 Ensure 'python build_exe.py' runs completely to the end.")
         return
     
-    print(f"✅ Found asset to upload: {asset_to_upload}")
+    print(f"🚀 Publishing asset: {asset_to_upload}")
 
     # 3. Git Operations
     print("🔄 Syncing with GitHub...")
