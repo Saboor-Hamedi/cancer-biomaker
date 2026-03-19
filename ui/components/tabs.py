@@ -270,6 +270,8 @@ class AnalysisTab(ttk.Frame):
         self.text.tag_configure("code", font=('Consolas', 10), foreground="#475569", background="#F8FAFC")
         self.text.tag_configure("table_head", font=('Consolas', 10, 'bold'), foreground="#1E293B", background="#E2E8F0")
         self.text.tag_configure("table_row", font=('Consolas', 10), foreground="#475569")
+        self.text.tag_configure("table_row_bold", font=('Consolas', 10, 'bold'), foreground="#1E293B")
+        self.text.tag_configure("table_row_crit", font=('Consolas', 10, 'bold'), foreground="#EF4444")
 
     def clear(self):
         self.text.config(state=tk.NORMAL)
@@ -306,8 +308,8 @@ class AnalysisTab(ttk.Frame):
         if positives > 0 and metadata and 'audit_registry' in metadata:
             self.text.insert(tk.END, "2. HIGH-RISK CLINICAL REGISTRY (FLAGGED PATIENT PROFILES)\n", "sub")
             
-            # Professional Table Header
-            h_line = f"  {'ID':<6} │ {'RISK':>8} │ {'COMMITTEE DETECTION':<20} │ {'PSA':>12} │ {'AFP':>10} │ {'CA125':>10} \n"
+            # Professional Table Header (Expanded for AI Recommendations)
+            h_line = f"  {'ID':<5} │ {'RISK':^8} │ {'COMMITTEE DETECTION':<20} │ {'PSA':>10} │ {'AFP':>10} │ {'CA125':>10} │ {'AI CLINICAL RECOMMENDATION':<32}\n"
             divider = "  " + "—" * 81 + "\n"
             
             self.text.insert(tk.END, h_line, "table_head")
@@ -316,17 +318,19 @@ class AnalysisTab(ttk.Frame):
             registry = metadata['audit_registry']
             for patient in registry:
                 p_id = str(patient.get('id', 'N/A'))[:5]
-                risk = f"{patient.get('risk', 0) * 100:.1f}%"
+                risk_val = patient.get('risk', 0)
+                risk_str = f"{risk_val * 100:.1f}%"
                 detectors = str(patient.get('detectors', 'Ensemble'))[:19]
                 
                 psa = f"{patient.get('psa', 0):.0f}"
                 afp = f"{patient.get('afp', 0):.2f}"
                 ca = f"{patient.get('ca125', 0):.2f}"
+                action = patient.get('action', 'N/A')
                 
-                row_line = f"  {p_id:<6} │ {risk:>8} │ {detectors:<20} │ {psa:>12} │ {afp:>10} │ {ca:>10} \n"
+                row_line = f"  {p_id:<5} │ {risk_str:>8} │ {detectors:<20} │ {psa:>10} │ {afp:>10} │ {ca:>10} │ {action:<32}\n"
                 
-                # Highlight logic: Use 'crit' text for very high risk (>90%)
-                tag = "crit" if patient.get('risk', 0) > 0.9 else "table_row"
+                # Highlight logic: Use 'table_row_crit' for very high risk (>90%)
+                tag = "table_row_crit" if risk_val > 0.9 else "table_row"
                 self.text.insert(tk.END, row_line, tag)
             
             self.text.insert(tk.END, divider, "dim")
@@ -590,9 +594,9 @@ class LeaderboardTab(ttk.Frame):
         lb_frame = ttk.Frame(outer, padding=(15, 0, 15, 10))
         lb_frame.pack(fill=tk.X)
 
-        cols = ("rank", "model", "acc", "f1", "prec", "rec", "spec", "cv", "badge")
-        headers = ("RANK", "AI ALGORITHM", "ACCURACY", "F1 SCORE", "PRECISION", "RECALL", "SPECIFICITY", "CV STABILITY", "BADGE")
-        widths = (50, 160, 90, 90, 90, 90, 100, 100, 100)
+        cols = ("rank", "model", "acc", "f1", "auc", "prec", "rec", "spec", "cv", "badge")
+        headers = ("RANK", "AI ALGORITHM", "ACCURACY", "F1 SCORE", "ROC-AUC", "PRECISION", "RECALL", "SPECIFICITY", "CV STABILITY", "BADGE")
+        widths = (50, 160, 85, 85, 85, 85, 85, 95, 100, 100)
 
         lb_vsb = ttk.Scrollbar(lb_frame, orient=tk.VERTICAL)
         # Give more height since we have extra space now
@@ -678,6 +682,7 @@ class LeaderboardTab(ttk.Frame):
                 en['model'],
                 f"{en.get('accuracy',0):.2%}",
                 f"{f1:.2%}",
+                f"{en.get('auc', 0):.2%}",
                 f"{en.get('precision', 0):.2%}",
                 f"{en.get('recall', 0):.2%}",
                 f"{en.get('specificity', 0):.2%}",

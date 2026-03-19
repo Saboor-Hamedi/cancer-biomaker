@@ -1,5 +1,7 @@
 import logging
 import os
+import io
+import shutil
 
 import joblib
 import numpy as np
@@ -66,7 +68,7 @@ _SHAP_MAX_ROWS  = 100
 class GNNClassifier:
     """Graph Neural Network classifier with sklearn-like interface."""
 
-    def __init__(self, num_features=1, hidden_channels=64, num_classes=2):
+    def __init__(self, num_features=1, hidden_channels=32, num_classes=2):
         if not HAS_TORCH:
             raise ImportError("PyTorch and torch_geometric required for GNN")
 
@@ -131,7 +133,44 @@ class GNNClassifier:
                 loss.backward()
                 optimizer.step()
 
+        # Phase 2 Optimization: Quantization & JIT for high-performance CPU inference
+        try:
+            log.info("Applying clinical optimizations (Quantization & JIT)...")
+            self.model.eval()
+            # 1. Dynamic Quantization (reduces size and improves CPU speed)
+            self.model = torch.quantization.quantize_dynamic(
+                self.model, {torch.nn.Linear}, dtype=torch.qint8
+            )
+            # 2. TorchScript (JIT) Compilation
+            # Note: We must use a dummy input for tracing if script() fails on complex PyG models, 
+            # but for this simple GNN, script() is usually safer.
+            self.model = torch.jit.script(self.model)
+            log.info("GNN Optimization successful.")
+        except Exception as e:
+            log.warning("PyTorch optimizations (Quantization/JIT) skipped: %s", e)
+
         return self
+
+    def __getstate__(self):
+        """Prepare for joblib/pickle: ScriptModules need special handling."""
+        state = self.__dict__.copy()
+        if HAS_TORCH and self.model is not None:
+            # We save the JIT model to a byte stream
+            buffer = io.BytesIO()
+            torch.jit.save(self.model, buffer)
+            state['model_stream'] = buffer.getvalue()
+            state['model'] = None  # Remove the live object for pickling
+        return state
+
+    def __setstate__(self, state):
+        """Restore from joblib/pickle."""
+        self.__dict__.update(state)
+        if HAS_TORCH and 'model_stream' in state:
+            # Restore the JIT model from the byte stream
+            buffer = io.BytesIO(state['model_stream'])
+            self.model = torch.jit.load(buffer, map_location='cpu')
+            self.model.eval()  # Ensure eval mode
+            del self.model_stream
 
     def predict(self, X):
         """Predict class labels with robust data conversion."""
@@ -191,6 +230,14 @@ class GNN(torch_base):
         x = global_mean_pool(x, batch)
         x = self.lin(x)
         return x
+
+    def __getstate__(self):
+        """Standard pickle support for the GNN module."""
+        return self.__dict__.copy()
+
+    def __setstate__(self, state):
+        """Restore module state."""
+        self.__dict__.update(state)
 
 
 class EnsembleProxy:
@@ -282,6 +329,16 @@ class ModelManager:
                         os.remove(os.path.join(self.script_dir, filename))
                     except:
                         pass
+        
+        # Cleanup XGBoost/Joblib cache as well
+        # self.script_dir is tkinter_ui/views/models, so cachedir is at tkinter_ui/cachedir
+        cachedir = os.path.abspath(os.path.join(self.script_dir, '..', '..', 'cachedir'))
+        if os.path.exists(cachedir):
+            try:
+                shutil.rmtree(cachedir, ignore_errors=True)
+                log.info("Clinical cache (cachedir) cleared.")
+            except:
+                pass
         
         # Also definitely remove feature names to force a fresh sync next time
         feature_path = os.path.join(self.script_dir, 'feature_names.pkl')
@@ -388,11 +445,7 @@ class ModelManager:
             for pkl, name, model_obj in models_data:
                 target_path = os.path.join(self.script_dir, pkl)
                 
-                # CLINICAL SKIP: If the .pkl exists, we jump to the next one to save time
-                if os.path.exists(target_path):
-                    log.info("Forensic artifact found: Skipping training for %s", name)
-                    continue
-
+                # CLINICAL SYNC: Train the model (overwriting existing artifacts if needed)
                 if status_callback:
                     status_callback(f"Training {name} (Please wait)…", "orange")
                 
@@ -922,6 +975,13 @@ class ModelManager:
                     spec = 0.0
 
                 try:
+                    from sklearn.metrics import roc_auc_score
+                    y_prob = model.predict_proba(X_pred)[:, 1] if hasattr(model, 'predict_proba') else None
+                    auc_val = roc_auc_score(y_test, y_prob) if y_prob is not None else 0.5
+                except:
+                    auc_val = 0.5
+
+                try:
                     cv_scores = cross_val_score(model, X_all[self.feature_names], y_all, cv=cv, scoring='accuracy', n_jobs=1)
                     cv_mean = float(cv_scores.mean())
                     cv_std  = float(cv_scores.std())
@@ -935,9 +995,10 @@ class ModelManager:
                     'precision':   prec,
                     'recall':      rec,
                     'specificity': spec,
+                    'auc':         auc_val,
                     'cv_mean':     cv_mean,
                     'cv_std':      cv_std,
-                    'rank_score':  f1,
+                    'rank_score':  (f1 * 0.7) + (auc_val * 0.3), # Composite score for better ranking
                 })
             except Exception as e:
                 log.warning("Leaderboard: skipped %s - %s", name, e)

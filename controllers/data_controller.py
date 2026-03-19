@@ -331,24 +331,35 @@ class DataController:
         tab.text.insert(tk.END, "◈ 2. DESCRIPTIVE BIO-STATISTICS (POPULATION MEAN)\n", "sub")
         
         if not numeric_df.empty:
-            # Table Header - Professional Minimalism
-            h_line = f" {'BIOMARKER PEAK':<30}   {'MEAN':>12}   {'STD DEV':>12}   {'MAX PEAK':>12} \n"
-            divider = " " + "—" * 70 + "\n"
+            # Professional Table Construction
+            # Columns: Biomarker (30), Mean (15), Std (15), Max (15)
+            h_line = f" {'BIOMARKER NAME':<30} │ {'AVG MEAN':^14} │ {'VOLATILITY':^14} │ {'MAX PEAK':^14} \n"
+            divider = " " + "—" * 31 + "┼" + "—" * 16 + "┼" + "—" * 16 + "┼" + "—" * 16 + "\n"
             
             tab.text.insert(tk.END, h_line, "table_head")
             tab.text.insert(tk.END, divider, "dim")
             
+            # Use InputTab class for humanizing names if available
+            from ui.components.tabs import InputTab
+            
             # Table Body
             for i, (feat, row) in enumerate(desc.iterrows()):
-                f_label = (str(feat)[:27] + "...") if len(str(feat)) > 30 else str(feat)
-                row_line = f" {f_label:<30}   {row['mean']:>12.2f}   {row['std']:>12.2f}   {row['max']:>12.2f} \n"
+                name, unit = InputTab._humanize(feat)
+                display_name = f"{name} ({unit})" if unit else name
+                f_label = (display_name[:28] + "..") if len(display_name) > 30 else display_name
                 
-                # Insert row with clean tag
-                tab.text.insert(tk.END, row_line, "table_row")
+                # We insert parts with different tags for better style
+                tab.text.insert(tk.END, f" {f_label:<30} ", "table_row_bold")
+                tab.text.insert(tk.END, "│", "dim")
+                tab.text.insert(tk.END, f" {row['mean']:>14.2f} ", "metric")
+                tab.text.insert(tk.END, "│", "dim")
+                tab.text.insert(tk.END, f" {row['std']:>14.2f} ", "table_row")
+                tab.text.insert(tk.END, "│", "dim")
+                tab.text.insert(tk.END, f" {row['max']:>14.2f} \n", "table_row")
                 
                 # Subtle separator every few rows for readability
                 if (i + 1) % 5 == 0 and (i + 1) < len(desc):
-                    tab.text.insert(tk.END, " " + "." * 70 + "\n", "dim")
+                    tab.text.insert(tk.END, " " + "." * 78 + "\n", "dim")
             
             tab.text.insert(tk.END, divider, "dim")
         else:

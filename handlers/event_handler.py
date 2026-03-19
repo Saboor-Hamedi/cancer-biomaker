@@ -93,14 +93,12 @@ class EventHandler:
 
     def handle_predict_file(self):
         """Handle batch file prediction."""
-        if not self._require_data("Batch Prediction"):
-            return
-
+        # Relax requirement: we still need models, but we can prompt for data during the batch process
         model_name = self.layout_manager.sidebar.model_var.get()
         if not self._require_model(model_name):
             return
 
-        # Run batch prediction
+        # Run batch prediction (controller will prompt for file if data is missing)
         self.model_controller.predict_batch()
 
     def handle_clear_input(self):

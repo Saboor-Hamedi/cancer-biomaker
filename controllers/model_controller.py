@@ -2,6 +2,7 @@
 Model Controller - Handles model training, predictions, and analytics.
 """
 
+import os
 import threading
 from tkinter import messagebox
 
@@ -206,8 +207,36 @@ class ModelController:
     def predict_batch(self):
         """Perform batch prediction on uploaded data."""
         if self.data_manager.uploaded_df is None:
-            messagebox.showwarning("Warning", "Please upload data first")
-            return
+            # Auto-recovery: if path exists but data isn't in memory yet
+            if self.data_manager.data_path and os.path.exists(self.data_manager.data_path):
+                self.layout_manager.update_status("Reloading clinical dataset...", "orange")
+                df, _ = self.data_manager.load_data(self.data_manager.data_path)
+                if df is not None:
+                    self.layout_manager.refresh_data_tree()
+            
+            # If still None, prompt user to select a file for batch forensic
+            if self.data_manager.uploaded_df is None:
+                from tkinter import filedialog
+                file_path = filedialog.askopenfilename(
+                    title="Select Clinical Dataset for Batch Forensic",
+                    filetypes=[("Excel files", "*.xlsx *.xls"), ("CSV files", "*.csv"), ("All files", "*.*")]
+                )
+                if not file_path:
+                    return
+                
+                self.layout_manager.update_status("Loading dataset for forensic analysis...", "orange")
+                df, err = self.data_manager.load_data(file_path)
+                if df is None:
+                    messagebox.showerror("Load Error", f"Could not load dataset: {err}")
+                    return
+                
+                # Success! Update data path and table
+                self.data_manager.data_path = file_path
+                self.layout_manager.refresh_data_tree()
+                # Also update the dashboard counts
+                rows, cols = len(df), len(df.columns)
+                features = len(self.model_manager.feature_names)
+                self.layout_manager.dashboard.update_data_info(rows=rows, cols=cols, samples=rows)
 
         model_name = self.layout_manager.sidebar.model_var.get()
         is_ensemble = "AI Ensemble" in model_name
@@ -308,10 +337,21 @@ class ModelController:
                     if match: return float(df.loc[df_idx, match[0]]) if pd.notna(df.loc[df_idx, match[0]]) else 0.0
                     return 0.0
 
+                r_val = float(risks[array_idx_int])
+                if r_val > 0.9:
+                    action = "URGENT CLINICAL REVIEW / BIOPSY"
+                elif r_val > 0.7:
+                    action = "IMMEDIATE MONITORING / SCAN"
+                elif r_val > 0.5:
+                    action = "3-MONTH FOLLOW-UP RE-TEST"
+                else:
+                    action = "ROUTINE CLINICAL OBSERVATION"
+
                 detailed_audit_data.append({
                     'id': df_idx, 'lead_model': lead_m, 'detectors': ", ".join(flagging_models),
-                    'risk': float(risks[array_idx_int]), 'consensus': f"{int(agreement_counts[array_idx_int])}/{total_models}",
-                    'psa': get_m_val('PSA'), 'afp': get_m_val('AFP'), 'ca125': get_m_val('CA125')
+                    'risk': r_val, 'consensus': f"{int(agreement_counts[array_idx_int])}/{total_models}",
+                    'psa': get_m_val('PSA'), 'afp': get_m_val('AFP'), 'ca125': get_m_val('CA125'),
+                    'action': action
                 })
 
             summary_metadata['audit_registry'] = detailed_audit_data

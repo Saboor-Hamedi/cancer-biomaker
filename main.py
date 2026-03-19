@@ -269,21 +269,16 @@ class CancerDetectionApp:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def on_close(self):
-        """Clean shutdown of the application - deletes models per professor's requirement,
-        unless PRESERVE_MODELS environment variable is set for building purposes."""
+        """Clean shutdown of the application. 
+        Models now persist between sessions for continuity, unless explicitly reset by the user."""
         try:
             self.layout_manager.update_status("Saving session & cleaning environment...", "orange")
             # Save the data path so Analytics works on next launch
             self.data_manager.save_session()
             
-            # Prof's requirement: Models must be deleted on close
-            # But we allow an escape hatch for the dev to build the EXE with models included
-            if os.environ.get('PRESERVE_MODELS', '').lower() != 'true':
-                self.model_manager.delete_all_models()
-                print("Models deleted per policy.")
-            else:
-                print("PRESERVE_MODELS=true: Keeping models for build.")
-
+            # Note: We NO LONGER delete models on close by default to allow 
+            # the user to pick up where they left off without re-training.
+            
             Visualizer.close_all_modals()
             self.root.destroy()
         except Exception as e:
@@ -318,6 +313,13 @@ class CancerDetectionApp:
                 self.data_manager.restore_session()
                 self.data_controller.data_path = self.data_manager.data_path
                 self.root.after(0, lambda: self.layout_manager.refresh_input_features(self.model_manager.feature_names))
+                # Sync UI Data Table & Dashboard Stats
+                if self.data_manager.uploaded_df is not None:
+                    df = self.data_manager.uploaded_df
+                    rows, cols = len(df), len(df.columns)
+                    self.root.after(0, self.layout_manager.refresh_data_tree)
+                    self.root.after(0, lambda: self.layout_manager.dashboard.update_data_info(rows=rows, cols=cols, samples=rows))
+                
                 self.root.after(0, lambda: self.layout_manager.update_status("System Ready — Models Loaded", "#10B981"))
                 self.root.after(0, lambda: self.error_handler.notify("Clinical models loaded and ready.", type='success'))
             else:

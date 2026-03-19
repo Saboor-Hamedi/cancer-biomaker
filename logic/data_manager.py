@@ -32,6 +32,7 @@ class DataManager:
                 path = cfg.get('last_data_path', '')
                 if path and os.path.exists(path):
                     self.data_path = path
+                    self.load_data(path) # Automatic reload for continuity
                     return True
         except Exception:
             pass
