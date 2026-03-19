@@ -32,10 +32,31 @@ class DataManager:
                 path = cfg.get('last_data_path', '')
                 if path and os.path.exists(path):
                     self.data_path = path
-                    self.load_data(path) # Automatic reload for continuity
-                    return True
+                    df, _ = self.load_data(path)
+                    if df is not None:
+                        self.uploaded_df = df
+                        return True
         except Exception:
             pass
+        return self.ensure_default_dataset()
+
+    def ensure_default_dataset(self):
+        """Fallback to the clinical gold-standard dataset if no user data is loaded."""
+        # Try a few common relative locations for the clinical set
+        possible_paths = [
+            os.path.join(self.user_data_dir, 'cancer_biomarkers.xlsx'),
+            os.path.join(self.user_data_dir, '..', 'src', 'data', 'cancer_biomarkers.xlsx'),
+            os.path.join(os.path.dirname(__file__), '..', '..', 'src', 'data', 'cancer_biomarkers.xlsx')
+        ]
+        
+        for path in possible_paths:
+            path = os.path.abspath(path)
+            if os.path.exists(path):
+                self.data_path = path
+                df, _ = self.load_data(path)
+                if df is not None:
+                    self.uploaded_df = df
+                    return True
         return False
 
     def save_prospective_audit(self, prediction_data):

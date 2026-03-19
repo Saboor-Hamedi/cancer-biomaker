@@ -251,6 +251,19 @@ class CancerDetectionApp:
 
         # Setup Layout
         self.layout_manager.setup_layout()
+        
+        # 5. Restore Session & Fallback to Clinical Gold Standard (Now that UI is ready)
+        if self.data_manager.restore_session():
+            path = self.data_manager.data_path
+            self.layout_manager.log_message(f"Auto-loaded dataset: {os.path.basename(path)}", level="INFO")
+            self.layout_manager.update_status(f"Dataset Ready: {os.path.basename(path)}")
+            # Populate UI with restored data
+            self.layout_manager.refresh_data_tree()
+            df = self.data_manager.uploaded_df
+            if self.layout_manager.dashboard:
+                self.layout_manager.dashboard.update_data_info(rows=len(df), cols=len(df.columns), samples=len(df))
+        else:
+            self.layout_manager.update_status("No dataset loaded. Please upload to begin.")
 
         # Setup Event Bindings
         self.event_handler.setup_event_bindings()

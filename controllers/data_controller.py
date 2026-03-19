@@ -118,6 +118,10 @@ class DataController:
 
     def handle_sample(self, sample_size=None):
         """Load a sample of the current dataset in the background."""
+        # Sync with DataManager for persistent sessions
+        if not self.data_path and self.data_manager.data_path:
+            self.data_path = self.data_manager.data_path
+            
         if not self.data_path:
             self.error_handler.require_data("Data Sampling")
             return

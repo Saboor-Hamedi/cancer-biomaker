@@ -316,7 +316,7 @@ class ModelController:
             # Detailed Audit Data
             pos_indices = np.where(predictions == 1)[0]
             if len(pos_indices) == 0: pos_indices = np.where(risks > 0.5)[0]
-            target_audit_indices = pos_indices[:10]
+            target_audit_indices = pos_indices # Removed [:10] limit to show all dynamic cases
             detailed_audit_data = []
             
             for array_idx in target_audit_indices:
