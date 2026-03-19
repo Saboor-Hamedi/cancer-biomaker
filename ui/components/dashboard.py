@@ -22,6 +22,7 @@ class Dashboard(ttk.Frame):
         self.leaderboard_tab = None
         self.velocity_tab = None
         self.analysis_tab = None
+        self.settings_tab = None
         self.log_tab_frame = None
         self.console = None
         self.metrics_frame = None
@@ -30,6 +31,10 @@ class Dashboard(ttk.Frame):
         self._create_widgets()
 
     def _create_widgets(self):
+        from ui.styles import StyleManager
+        # We'll use the default theme for initial values, or better, let main.py update these.
+        # But for now, we remove the hardcoded #FFFFFF
+        
         # Header Main Title
         header_frame = ttk.Frame(self, style='Card.TFrame', padding=(20, 15))
         header_frame.pack(fill=tk.X, padx=15, pady=(15, 5))
@@ -40,7 +45,7 @@ class Dashboard(ttk.Frame):
         ttk.Label(title_container, text="Cancer Biomarker AI", style='Header.TLabel').pack(anchor=tk.W)
         ttk.Label(title_container, text="Predictive diagnostics & explainable clinical analysis", style='SubHeader.TLabel').pack(anchor=tk.W)
 
-        # Status Bar with Grid Layout (Item #6 Fix: "labels messes up")
+        # Status Bar with Grid Layout
         self.status_frame = ttk.Frame(self, style='Card.TFrame', padding=(15, 8))
         self.status_frame.pack(fill=tk.X, padx=15, pady=5)
         self.status_frame.columnconfigure(0, weight=1) # Status side
@@ -49,8 +54,8 @@ class Dashboard(ttk.Frame):
         # Left side: Message Status
         status_inner = ttk.Frame(self.status_frame, style='Card.TFrame')
         status_inner.grid(row=0, column=0, sticky='w')
-        ttk.Label(status_inner, text="System Status:", font=("Inter", 9, "bold"), foreground="#64748B", background="#FFFFFF").pack(side=tk.LEFT, padx=5)
-        self.status_label = ttk.Label(status_inner, text="System Ready", font=("Inter", 9, "bold"), foreground="#3B82F6", background="#FFFFFF")
+        ttk.Label(status_inner, text="System Status:", font=("Inter", 9, "bold"), style='Card.TLabel').pack(side=tk.LEFT, padx=5)
+        self.status_label = ttk.Label(status_inner, text="System Ready", font=("Inter", 9, "bold"), style='Card.TLabel')
         self.status_label.pack(side=tk.LEFT)
 
         # Right side: Data Stats labels
@@ -60,8 +65,8 @@ class Dashboard(ttk.Frame):
         def add_stat(label, value_attr):
             container = ttk.Frame(stats_outer, style='Card.TFrame')
             container.pack(side=tk.LEFT, padx=10)
-            ttk.Label(container, text=f"{label}:", font=("Inter", 8), foreground="#94A3B8", background="#FFFFFF").pack(side=tk.LEFT)
-            val_lb = ttk.Label(container, text="0", font=("Inter", 8, "bold"), foreground="#1E293B", background="#FFFFFF")
+            ttk.Label(container, text=f"{label}:", font=("Inter", 8), style='Card.TLabel').pack(side=tk.LEFT)
+            val_lb = ttk.Label(container, text="0", font=("Inter", 8, "bold"), style='Card.TLabel')
             val_lb.pack(side=tk.LEFT, padx=2)
             setattr(self, value_attr, val_lb)
 
@@ -73,13 +78,12 @@ class Dashboard(ttk.Frame):
         self.metrics_frame = ttk.Frame(self)
         self.metrics_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        # Intelligence Cards
         self.risk_card_val    = self._create_metric_card(self.metrics_frame, "Avg Risk", "0.0%", "#EF4444")
         self.conf_card_val    = self._create_metric_card(self.metrics_frame, "Confidence", "0.0%", "#10B981")
         self.triage_card_val  = self._create_metric_card(self.metrics_frame, "Triage", "Pending", "#F59E0B")
         self.consensus_card_val = self._create_metric_card(self.metrics_frame, "Consensus", "N/A", "#6366F1")
 
-        # ── NEW: Clinical Analysis Narrative (More Analysis, Less Statistics) ──
+        # ── Clinical Analysis Narrative ──
         analysis_frame = ttk.LabelFrame(self, text="CLINICAL NARRATIVE & BIOMARKER INTERPRETATION", style='Card.TFrame', padding=15)
         analysis_frame.pack(fill=tk.X, padx=15, pady=5)
         
@@ -89,12 +93,13 @@ class Dashboard(ttk.Frame):
             selectbackground="#E2E8F0", selectforeground="#0F172A"
         )
         self.narrative_text.pack(fill=tk.X, expand=True)
-        self.narrative_text.insert(tk.END, "Awaiting clinical data... The AI will provide a qualitative analysis here once training and prediction are complete.")
+        self.narrative_text.insert(tk.END, "Awaiting clinical data...")
         self.narrative_text.config(state=tk.DISABLED)
 
-        # Notebook for content
+        # Notebook
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+        # ... (rest of the tab initialization remains same)
 
         self.input_tab = ttk.Frame(self.notebook)
         self.data_tab = ttk.Frame(self.notebook)
@@ -116,8 +121,8 @@ class Dashboard(ttk.Frame):
         card = ttk.Frame(parent, style='Card.TFrame', padding=15)
         card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=4, pady=5)
         
-        ttk.Label(card, text=title.upper(), font=("Inter", 9, "bold"), foreground="#94A3B8", background="#FFFFFF").pack()
-        val_label = ttk.Label(card, text=value, font=("Inter", 16, "bold"), foreground=color, background="#FFFFFF")
+        ttk.Label(card, text=title.upper(), font=("Inter", 9, "bold"), style='Card.TLabel').pack()
+        val_label = ttk.Label(card, text=value, font=("Inter", 16, "bold"), foreground=color, style='Card.TLabel')
         val_label.pack(pady=(5, 0))
         return val_label
 
@@ -138,11 +143,14 @@ class Dashboard(ttk.Frame):
         self.narrative_text.config(state=tk.NORMAL)
         self.narrative_text.delete("1.0", tk.END)
         
-        # Color mapping for narrative
-        color = "#1E293B" # Default slate
+        # High Contrast mapping for narrative
+        from ui.styles import StyleManager
+        palette = StyleManager.get_palette() # Default or current 
+        # Better: use explicit high-contrast constants
+        color = "#3B82F6" if level == "INFO" else "#10B981"
         if level == "DANGER": color = "#EF4444"
-        elif level == "SUCCESS": color = "#059669"
-        elif level == "WARNING": color = "#D97706"
+        elif level == "WARNING": color = "#F59E0B"
+        elif level == "SUCCESS": color = "#10B981"
         
         self.narrative_text.tag_configure("level", foreground=color, font=("Inter", 10, "bold"))
         
@@ -160,3 +168,28 @@ class Dashboard(ttk.Frame):
         """Log a message to the internal console tab."""
         if self.console:
             self.console.log(message, level)
+
+    def refresh_theme(self, theme_name):
+        """Dynamic theme refresh for dashboard cards and text engines."""
+        from ui.styles import StyleManager
+        palette = StyleManager.get_palette(theme_name)
+        
+        self.configure(style='TFrame')
+        self.notebook.configure(style='TNotebook')
+        self.status_frame.configure(style='Card.TFrame')
+        self.status_label.config(style='Card.TLabel')
+        self.metrics_frame.configure(style='TFrame')
+        
+        if self.narrative_text:
+            self.narrative_text.config(
+                bg=palette['bg_main'],
+                fg=palette['text_main'],
+                insertbackground=palette['text_main'],
+                selectbackground=palette['medic_brand'],
+                selectforeground="white"
+            )
+            # Force tags to refresh in case data is present
+            self.narrative_text.tag_configure("level", foreground=palette['medic_brand'])
+        
+        # Update any other custom elements if necessary
+        self.update_status("Theme synchronized across clinical panels.", palette['medic_brand'])

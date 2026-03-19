@@ -1,192 +1,129 @@
-"""
-Style Manager - Manages global application themes and component styles.
-"""
 from tkinter import ttk
 
-# Modern Minimalist Palette
-PALETTE = {
-    'primary': '#3B82F6',    # Blue 500
-    'primary_dark': '#1D4ED8',
-    'secondary': '#64748B',  # Slate 500
-    'success': '#10B981',    # Emerald 500
-    'warning': '#F59E0B',    # Amber 500
-    'danger': '#EF4444',     # Red 500
-    'danger_dark': '#B91C1C', 
-    'bg': '#F8FAFC',         # Slate 50
-    'card': '#FFFFFF',       # White
-    'border': '#E2E8F0',     # Slate 200
-    'text': '#1E293B',       # Slate 800
-    'text_light': '#94A3B8', # Slate 400
-    'sidebar_bg': '#0F172A', # Slate 900
-    'sidebar_hover': '#1E293B' # Slate 800 (used for items, not full background)
-}
-
-FONT_PRIMARY = ("Inter", 10)
-FONT_BOLD = ("Inter", 10, "bold")
-FONT_TITLE = ("Inter", 18, "bold")
-
 class StyleManager:
-    """Manages the application's visual theme using ttk.Style."""
+    """Manages global application styling, including themes and font scaling."""
     
-    @staticmethod
-    def apply_styles(root):
+    # Global Pure Themes
+    THEMES = {
+        'pure_dark': {
+            'bg_main': '#000000',      # Absolute Black
+            'accent_dark': '#000000',   # No layering separation
+            'medic_brand': '#3B82F6',   # Subtle blue for active states
+            'text_main': '#FFFFFF',     # Absolute White
+            'text_muted': '#A1A1AA',    # Zinc-400
+            'card_bg': '#000000',
+            'border_light': '#27272A'    # Zinc-800 for borders
+        },
+        'pure_light': {
+            'bg_main': '#FFFFFF',      # Absolute White
+            'accent_dark': '#FFFFFF',   # No layering separation
+            'medic_brand': '#2563EB',   # Blue-600
+            'text_main': '#000000',     # Absolute Black
+            'text_muted': '#52525B',    # Zinc-600
+            'card_bg': '#FFFFFF',
+            'border_light': '#E4E4E7'    # Zinc-200
+        }
+    }
+
+    @classmethod
+    def apply_styles(cls, root, settings=None):
+        """Apply global CSS-like styles to the application."""
         style = ttk.Style(root)
         
-        # Use a modern theme as base if available
-        available_themes = style.theme_names()
-        if 'clam' in available_themes:
+        # Use a cross-platform theme as base to ensure colors work on Windows
+        if 'clam' in style.theme_names():
             style.theme_use('clam')
             
-        # Global Background
-        root.configure(bg=PALETTE['bg'])
+        # Determine settings
+        theme_name = settings.get('theme', 'pure_dark') if settings else 'pure_dark'
+        scale = settings.get('font_scale', 1.0) if settings else 1.0
+        family = settings.get('font_family', 'Inter') if settings else 'Inter'
+        is_dark = theme_name == 'pure_dark'
         
-        style.configure('TFrame', background=PALETTE['bg'])
-        style.configure('Card.TFrame', background=PALETTE['card'], 
-                        relief='flat', borderwidth=0)
+        palette = cls.THEMES.get(theme_name, cls.THEMES['pure_dark'])
         
-        # --- Label Styles ---
-        style.configure('TLabel', background=PALETTE['bg'], 
-                        foreground=PALETTE['text'], font=FONT_PRIMARY)
+        # Font definitions with SCALING LIMITS (as per user request: max 18px)
+        # We cap the scaled size to ensure labels don't overflow containers
+        f_small = (family, min(int(8 * scale), 14))
+        f_normal = (family, min(int(9 * scale), 16))
+        f_medium = (family, min(int(10 * scale), 17), 'bold')
+        f_large = (family, min(int(12 * scale), 18), 'bold')
+        f_header = (family, min(int(18 * scale), 20), 'bold')
         
-        style.configure('Header.TLabel', font=FONT_TITLE, 
-                        foreground=PALETTE['text'], padding=(0, 5))
+        # Base widget configurations - Focus elimination
+        style.configure('.', font=f_normal, background=palette['bg_main'], foreground=palette['text_main'], 
+                        borderwidth=0, relief='flat', focuscolor='', highlightthickness=0)
         
-        style.configure('SubHeader.TLabel', font=("Inter", 11), 
-                        foreground=PALETTE['text_light'])
+        style.configure('TFrame', background=palette['bg_main'])
+        style.configure('TLabel', font=f_normal, background=palette['bg_main'], foreground=palette['text_main'])
         
-        style.configure('CardHeader.TLabel', font=FONT_BOLD, 
-                        foreground=PALETTE['text_light'], background=PALETTE['card'])
+        # Button Styles - Fixed mapping for hover
+        style.configure('TButton', font=f_medium, padding=6, background=palette['border_light'], foreground=palette['text_main'], borderwidth=0)
+        style.map('TButton', 
+                  background=[('pressed', palette['medic_brand']), ('active', palette['medic_brand']), ('!disabled', palette['border_light'])],
+                  foreground=[('active', 'white')])
 
-        # --- Base Focus Style Removal ---
-        style.configure('.', focuscolor='', highlightthickness=0)
-        style.map('.', focuscolor=[('active', ''), ('focus', '')])
+        # Primary Button mapping fix
+        style.configure('Primary.TButton', background=palette['medic_brand'], foreground='white', font=f_medium, borderwidth=0)
+        style.map('Primary.TButton', 
+                  background=[('pressed', '#1D4ED8'), ('active', '#1E40AF'), ('!disabled', palette['medic_brand'])],
+                  foreground=[('active', 'white')])
 
-        # --- Sidebar Specific Styles ---
-        style.configure('Sidebar.TFrame', background=PALETTE['sidebar_bg'])
-        style.configure('Sidebar.TLabel', background=PALETTE['sidebar_bg'], 
-                        foreground='#F8FAFC', font=FONT_PRIMARY)
-        style.configure('SidebarCaption.TLabel', background=PALETTE['sidebar_bg'], 
-                        foreground=PALETTE['text_light'], font=("Inter", 8, "bold"))
+        # Danger Button mapping fix
+        style.configure('Danger.TButton', background='#EF4444', foreground='white', font=f_medium, borderwidth=0)
+        style.map('Danger.TButton', 
+                  background=[('pressed', '#991B1B'), ('active', '#B91C1C'), ('!disabled', '#EF4444')],
+                  foreground=[('active', 'white')])
         
-        style.configure('Sidebar.TLabelframe', background=PALETTE['sidebar_bg'], 
-                        foreground='#F8FAFC', borderwidth=0)
-        style.configure('Sidebar.TLabelframe.Label', background=PALETTE['sidebar_bg'], 
-                        foreground=PALETTE['primary'], font=("Inter", 9, "bold"))
-
-        # --- Button Styles ---
-        style.configure('TButton', font=FONT_BOLD, padding=(15, 8), borderwidth=0, relief='flat')
-        style.map('TButton',
-                  focuscolor=[('active', ''), ('focus', '')],
-                  highlightcolor=[('active', ''), ('focus', '')])
+        # Card & Sidebar styles
+        style.configure('Card.TFrame', background=palette['card_bg'], relief='flat', borderwidth=0)
+        style.configure('Card.TLabel', background=palette['card_bg'], foreground=palette['text_main'], font=f_normal)
         
-        # Primary Action Button
-        style.configure('Primary.TButton', 
-                        background=PALETTE['primary'], 
-                        foreground='#FFFFFF')
-        style.map('Primary.TButton',
-                  background=[('active', PALETTE['primary_dark']), 
-                             ('pressed', PALETTE['primary_dark'])],
-                  foreground=[('active', '#FFFFFF')])
+        # Fix Sidebar Visibility in Light Mode
+        style.configure('Sidebar.TFrame', background=palette['accent_dark'], relief='flat', borderwidth=0)
+        style.configure('Sidebar.TLabel', background=palette['accent_dark'], foreground=palette['text_main'], font=f_large)
+        style.configure('SidebarCaption.TLabel', background=palette['accent_dark'], foreground=palette['text_muted'], font=f_small)
         
-        style.configure('Secondary.TButton', 
-                        background=PALETTE['card'], 
-                        foreground=PALETTE['secondary'])
+        # Labelframe styling 
+        style.configure('Sidebar.TLabelframe', background=palette['accent_dark'], foreground=palette['text_muted'], bordercolor=palette['border_light'], borderwidth=0)
+        style.configure('Sidebar.TLabelframe.Label', background=palette['accent_dark'], foreground=palette['text_muted'], font=f_small)
         
-        # Danger/Reset Button
-        style.configure('Danger.TButton', 
-                        background='#F1F5F9', # Light gray base
-                        foreground=PALETTE['danger'])
-        style.map('Danger.TButton',
-                  background=[('active', PALETTE['danger']), 
-                             ('pressed', PALETTE['danger_dark'] if 'danger_dark' in PALETTE else '#B91C1C')],
-                  foreground=[('active', '#FFFFFF')])
+        # Notebook (Tabs) customization - Premium padding for height
+        style.configure("TNotebook", background=palette['bg_main'], borderwidth=0, tabmargins=[0, 0, 0, 0], highlightthickness=0)
+        style.configure("TNotebook.Tab", padding=[25, 12], font=f_medium, background=palette['border_light'], borderwidth=0, focuscolor='')
         
-        # --- Modern Premium Tabs ---
-        style.configure('TNotebook', background=PALETTE['bg'], borderwidth=0)
-        style.configure('TNotebook.Tab', 
-                        padding=(25, 12), 
-                        font=FONT_BOLD, 
-                        background=PALETTE['border'], 
-                        foreground=PALETTE['secondary'],
-                        borderwidth=0)
+        # Tab Mapping - Fixed background/foreground persistence
+        # Active tab must show medic_brand text in light mode for clarity
+        sel_bg = palette['card_bg']
+        sel_fg = palette['medic_brand'] if not is_dark else 'white'
         
-        # Ensure the content area (client) matches the card background
-        style.configure('TNotebook.client', background=PALETTE['card'], borderwidth=0)
+        style.map("TNotebook.Tab", 
+                  background=[("selected", sel_bg), ("active", palette['border_light']), ("!selected", palette['border_light'])], 
+                  foreground=[("selected", sel_fg), ("active", palette['text_main']), ("!selected", palette['text_muted'])])
         
-        style.map('TNotebook.Tab',
-                  background=[('selected', PALETTE['primary']), ('!selected', PALETTE['border'])],
-                  foreground=[('selected', '#FFFFFF'), ('!selected', PALETTE['secondary'])],
-                  padding=[('selected', (25, 12))], # Consistent height to avoid jumping
-                  lightcolor=[('selected', PALETTE['primary']), ('!selected', PALETTE['border'])],
-                  bordercolor=[('selected', PALETTE['primary']), ('!selected', PALETTE['border'])],
-                  focuscolor=[('selected', ''), ('!selected', '')])
-
-        # --- Scrollbar Styling (Modern Premium - Enhanced Thickness) ---
-        style.configure('Vertical.TScrollbar', 
-                        troughcolor='#F1F5F9', # Light Slate 100
-                        background='#CBD5E1', # Slate 300 Thumb
-                        relief='flat',
-                        borderwidth=0, 
-                        arrowsize=18,
-                        width=18)
-        style.configure('Horizontal.TScrollbar', 
-                        troughcolor='#F1F5F9', 
-                        background='#CBD5E1',
-                        relief='flat',
-                        borderwidth=0,
-                        arrowsize=18,
-                        width=18)
-
-        # Style mapping for hover effects
-        style.map('Vertical.TScrollbar',
-                  background=[('active', '#94A3B8'), ('pressed', '#64748B')])
-        style.map('Horizontal.TScrollbar',
-                  background=[('active', '#94A3B8'), ('pressed', '#64748B')])
-
-        style.configure('Treeview', 
-                        font=FONT_PRIMARY, 
-                        rowheight=38,
-                        background=PALETTE['card'],
-                        fieldbackground=PALETTE['card'],
+        # Treeview customization - Minimal layering
+        style.configure("Treeview", 
+                        font=f_normal, 
+                        rowheight=int(34 * (1.0 + (scale-1.0)*0.4)),
+                        background=palette['card_bg'],
+                        fieldbackground=palette['card_bg'],
+                        foreground=palette['text_main'],
                         borderwidth=0,
                         highlightthickness=0)
-        style.configure('Treeview.Heading', 
-                        font=FONT_BOLD, 
-                        background=PALETTE['bg'],
-                        foreground=PALETTE['secondary'],
-                        relief='flat',
-                        padding=10)
-        style.map('Treeview',
-                  background=[('selected', PALETTE['primary'])],
-                  foreground=[('selected', '#FFFFFF')])
+        
+        # Ensure headings and selected rows are high-contrast
+        style.configure("Treeview.Heading", font=f_medium, background=palette['border_light'], foreground=palette['text_main'], relief='flat', borderwidth=0)
+        style.map("Treeview", 
+                  background=[('selected', palette['medic_brand']), ('!disabled', palette['card_bg'])], 
+                  foreground=[('selected', 'white'), ('!disabled', palette['text_main'])])
 
-        # --- Entry Styles ---
-        style.configure('TEntry', padding=8, relief='flat')
+        # Custom Header Style
+        style.configure('Header.TLabel', font=f_header, background=palette['card_bg'], foreground=palette['text_main'])
+        style.configure('SubHeader.TLabel', font=f_normal, background=palette['card_bg'], foreground=palette['text_muted'])
 
-        # --- Spinbox Styles ---
-        # Configure the general TSpinbox style
-        style.configure('TSpinbox',
-                        fieldbackground=PALETTE['card'],
-                        background=PALETTE['card'], # Background of the spinbox itself
-                        foreground=PALETTE['text'],
-                        insertbackground=PALETTE['text'],
-                        selectbackground=PALETTE['primary'],
-                        selectforeground='#FFFFFF',
-                        bordercolor=PALETTE['border'],
-                        lightcolor=PALETTE['border'],
-                        darkcolor=PALETTE['border'],
-                        arrowsize=12,
-                        padding=8,
-                        relief='flat')
-        # Configure the Spinbox buttons
-        style.map('TSpinbox',
-                  background=[('active', PALETTE['border']), ('!active', PALETTE['card'])],
-                  foreground=[('active', PALETTE['text']), ('!active', PALETTE['text'])])
-        style.map('TSpinbox.button',
-                  background=[('active', PALETTE['primary']), ('!active', PALETTE['border'])],
-                  foreground=[('active', '#FFFFFF'), ('!active', PALETTE['text'])])
+        # Root background
+        root.configure(bg=palette['bg_main'])
 
-
-    @staticmethod
-    def get_color(name):
-        return PALETTE.get(name, '#000000')
+    @classmethod
+    def get_palette(cls, theme_name='pure_dark'):
+        return cls.THEMES.get(theme_name, cls.THEMES['pure_dark'])

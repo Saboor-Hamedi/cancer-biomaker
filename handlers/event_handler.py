@@ -201,9 +201,16 @@ class EventHandler:
         current_item = tree.item(item)
         current_value = current_item['values'][col_index]
 
-        # Create entry widget for editing
+        # Create entry widget for editing - High Contrast Theme Sync
+        from ui.styles import StyleManager
+        palette = StyleManager.get_palette(self.layout_manager.settings_manager.theme)
+        
         x, y, width, height = tree.bbox(item, column=col_index)
-        entry = tk.Entry(tree, font=("Inter", 9))
+        entry = tk.Entry(tree, font=("Inter", 9), 
+                         bg=palette['card_bg'], fg=palette['text_main'],
+                         insertbackground=palette['text_main'],
+                         relief='flat', borderwidth=0, highlightthickness=1)
+        entry.config(highlightbackground=palette['medic_brand'], highlightcolor=palette['medic_brand'])
         entry.place(x=x, y=y, width=width, height=height)
         entry.insert(0, current_value)
         entry.focus()

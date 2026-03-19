@@ -8,6 +8,7 @@ import numpy as np
 from ui.components.dashboard import Dashboard
 from ui.components.sidebar import Sidebar
 from ui.components.model_explorer import ModelExplorer
+from views.dialogs import PreprocessingDialog, SettingsDialog
 from ui.components.tabs import AnalysisTab, DataTab, InputTab, ValidationTab, LeaderboardTab
 from ui.components.velocity_tab import VelocityTab
 from ui.components.console import ConsoleTab
@@ -17,10 +18,11 @@ from logic.model_manager import HAS_XGB
 class LayoutManager:
     """Manages the assembly and layout of UI components."""
 
-    def __init__(self, root, model_manager, data_manager, callbacks, version="1.0.0"):
+    def __init__(self, root, model_manager, data_manager, callbacks, settings_manager=None, version="1.0.0"):
         self.root = root
         self.model_manager = model_manager
         self.data_manager = data_manager
+        self.settings_manager = settings_manager
         self.callbacks = callbacks
         self.version = version
 
@@ -50,8 +52,9 @@ class LayoutManager:
         # Add Ensemble Mode
         model_list.append("AI Ensemble")
 
-        # Update callbacks with model list
+        # Update callbacks
         self.callbacks['models'] = model_list
+        self.callbacks['show_settings'] = self.show_settings_modal
 
         self.sidebar = Sidebar(self.root, self.callbacks)
         self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
@@ -88,6 +91,14 @@ class LayoutManager:
         
         # Link console back to dashboard for easy logging
         self.dashboard.console = self.tab_console
+
+    def show_settings_modal(self):
+        """Launch the modal settings window."""
+        SettingsDialog(
+            self.root, 
+            self.settings_manager, 
+            self.callbacks.get('refresh_styles')
+        )
 
         # Bind events
         self.tab_input.tree.bind("<Double-1>", self.callbacks.get('edit_input_value', lambda e: None))
@@ -217,5 +228,16 @@ class LayoutManager:
         if self.dashboard:
             self.dashboard.log_message(message, level)
     
+    def refresh_all_tabs_theme(self, theme_name):
+        """Broadcast theme signal to all dashboard tabs."""
+        tabs = [
+            self.tab_input, self.tab_data, self.tab_analysis,
+            self.tab_validation, self.tab_leaderboard, self.tab_velocity,
+            self.tab_console
+        ]
+        for t in tabs:
+            if t and hasattr(t, 'refresh_theme'):
+                t.refresh_theme(theme_name)
+
     # Alias for convenience and backward compatibility
     log = log_message

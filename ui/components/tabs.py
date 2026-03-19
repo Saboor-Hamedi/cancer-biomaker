@@ -55,12 +55,14 @@ class InputTab(ttk.Frame):
             self.refresh_features(self.features)
 
     def _create_widgets(self):
-        header = ttk.Frame(self, padding=(12, 8, 12, 4))
-        header.pack(fill=tk.X)
-        ttk.Label(header, text="PATIENT BIOMARKER INPUT PANEL",
-                  font=('Inter', 10, 'bold'), foreground="#0F172A").pack(side=tk.LEFT)
-        ttk.Label(header, text="  —  Load a dataset or double-click a value to edit",
-                  font=('Inter', 9), foreground="#94A3B8").pack(side=tk.LEFT)
+        self.header = ttk.Frame(self, padding=(12, 8, 12, 4))
+        self.header.pack(fill=tk.X)
+        self.title_label = ttk.Label(self.header, text="PATIENT BIOMARKER INPUT PANEL",
+                                     font=('Inter', 10, 'bold'))
+        self.title_label.pack(side=tk.LEFT)
+        self.sub_label = ttk.Label(self.header, text="  —  Load a dataset or double-click a value to edit",
+                                   font=('Inter', 9))
+        self.sub_label.pack(side=tk.LEFT)
 
         container = ttk.Frame(self)
         container.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
@@ -77,11 +79,11 @@ class InputTab(ttk.Frame):
         self.tree.column("unit",    width=110, anchor=tk.CENTER, stretch=False)
         self.tree.column("value",   width=160, anchor=tk.CENTER, stretch=False)
 
-        # Colour bands by biomarker group
-        self.tree.tag_configure('psa',  background="#EFF6FF")
-        self.tree.tag_configure('afp',  background="#F0FDF4")
-        self.tree.tag_configure('ca',   background="#FFF7ED")
-        self.tree.tag_configure('other', background="#FAFAFA")
+        # Clean initial tags (no hardcoded backgrounds)
+        self.tree.tag_configure('psa')
+        self.tree.tag_configure('afp')
+        self.tree.tag_configure('ca')
+        self.tree.tag_configure('other')
 
         vsb = ttk.Scrollbar(container, orient=tk.VERTICAL,   command=self.tree.yview)
         hsb = ttk.Scrollbar(container, orient=tk.HORIZONTAL, command=self.tree.xview)
@@ -190,6 +192,25 @@ class InputTab(ttk.Frame):
             v[2] = "0.0000"
             self.tree.item(it, values=v)
 
+    def refresh_theme(self, theme_name):
+        from ui.styles import StyleManager
+        palette = StyleManager.get_palette(theme_name)
+        is_dark = theme_name == 'pure_dark'
+        
+        self.configure(style='TFrame')
+        self.header.configure(style='TFrame')
+        self.title_label.config(foreground=palette['medic_brand'])
+        self.sub_label.config(foreground=palette['text_muted'])
+        
+        # Reset tags for high contrast
+        row_bg = palette['card_bg'] # Pure black or white
+        alt_bg = palette['border_light'] if is_dark else "#F1F5F9"
+        
+        self.tree.tag_configure('psa', background=row_bg, foreground=palette['text_main'])
+        self.tree.tag_configure('afp', background=row_bg, foreground=palette['text_main'])
+        self.tree.tag_configure('ca', background=row_bg, foreground=palette['text_main'])
+        self.tree.tag_configure('other', background=row_bg, foreground=palette['text_main'])
+
 class DataTab(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
@@ -231,6 +252,9 @@ class DataTab(ttk.Frame):
         self.tree.delete(*self.tree.get_children())
         self.tree["columns"] = []
 
+    def refresh_theme(self, theme_name):
+        self.configure(style='TFrame')
+
 class AnalysisTab(ttk.Frame):
     """
     PREMIUM CLINICAL PERFORMANCE: Standardized robust scrolling with deep-dive forensic insights.
@@ -243,7 +267,6 @@ class AnalysisTab(ttk.Frame):
         self._create_widgets()
 
     def _create_widgets(self):
-        # Using a direct Text widget with its own scrollbar for guaranteed robust scrolling
         container = ttk.Frame(self)
         container.pack(fill=tk.BOTH, expand=True)
 
@@ -251,27 +274,26 @@ class AnalysisTab(ttk.Frame):
         self.sb.pack(side=tk.RIGHT, fill=tk.Y)
 
         self.text = tk.Text(container, wrap=tk.WORD, yscrollcommand=self.sb.set,
-                            font=('Inter', 11), bg="#FFFFFF", fg="#1E293B", 
-                            padx=40, pady=35, borderwidth=0, highlightthickness=0,
-                            selectbackground="#E2E8F0", selectforeground="#0F172A")
+                            font=('Inter', 11), 
+                            padx=40, pady=35, borderwidth=0, highlightthickness=0)
         self.text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.sb.config(command=self.text.yview)
         self.text.config(state=tk.DISABLED)
 
-        # Premium Tags for Reporting
-        self.text.tag_configure("title", font=('Inter', 20, 'bold'), foreground="#0F172A", spacing3=20)
-        self.text.tag_configure("sub", font=('Inter', 12, 'bold'), foreground="#3B82F6", spacing1=20, spacing3=10)
-        self.text.tag_configure("crit", foreground="#EF4444", font=('Inter', 11, 'bold'))
-        self.text.tag_configure("pos", foreground="#10B981", font=('Inter', 11, 'bold'))
-        self.text.tag_configure("metric", foreground="#6366F1", font=('Inter', 11, 'bold'))
-        self.text.tag_configure("dim", foreground="#94A3B8", font=('Inter', 10))
-        self.text.tag_configure("highlight", background="#F1F5F9", foreground="#1E293B", font=('Inter', 10, 'italic'))
-        self.text.tag_configure("bullet", foreground="#3B82F6", font=('Inter', 12, 'bold'))
-        self.text.tag_configure("code", font=('Consolas', 10), foreground="#475569", background="#F8FAFC")
-        self.text.tag_configure("table_head", font=('Consolas', 10, 'bold'), foreground="#1E293B", background="#E2E8F0")
-        self.text.tag_configure("table_row", font=('Consolas', 10), foreground="#475569")
-        self.text.tag_configure("table_row_bold", font=('Consolas', 10, 'bold'), foreground="#1E293B")
-        self.text.tag_configure("table_row_crit", font=('Consolas', 10, 'bold'), foreground="#EF4444")
+        # Premium Tags
+        self.text.tag_configure("title", font=('Inter', 20, 'bold'), spacing3=20)
+        self.text.tag_configure("sub", font=('Inter', 12, 'bold'), spacing1=20, spacing3=10)
+        self.text.tag_configure("crit", font=('Inter', 11, 'bold'))
+        self.text.tag_configure("pos", font=('Inter', 11, 'bold'))
+        self.text.tag_configure("metric", font=('Inter', 11, 'bold'))
+        self.text.tag_configure("dim", font=('Inter', 10))
+        self.text.tag_configure("highlight", font=('Inter', 10, 'italic'))
+        self.text.tag_configure("bullet", font=('Inter', 12, 'bold'))
+        self.text.tag_configure("code", font=('Consolas', 10))
+        self.text.tag_configure("table_head", font=('Consolas', 10, 'bold'))
+        self.text.tag_configure("table_row", font=('Consolas', 10))
+        self.text.tag_configure("table_row_bold", font=('Consolas', 10, 'bold'))
+        self.text.tag_configure("table_row_crit", font=('Consolas', 10, 'bold'))
 
     def clear(self):
         self.text.config(state=tk.NORMAL)
@@ -496,7 +518,29 @@ class AnalysisTab(ttk.Frame):
 
         self.text.insert(tk.END, "\n" + "—" * 60 + "\n", "dim")
         self.text.insert(tk.END, "CLINICAL VALIDATION COMPLETED | ISO-COMPLIANT LOGGING", "highlight")
-        self.text.config(state=tk.DISABLED)
+    def refresh_theme(self, theme_name):
+        from ui.styles import StyleManager
+        palette = StyleManager.get_palette(theme_name)
+        is_dark = theme_name == 'pure_dark'
+
+        self.configure(style='TFrame')
+        self.text.config(bg=palette['bg_main'], fg=palette['text_main'], 
+                         selectbackground=palette['medic_brand'], selectforeground="white")
+        
+        # Update Reporting Tags - High Contrast Enforcement
+        self.text.tag_configure("title", foreground=palette['text_main'], font=("Consolas", 11, "bold"))
+        self.text.tag_configure("sub", foreground=palette['medic_brand'], font=("Consolas", 10, "bold"))
+        self.text.tag_configure("crit", foreground="#EF4444", font=("Consolas", 10, "bold"))
+        self.text.tag_configure("pos", foreground="#10B981", font=("Consolas", 10, "bold"))
+        self.text.tag_configure("metric", foreground=palette['medic_brand'], font=("Consolas", 10, "bold"))
+        self.text.tag_configure("dim", foreground=palette['text_muted'], font=("Consolas", 10))
+        self.text.tag_configure("highlight", background=palette['border_light'], foreground=palette['text_main'])
+        self.text.tag_configure("bullet", foreground=palette['medic_brand'])
+        self.text.tag_configure("code", foreground=palette['text_muted'], background=palette['bg_main'])
+        self.text.tag_configure("table_head", foreground=palette['text_main'], background=palette['border_light'], font=("Consolas", 10, "bold"))
+        self.text.tag_configure("table_row", foreground=palette['text_muted'])
+        self.text.tag_configure("table_row_bold", foreground=palette['text_main'])
+        self.text.tag_configure("table_row_crit", foreground="#EF4444")
 
 class ValidationTab(ttk.Frame):
     """Handles AI Committee Consensus with professional diagnostic highlighting."""
@@ -521,10 +565,10 @@ class ValidationTab(ttk.Frame):
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Color configuration: High Contrast for diagnostics
-        self.tree.tag_configure('pos', background="#FEE2E2", foreground="#991B1B") # CRITICAL: Soft Red alert
-        self.tree.tag_configure('neg', foreground="#059669") # STABLE: Emerald Green text
-        self.tree.tag_configure('summary', foreground="#64748B") # INFO: Slate Grey for batch counts
+        # Color configuration
+        self.tree.tag_configure('pos')
+        self.tree.tag_configure('neg')
+        self.tree.tag_configure('summary')
 
     def clear(self):
         self.tree.delete(*self.tree.get_children())
@@ -579,6 +623,14 @@ class ValidationTab(ttk.Frame):
                 "BATCH ANALYSIS COMPLETE"
             ), tags=('summary',))
 
+    def refresh_theme(self, theme_name):
+        from ui.styles import StyleManager
+        palette = StyleManager.get_palette(theme_name)
+        self.configure(style='TFrame')
+        self.tree.tag_configure('pos', foreground="#EF4444")
+        self.tree.tag_configure('neg', foreground="#10B981")
+        self.tree.tag_configure('summary', foreground=palette['text_muted'])
+
 class LeaderboardTab(ttk.Frame):
     """
     CLINICAL ALGORITHM LEADERBOARD: Deep-dive model statistics with clinical context.
@@ -599,10 +651,12 @@ class LeaderboardTab(ttk.Frame):
         top = ttk.Frame(outer, padding=(15, 12, 15, 6))
         top.pack(fill=tk.X)
 
-        ttk.Label(top, text="CLINICAL ALGORITHM COMPETITION LEADERBOARD",
-                  font=('Inter', 12, 'bold'), foreground="#0F172A").pack(anchor=tk.W)
-        ttk.Label(top, text="Ranked by clinical F1-Score & Cross-Validation Stability",
-                  font=('Inter', 9), foreground="#94A3B8").pack(anchor=tk.W)
+        self.title_label = ttk.Label(top, text="CLINICAL ALGORITHM COMPETITION LEADERBOARD",
+                                     font=('Inter', 12, 'bold'))
+        self.title_label.pack(anchor=tk.W)
+        self.sub_label = ttk.Label(top, text="Ranked by clinical F1-Score & Cross-Validation Stability",
+                                   font=('Inter', 9))
+        self.sub_label.pack(anchor=tk.W)
 
         lb_frame = ttk.Frame(outer, padding=(15, 0, 15, 10))
         lb_frame.pack(fill=tk.X)
@@ -624,10 +678,10 @@ class LeaderboardTab(ttk.Frame):
         lb_vsb.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Tag colors
-        self.lb_tree.tag_configure('gold',   background="#FEF9C3", foreground="#92400E")
-        self.lb_tree.tag_configure('silver', background="#F1F5F9", foreground="#334155")
-        self.lb_tree.tag_configure('bronze', background="#FFF7ED", foreground="#9A3412")
-        self.lb_tree.tag_configure('other',  foreground="#475569")
+        self.lb_tree.tag_configure('gold')
+        self.lb_tree.tag_configure('silver')
+        self.lb_tree.tag_configure('bronze')
+        self.lb_tree.tag_configure('other')
 
         # Model insight panel
         self.insight_label = tk.Label(outer, text="", font=('Inter', 9, 'italic'),
@@ -703,7 +757,24 @@ class LeaderboardTab(ttk.Frame):
                 badge
             ), tags=(tag,))
 
-        # Insight panel for the champion model
-        if top_model and self.insight_label:
-            insight = self._INSIGHTS.get(top_model, f"Model '{top_model}' achieved highest clinical ranking based on F1 and Recall metrics.")
-            self.insight_label.config(text=insight)
+    def refresh_theme(self, theme_name):
+        from ui.styles import StyleManager
+        palette = StyleManager.get_palette(theme_name)
+        is_dark = theme_name == 'pure_dark'
+        
+        self.configure(style='TFrame')
+        self.title_label.config(foreground=palette['text_main'])
+        self.sub_label.config(foreground=palette['text_muted'])
+        self.insight_label.config(bg=palette['card_bg'], fg=palette['medic_brand'])
+        
+        # Champion tags
+        if is_dark:
+            self.lb_tree.tag_configure('gold', background="#422006", foreground="#FCD34D")
+            self.lb_tree.tag_configure('silver', background="#1E293B", foreground="#F8FAFC")
+            self.lb_tree.tag_configure('bronze', background="#431407", foreground="#FB923C")
+            self.lb_tree.tag_configure('other', foreground=palette['text_muted'])
+        else:
+            self.lb_tree.tag_configure('gold', background="#FEF9C3", foreground="#92400E")
+            self.lb_tree.tag_configure('silver', background="#F1F5F9", foreground="#334155")
+            self.lb_tree.tag_configure('bronze', background="#FFF7ED", foreground="#9A3412")
+            self.lb_tree.tag_configure('other', foreground="#475569")

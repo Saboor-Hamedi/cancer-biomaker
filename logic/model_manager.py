@@ -133,43 +133,45 @@ class GNNClassifier:
                 loss.backward()
                 optimizer.step()
 
-        # Phase 2 Optimization: Quantization & JIT for high-performance CPU inference
+        # Phase 2 Optimization: Quantization for high-performance CPU inference
         try:
-            log.info("Applying clinical optimizations (Quantization & JIT)...")
+            log.info("Applying clinical optimizations (Quantization)...")
             self.model.eval()
             # 1. Dynamic Quantization (reduces size and improves CPU speed)
+            # We only quantize Linear layers as GCNConv is custom and less stable under quantization
             self.model = torch.quantization.quantize_dynamic(
                 self.model, {torch.nn.Linear}, dtype=torch.qint8
             )
-            # 2. TorchScript (JIT) Compilation
-            # Note: We must use a dummy input for tracing if script() fails on complex PyG models, 
-            # but for this simple GNN, script() is usually safer.
-            self.model = torch.jit.script(self.model)
             log.info("GNN Optimization successful.")
         except Exception as e:
-            log.warning("PyTorch optimizations (Quantization/JIT) skipped: %s", e)
+            log.warning("PyTorch optimizations (Quantization) skipped: %s", e)
 
         return self
 
     def __getstate__(self):
-        """Prepare for joblib/pickle: ScriptModules need special handling."""
+        """Prepare for joblib/pickle: Models need special handling for thread safety."""
         state = self.__dict__.copy()
         if HAS_TORCH and self.model is not None:
-            # We save the JIT model to a byte stream
+            # We save the model state to a byte stream
             buffer = io.BytesIO()
-            torch.jit.save(self.model, buffer)
+            torch.save(self.model, buffer)
             state['model_stream'] = buffer.getvalue()
-            state['model'] = None  # Remove the live object for pickling
+            state['model'] = None  # Remove live object
         return state
 
     def __setstate__(self, state):
         """Restore from joblib/pickle."""
         self.__dict__.update(state)
         if HAS_TORCH and 'model_stream' in state:
-            # Restore the JIT model from the byte stream
+            # Restore model from byte stream
             buffer = io.BytesIO(state['model_stream'])
-            self.model = torch.jit.load(buffer, map_location='cpu')
-            self.model.eval()  # Ensure eval mode
+            try:
+                self.model = torch.load(buffer, map_location='cpu')
+            except Exception as e:
+                log.warning("Failed to load model from stream: %s", e)
+                self.model = None
+            if self.model:
+                self.model.eval()
             del self.model_stream
 
     def predict(self, X):

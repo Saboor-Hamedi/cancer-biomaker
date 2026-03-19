@@ -5,6 +5,10 @@ app.log
 doc.md
 build/
 dist/
+*.zip
+*.exe
+*.msi
+settings_config.json
 *.spec
 session_config.json
 .gitignore

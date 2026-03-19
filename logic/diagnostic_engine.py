@@ -75,7 +75,7 @@ class DiagnosticEngine:
         total_var = variances.sum()
         if total_var == 0: return []
         
-        normalized = (variances / total_var).sort_values(reverse=True)
+        normalized = (variances / total_var).sort_values(ascending=False)
         return [{'marker': m, 'impact': v} for m, v in normalized.items()][:5]
 
     def _analyze_confidence_zones(self, df):

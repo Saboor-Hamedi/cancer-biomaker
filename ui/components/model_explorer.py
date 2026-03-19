@@ -13,7 +13,7 @@ class ModelExplorer(ttk.Frame):
         self.pack_propagate(False)
         
         # ── Responsive Scrollable Container ──────────────────────
-        self.canvas = tk.Canvas(self, bg="#0F172A", highlightthickness=0, borderwidth=0)
+        self.canvas = tk.Canvas(self, bg="#000000", highlightthickness=0, borderwidth=0)
         self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.scroll_content = ttk.Frame(self.canvas, style='Sidebar.TFrame')
         
@@ -58,8 +58,8 @@ class ModelExplorer(ttk.Frame):
         self.file_listbox = tk.Listbox(
             list_container,
             selectmode=tk.SINGLE,
-            bg="#0F172A",
-            fg="#34D399",
+            bg="#000000",
+            fg="#10B981",
             font=("Consolas", 10, "bold"),
             borderwidth=0,
             highlightthickness=0,
@@ -127,7 +127,7 @@ class ModelExplorer(ttk.Frame):
             files = [f for f in os.listdir(self.model_dir) if f.endswith('.pkl')]
             files.sort()
             
-            # Extract standard names for comparison
+            # Extract names for comparison
             current_items = [self.file_listbox.get(i).replace(" ➤", "").strip() for i in range(self.file_listbox.size())]
             
             if set(files) != set(current_items):
@@ -138,7 +138,25 @@ class ModelExplorer(ttk.Frame):
                 count = len(files)
                 self.status_label.config(text=f"Detected: {count} models")
                 self.verify_icon.config(text="✓ VERIFIED" if count > 0 else "⚠ NO MODELS")
-                self.verify_icon.config(foreground="#10B981" if count > 0 else "#EF4444")
-        except Exception as e:
-            # Silent fallback for background thread safety
+        except Exception:
             pass
+
+    def refresh_theme(self, theme_name):
+        from ui.styles import StyleManager
+        palette = StyleManager.get_palette(theme_name)
+        is_dark = theme_name == 'pure_dark'
+        
+        self.configure(style='Sidebar.TFrame', width=260)
+        self.canvas.config(bg=palette['bg_main'])
+        self.scroll_content.configure(style='Sidebar.TFrame')
+        
+        # Listbox sync
+        self.file_listbox.config(
+            bg=palette['bg_main'], 
+            fg="#10B981" if is_dark else "#059669",
+            selectbackground="#10B981",
+            selectforeground=palette['bg_main']
+        )
+        
+        # Ensure scrollregion is correct after color shift
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))

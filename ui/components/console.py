@@ -12,35 +12,58 @@ class ConsoleTab(ttk.Frame):
         
     def _create_widgets(self):
         # Toolbar for console actions
-        toolbar = ttk.Frame(self, style='Card.TFrame', padding=5)
-        toolbar.pack(fill=tk.X)
+        self.toolbar_frame = ttk.Frame(self, style='Card.TFrame', padding=5)
+        self.toolbar_frame.pack(fill=tk.X)
         
-        ttk.Label(toolbar, text="SYSTEM DIAGNOSTICS LOGS", font=("Inter", 9, "bold"), 
-                  foreground="#64748B", background="#FFFFFF").pack(side=tk.LEFT, padx=10)
+        self.title_label = ttk.Label(self.toolbar_frame, text="SYSTEM DIAGNOSTICS LOGS", 
+                                     font=("Inter", 9, "bold"), style='Card.TLabel')
+        self.title_label.pack(side=tk.LEFT, padx=10)
         
-        ttk.Button(toolbar, text="Clear Logs", command=self.clear, style='Action.TButton').pack(side=tk.RIGHT, padx=5)
-        ttk.Button(toolbar, text="Copy All", command=self.copy_all, style='Action.TButton').pack(side=tk.RIGHT, padx=5)
+        ttk.Button(self.toolbar_frame, text="Clear Logs", command=self.clear, style='TButton').pack(side=tk.RIGHT, padx=5)
+        ttk.Button(self.toolbar_frame, text="Copy All", command=self.copy_all, style='TButton').pack(side=tk.RIGHT, padx=5)
 
         # Text area with scrollbar
-        container = ttk.Frame(self)
-        container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.content_container = ttk.Frame(self)
+        self.content_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        self.text = tk.Text(container, font=("Consolas", 10), wrap=tk.WORD, 
-                            state=tk.DISABLED, undo=True, borderwidth=1, relief="flat",
-                            background="#F8FAFC", foreground="#1E293B",
-                            selectbackground="#E2E8F0", selectforeground="#0F172A")
-        scrollbar = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.text.yview)
+        self.text = tk.Text(self.content_container, font=("Consolas", 10), wrap=tk.WORD, 
+                            state=tk.DISABLED, undo=True, borderwidth=0, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.content_container, orient=tk.VERTICAL, command=self.text.yview)
         self.text.configure(yscrollcommand=scrollbar.set)
         
         self.text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Simple tags for coloring
-        self.text.tag_configure("INFO", foreground="#3B82F6")
-        self.text.tag_configure("SUCCESS", foreground="#10B981")
-        self.text.tag_configure("WARNING", foreground="#F59E0B")
-        self.text.tag_configure("ERROR", foreground="#EF4444")
-        self.text.tag_configure("TIMESTAMP", foreground="#94A3B8")
+        # Standard tags (will be updated in refresh_theme)
+        self.text.tag_configure("INFO", font=("Consolas", 10, "bold"))
+        self.text.tag_configure("SUCCESS", font=("Consolas", 10, "bold"))
+        self.text.tag_configure("WARNING", font=("Consolas", 10, "bold"))
+        self.text.tag_configure("ERROR", font=("Consolas", 10, "bold"))
+        self.text.tag_configure("TIMESTAMP", font=("Consolas", 10))
+
+    def refresh_theme(self, theme_name):
+        from ui.styles import StyleManager
+        palette = StyleManager.get_palette(theme_name)
+        
+        self.configure(style='TFrame')
+        self.toolbar_frame.configure(style='Card.TFrame')
+        self.content_container.configure(style='TFrame')
+        self.title_label.config(style='Card.TLabel')
+        
+        # Text sync
+        self.text.config(
+            background=palette['bg_main'], 
+            foreground=palette['text_main'],
+            selectbackground=palette['medic_brand'],
+            selectforeground="white"
+        )
+        
+        # Tags sync
+        self.text.tag_configure("INFO",      foreground=palette['medic_brand'])
+        self.text.tag_configure("SUCCESS",   foreground="#10B981")
+        self.text.tag_configure("WARNING",   foreground="#F59E0B")
+        self.text.tag_configure("ERROR",     foreground="#EF4444")
+        self.text.tag_configure("TIMESTAMP", foreground=palette['text_muted'])
 
     def log(self, message, level="INFO"):
         """Add a log entry to the console."""
