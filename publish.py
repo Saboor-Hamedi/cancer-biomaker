@@ -11,15 +11,21 @@ import subprocess
 import re
 import shutil
 
-def run_cmd(cmd):
-    """Utility to run shell commands and return output."""
+def run_cmd(cmd, verbose=False):
+    """Utility to run shell commands with optional real-time output."""
     try:
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True, shell=True)
-        return result.stdout.strip()
+        if verbose:
+            # Let output go to the terminal so user sees progress
+            subprocess.run(cmd, check=True, shell=True)
+            return "Done"
+        else:
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True, shell=True)
+            return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         print(f"Error running command: {' '.join(cmd) if isinstance(cmd, list) else cmd}")
-        print(f"Output: {e.output}")
-        print(f"Stderr: {e.stderr}")
+        if not verbose:
+            print(f"Output: {e.output}")
+            print(f"Stderr: {e.stderr}")
         return None
 
 def get_version():
@@ -82,7 +88,7 @@ def publish():
     
     run_cmd(f'git commit -m "Release {tag} - Clinical Dashboard Build"')
     print(f"🚀 Pushing to origin/{branch}...")
-    run_cmd(f"git push origin {branch}")
+    run_cmd(f"git push origin {branch}", verbose=True)
 
     # 4. Create Tag
     print(f"🏷️ Tag Management: {tag}...")
@@ -108,10 +114,10 @@ def publish():
     check_release = run_cmd(f"gh release view {tag}")
     if check_release:
         print(f"⚠️ Release {tag} exists. Refreshing assets...")
-        run_cmd(f'gh release upload {tag} {assets_str} --clobber')
+        run_cmd(f'gh release upload {tag} {assets_str} --clobber', verbose=True)
     else:
         print(f"🏗️ Creating New Release: {tag}")
-        run_cmd(f'gh release create {tag} {assets_str} --title "Clinical AI Dashboard {tag}" --notes "Automated clinical production build with multi-model forensic analysis."')
+        run_cmd(f'gh release create {tag} {assets_str} --title "Clinical AI Dashboard {tag}" --notes "Automated clinical production build with multi-model forensic analysis."', verbose=True)
 
     print("\n" + "="*60)
     print("PROFESSIONAL DEPLOYMENT SUCCESSFUL!")

@@ -81,24 +81,30 @@ def build():
         'sklearn.neighbors._partition_nodes',
         'sklearn.ensemble._gradient_boosting',
         'sklearn.utils._cython_blas',
-        'torch',
-        'torch_geometric',
-        'networkx',
         'scipy.special.cython_special',
         'PIL._tkinter_finder',
         'defusedxml',
         'unittest',
         'packaging',
         'pkg_resources',
-        'umap',
-        'shap',
-        'xgboost'
     ]
     for imp in hidden_imports:
         args.extend(['--hidden-import', imp])
         
     # COLLECT ALL: For complex AI libraries, we must collect everything to avoid runtime "ModuleNotFound"
-    collect_all = ['torch', 'torch_geometric', 'xgboost', 'shap', 'sklearn', 'umap']
+    # This is critical for XGBoost and PyTorch which have hidden DLLs
+    from PyInstaller.utils.hooks import collect_all
+    
+    packages_to_collect = ['torch', 'torch_geometric', 'xgboost', 'shap', 'sklearn', 'umap', 'matplotlib', 'numpy']
+    for pkg in packages_to_collect:
+        datas, binaries, hiddenimports = collect_all(pkg)
+        for d in datas:
+            args.extend(['--add-data', f"{d[0]}{sep}{d[1]}"])
+        for b in binaries:
+            args.extend(['--add-binary', f"{b[0]}{sep}{b[1]}"])
+        for hi in hiddenimports:
+            args.extend(['--hidden-import', hi])
+
     # 1. Create .ICO for professional Windows branding
     try:
         from PIL import Image
@@ -194,6 +200,13 @@ def build():
         if os.path.exists(installer_exe):
             print(f"3. Installer EXE: {os.path.abspath(installer_exe)}")
         print("="*50)
+
+        # Cleanup: Delete the 'build' directory to save space as it can be very large
+        build_dir = "build"
+        if os.path.exists(build_dir):
+            print(f"Cleaning up {build_dir} directory...")
+            shutil.rmtree(build_dir)
+            
         print("💡 Share the Installer or ZIP file. Users just need to run the installer.")
     except Exception as e:
         print(f"Build failed: {e}")
