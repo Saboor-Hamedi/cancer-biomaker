@@ -8,7 +8,10 @@ from tkinter import messagebox
 
 import pandas as pd
 import numpy as np
+import logging
 from utils.error_handler import ErrorHandler
+
+log = logging.getLogger(__name__)
 
 
 class ModelController:
@@ -355,6 +358,16 @@ class ModelController:
                 })
 
             summary_metadata['audit_registry'] = detailed_audit_data
+            
+            # 3.5 Dynamic Diagnostic Analysis (Signal Drift & Strength)
+            try:
+                from logic.diagnostic_engine import DiagnosticEngine
+                engine = DiagnosticEngine()
+                dynamic_insights = engine.analyze_batch(df)
+                summary_metadata['dynamic_insights'] = dynamic_insights
+            except Exception as e:
+                log.error("Dynamic Analysis failed: %s", e)
+                summary_metadata['dynamic_insights'] = {}
             
             # 4. Move Leaderboard Calculation to Background
             # This is extremely heavy due to Cross-Validation and was causing UI freezing

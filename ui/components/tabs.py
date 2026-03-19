@@ -341,32 +341,44 @@ class AnalysisTab(ttk.Frame):
         self.text.insert(tk.END, "  • Champion Algorithm: ", "bullet")
         self.text.insert(tk.END, f"'{best_model}' — Highest F1-Score in clinical batch evaluation.\n")
 
-        # Real data-backed insights from cancer_biomarkers.xlsx analysis
-        self.text.insert(tk.END, "  • Why Random Forest Outperforms: ", "bullet")
-        self.text.insert(tk.END, (
-            "86.0% of its decision-making mass rests on PSA_concentration alone. "
-            "The dataset shows 42 cancer-positive samples vs 458 healthy — "
-            "the RF ensemble of 100 trees handles this imbalance without bias, "
-            "achieving 100% Recall (zero missed diagnoses) at 98.9% Specificity.\n"
-        ))
-        self.text.insert(tk.END, "  • Why Linear Models Underperform: ", "dim")
-        self.text.insert(tk.END, (
-            "PSA levels in healthy patients average ~1,742 pg/mL vs ~58,205 pg/mL in cancer cases. "
-            "This 33x skew requires non-linear decision boundaries. "
-            "Logistic Regression and linear SVM struggle with extreme distributions in biomarker data.\n"
-        ))
+        dynamic = metadata.get('dynamic_insights', {}) if metadata else {}
+        
+        # Dynamic Signal Strength
+        signals = dynamic.get('signal_strength', [])
+        if signals:
+            top_s = signals[0]
+            self.text.insert(tk.END, f"  • Why {best_model} Outperforms: ", "bullet")
+            self.text.insert(tk.END, (
+                f"{top_s['impact']:.1%} of its decision-making mass rests on {top_s['marker']} alone in this batch. "
+                f"The AI committee identifies this as the primary diagnostic signal for this cohort.\n"
+            ))
+        else:
+            self.text.insert(tk.END, "  • Diagnostic Signal: ", "bullet")
+            self.text.insert(tk.END, "Weighted ensemble consensus distributed across all clinical biomarkers.\n")
+
+        # Dynamic Drift/Diversity
+        drifts = dynamic.get('drift', [])
+        if drifts:
+            self.text.insert(tk.END, "  • Population Drift Alert: ", "crit")
+            drift_str = ", ".join([f"{d['marker']} ({d['shift']})" for d in drifts])
+            self.text.insert(tk.END, f"Detected shift in {drift_str}. This cohort differs from the baseline training set.\n")
+        else:
+            self.text.insert(tk.END, "  • Cohort Stability: ", "pos")
+            self.text.insert(tk.END, "No significant population drift detected. Biomarker distributions match baseline.\n")
+
         self.text.insert(tk.END, "  • AI Committee Consensus: ", "dim")
         self.text.insert(tk.END, f"Avg agreement: {metadata.get('avg_consensus', 0):.2f}/{metadata.get('total_committee', 4)} models\n")
 
-        self.text.insert(tk.END, "\n4. BIOMARKER CLASSIFICATION THRESHOLDS (From Dataset)\n", "sub")
-        self.text.insert(tk.END, "  • PSA CRITICAL THRESHOLD: ", "bullet")
-        self.text.insert(tk.END, "28,224 pg/mL  — Max PSA observed in healthy population.\n", "metric")
-        self.text.insert(tk.END, "    └ Cancer cases: PSA range 30,173 – 99,265 pg/mL (avg 58,205 pg/mL)\n", "dim")
-        self.text.insert(tk.END, "    └ Healthy cases: PSA range 85 – 28,224 pg/mL (avg 1,742 pg/mL)\n", "dim")
-        self.text.insert(tk.END, "  • AFP ELEVATED THRESHOLD: ", "bullet")
-        self.text.insert(tk.END, "100 pg/mL  — Indicates hepatocellular involvement when PSA also elevated.\n", "metric")
-        self.text.insert(tk.END, "  • CA125 ELEVATED THRESHOLD: ", "bullet")
-        self.text.insert(tk.END, "35 U/mL  — Indicates ovarian/peritoneal pathology co-signal.\n", "metric")
+        self.text.insert(tk.END, "\n4. BIOMARKER CLASSIFICATION THRESHOLDS (Batch Dynamics)\n", "sub")
+        # Dynamic correlations
+        corrs = dynamic.get('correlations', [])
+        if corrs:
+            for c in corrs[:2]:
+                self.text.insert(tk.END, f"  • CO-SIGNAL DETECTED: ", "bullet")
+                self.text.insert(tk.END, f"{c['pair'][0]} and {c['pair'][1]} show {c['strength']} correlation ({c['score']:.2f}).\n", "metric")
+        else:
+            self.text.insert(tk.END, "  • Signal Independence: ", "bullet")
+            self.text.insert(tk.END, "Biomarkers in this batch appear statistically independent.\n", "dim")
 
         self.text.insert(tk.END, "\n5. STRATEGIC CLINICAL RECOMMENDATIONS\n", "sub")
         if positives > 0:
@@ -383,15 +395,16 @@ class AnalysisTab(ttk.Frame):
             self.text.insert(tk.END, "Maintain current ensemble weights. Baseline stability verified.\n")
 
         self.text.insert(tk.END, "\n6. CLINICAL PATHWAY & PATIENT GUIDANCE\n", "sub")
+        conf_zones = dynamic.get('confidence_zones', {})
         if positives > 0:
-            top_markers = metadata.get('top_markers', ['PSA Concentration']) if metadata else ['PSA']
+            top_markers = [s['marker'] for s in signals[:2]] if signals else ['PSA']
             self.text.insert(tk.END, "  • Primary Trigger: ", "bullet")
-            self.text.insert(tk.END, f"PSA surge (>28,224 pg/mL threshold) is the dominant cancer signal in this dataset ({', '.join(top_markers[:2])}).\n")
-            self.text.insert(tk.END, "  • Patient Next Steps: ", "bullet")
-            self.text.insert(tk.END, "Flagged patients: (1) Oncology referral, (2) Repeat PSA + free-PSA ratio testing, (3) TRUS biopsy if PSA > 50,000 pg/mL, (4) Lifestyle audit (diet, BMI, family history).\n")
+            self.text.insert(tk.END, f"Diagnostic spikes localized primarily in {', '.join(top_markers)}.\n")
+            self.text.insert(tk.END, "  • Batch Reliability: ", "bullet")
+            self.text.insert(tk.END, f"{conf_zones.get('certain', 0)} cases in high-confidence zone. {conf_zones.get('ambiguous', 0)} borderline cases flagged.\n")
         else:
-            self.text.insert(tk.END, "  • Clinical Status: All biomarkers within healthy baseline ranges.\n")
-            self.text.insert(tk.END, "  • Guidance: Continue standard wellness protocols. Re-screen in 6–12 months.\n")
+            self.text.insert(tk.END, "  • Clinical Status: All biomarkers within healthy baseline ranges for this batch.\n")
+            self.text.insert(tk.END, f"  • Guidance: {conf_zones.get('total', 0)} patients cleared for routine wellness protocols.\n")
 
         self.text.insert(tk.END, "\n7. COMPUTATIONAL LOGGING & PERFORMANCE\n", "sub")
         latency = metadata.get('latency', '12ms') if metadata else '15ms'
