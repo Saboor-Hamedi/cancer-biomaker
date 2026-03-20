@@ -798,40 +798,63 @@ class Visualizer:
 
     @staticmethod
     def plot_counterfactual_analysis(data, model_name):
-        """Plot the before/after counterfactual biomarker scenarios."""
+        """Plot the before/after counterfactual scenarios or safety buffer."""
         fig = Figure(figsize=(9, 5), facecolor=DESIGN_PALETTE['bg'])
         ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
 
-        if not data.get('changes'):
-            ax.text(0.5, 0.5, "No significant risk reduction changes identified\nor patient is already classified as Healthy.",
+        changes = data.get('changes', [])
+        is_healthy = data.get('is_healthy', False)
+
+        if not changes:
+            ax.text(0.5, 0.5, "No significant risk reduction changes identified\ndespite the active risk flag.",
                     ha='center', va='center', fontsize=STYLE_CONFIG['title_size'], color=DESIGN_PALETTE['neutral'])
             ax.axis('off')
             return fig
 
-        features = [c['feature'] for c in data['changes']]
-        originals = [c['original'] for c in data['changes']]
-        news = [c['new'] for c in data['changes']]
+        features = [c['feature'] for c in changes]
+        originals = [c['original'] for c in changes]
+        news = [c['new'] for c in changes]
 
         x = np.arange(len(features))
         width = 0.35
 
-        ax.bar(x - width/2, originals, width, label='Current State', color=DESIGN_PALETTE['danger'], alpha=0.8)
-        ax.bar(x + width/2, news, width, label='Target State (Lower Risk)', color=DESIGN_PALETTE['success'], alpha=0.9)
+        if is_healthy:
+            # Buffer Mode: Current vs. High-Risk Mean
+            ax.bar(x - width/2, originals, width, label='Current Healthy State', color=DESIGN_PALETTE['success'], alpha=0.9)
+            ax.bar(x + width/2, news, width, label='High-Risk Threshold (Mean)', color=DESIGN_PALETTE['danger'], alpha=0.5, hatch='//')
+            title_prefix = "Clinical Buffer Profile"
+            note_title = "Safety Distance Analysis"
+            note_text = ("The patient is currently Healthy. This chart shows the 'Diagnostic Buffer'—the biological distance "
+                         "between the current patient's biomarkers and the typical levels found in positive cases.")
+        else:
+            # Reduction Mode: Current vs. Target (Reduction)
+            ax.bar(x - width/2, originals, width, label='Current Risk State', color=DESIGN_PALETTE['danger'], alpha=0.8)
+            ax.bar(x + width/2, news, width, label='Target State (Lower Risk)', color=DESIGN_PALETTE['success'], alpha=0.9)
+            title_prefix = "Counterfactual Trajectory"
+            note_title = "What-If Scenario Risk Reductions"
+            note_text = (f"The patient is at High Risk ({data['current_risk']:.1%}). This chart shows how reducing primary "
+                         f"drivers can shift the diagnosis to a Lower Risk state ({data['new_risk']:.1%}).")
 
-        ax.set_ylabel('Biomarker Scale', fontsize=STYLE_CONFIG['label_size'], fontfamily=STYLE_CONFIG['font_family'])
-        ax.set_title(f"Counterfactual Trajectory — {model_name}", fontsize=STYLE_CONFIG['title_size']+2,
+        ax.set_ylabel('Biomarker Scale', fontsize=STYLE_CONFIG['label_size'], fontfamily=STYLE_CONFIG['font_family'], color=DESIGN_PALETTE['text'])
+        ax.set_title(f"{title_prefix} — {model_name}", fontsize=STYLE_CONFIG['title_size']+2,
                      fontweight='bold', pad=20, fontfamily=STYLE_CONFIG['font_family'], color=DESIGN_PALETTE['text'])
         ax.set_xticks(x)
-        ax.set_xticklabels(features, fontsize=STYLE_CONFIG['label_size']+2, rotation=15, ha='right')
-        ax.legend(frameon=True)
+        ax.set_xticklabels(features, fontsize=STYLE_CONFIG['label_size']+2, rotation=15, ha='right', color=DESIGN_PALETTE['text'])
+        
+        # Legend styling
+        legend = ax.legend(frameon=True, fontsize=STYLE_CONFIG['label_size'])
+        legend.get_frame().set_facecolor(DESIGN_PALETTE['bg'])
+
+        
         ax.grid(axis='y', linestyle='--', alpha=0.3)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
+        for spine in ax.spines.values():
+            spine.set_color(DESIGN_PALETTE['neutral'])
 
-        Visualizer._add_explanatory_note(fig, "What-If Scenario Risk Reductions", 
-            "The chart visualizes the minimal biomarker reductions required to transition the patient's AI diagnosis "
-            f"from High Risk ({data['current_risk']:.1%}) to Lower Risk ({data['new_risk']:.1%}). Focus clinical "
-            "interventions on these specific primary drivers.")
+        Visualizer._add_explanatory_note(fig, note_title, note_text)
+        return fig
+
 
     @staticmethod
     def plot_biomarker_network(data, model_name="Graph Neural Network"):

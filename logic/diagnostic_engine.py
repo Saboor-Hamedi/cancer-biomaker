@@ -94,3 +94,43 @@ class DiagnosticEngine:
             'total': len(df),
             'ratio': certain / len(df) if len(df) > 0 else 0
         }
+
+    def get_individual_forensic(self, inputs, risk_score):
+        """Analyze a single patient's biomarker profile relative to the clinical cohort."""
+        biomarker_deviations = []
+        
+        for marker, baseline in self.baseline_stats.items():
+            # Find matching key in inputs
+            match = [k for k in inputs.keys() if marker.lower() in str(k).lower()]
+            if match:
+                val = float(inputs[match[0]])
+                z_score = (val - baseline['mean']) / baseline['std']
+                biomarker_deviations.append({
+                    'marker': marker,
+                    'value': val,
+                    'z_score': z_score,
+                    'deviation': f"{abs(z_score):.1f}σ {'Above' if z_score > 0 else 'Below'}",
+                    'severity': 'CRITICAL' if abs(z_score) > 3.0 else 'WARNING' if abs(z_score) > 1.5 else 'NORMAL'
+                })
+        
+        # Clinical Triage Category
+        if risk_score > 0.85:
+            triage = "Level 1: Immediate Oncology Consultation Required"
+            action = "Immediate biopsy and multiparametric MRI within 7 days."
+        elif risk_score > 0.65:
+            triage = "Level 2: Urgent Diagnostic Follow-up"
+            action = "Confirmatory blood test and diagnostic imaging within 14 days."
+        elif risk_score > 0.35:
+            triage = "Level 3: Elevated Vigilance"
+            action = "3-month scheduled re-test to track biomarker velocity."
+        else:
+            triage = "Level 4: Routine Wellness Observation"
+            action = "Standard annual clinical surveillance recommended."
+            
+        return {
+            'deviations': sorted(biomarker_deviations, key=lambda x: abs(x['z_score']), reverse=True),
+            'triage_level': triage,
+            'primary_action': action,
+            'metabolic_stability': "Unstable" if any(d['severity'] == 'CRITICAL' for d in biomarker_deviations) else "Stable"
+        }
+

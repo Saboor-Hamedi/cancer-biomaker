@@ -1074,13 +1074,33 @@ class ModelManager:
         base_prob = model.predict_proba(base_df)[0][1]
         
         if base_pred == 0:
+            # If healthy, provide a "Safety Buffer" analysis instead of empty results
+            # Compare patient biomarkers to the high-risk population mean
+            stats = self.get_biomarker_separation_stats(data_path) if data_path else {}
+            explanation = self.get_local_explanation(model_name, inputs, data_path)
+            
+            changes_applied = []
+            if explanation and stats:
+                for feat, _ in explanation[:3]:
+                    if feat in stats:
+                        h_mean, d_mean = stats[feat]
+                        changes_applied.append({
+                            "feature": feat,
+                            "original": float(base_df.at[0, feat]),
+                            "new": float(d_mean),
+                            "reduction": 0.0, # Not a reduction, but a comparison
+                            "mode": "buffer"
+                        })
+
             return {
-                "status": "Healthy",
-                "message": "Patient is currently classified as Low Risk.",
+                "status": "Healthy (Low Risk)",
+                "message": "Patient is in the safe zone. Visualizing buffer relative to High-Risk population.",
                 "current_risk": float(base_prob),
                 "new_risk": float(base_prob),
-                "changes": []
+                "changes": changes_applied,
+                "is_healthy": True
             }
+
             
         # If high risk, find top contributing features
         explanation = self.get_local_explanation(model_name, inputs, data_path)

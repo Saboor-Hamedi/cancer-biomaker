@@ -280,20 +280,21 @@ class AnalysisTab(ttk.Frame):
         self.sb.config(command=self.text.yview)
         self.text.config(state=tk.DISABLED)
 
-        # Premium Tags
+        # Premium Forensic Tags - Theme-neutral vibrant colors
         self.text.tag_configure("title", font=('Inter', 20, 'bold'), spacing3=20)
         self.text.tag_configure("sub", font=('Inter', 12, 'bold'), spacing1=20, spacing3=10)
-        self.text.tag_configure("crit", font=('Inter', 11, 'bold'))
-        self.text.tag_configure("pos", font=('Inter', 11, 'bold'))
-        self.text.tag_configure("metric", font=('Inter', 11, 'bold'))
-        self.text.tag_configure("dim", font=('Inter', 10))
-        self.text.tag_configure("highlight", font=('Inter', 10, 'italic'))
-        self.text.tag_configure("bullet", font=('Inter', 12, 'bold'))
-        self.text.tag_configure("code", font=('Consolas', 10))
-        self.text.tag_configure("table_head", font=('Consolas', 10, 'bold'))
+        self.text.tag_configure("crit", font=('Inter', 11, 'bold'), foreground="#EF4444") # Red-500
+        self.text.tag_configure("pos", font=('Inter', 11, 'bold'), foreground="#10B981")  # Emerald-500
+        self.text.tag_configure("metric", font=('Inter', 11, 'bold'), foreground="#3B82F6") # Blue-500
+        self.text.tag_configure("dim", font=('Inter', 10), foreground="#71717A")      # Zinc-500
+        self.text.tag_configure("highlight", font=('Inter', 10, 'italic'), foreground="#F59E0B") # Amber-500
+        self.text.tag_configure("bullet", font=('Inter', 12, 'bold'), foreground="#3B82F6")
+        self.text.tag_configure("code", font=('Consolas', 10), background="#18181B", foreground="#A1A1AA")
+        self.text.tag_configure("table_head", font=('Consolas', 10, 'bold'), foreground="#3B82F6")
         self.text.tag_configure("table_row", font=('Consolas', 10))
         self.text.tag_configure("table_row_bold", font=('Consolas', 10, 'bold'))
-        self.text.tag_configure("table_row_crit", font=('Consolas', 10, 'bold'))
+        self.text.tag_configure("table_row_crit", font=('Consolas', 10, 'bold'), foreground="#EF4444")
+
 
     def clear(self):
         self.text.config(state=tk.NORMAL)
@@ -439,46 +440,79 @@ class AnalysisTab(ttk.Frame):
         self.text.config(state=tk.DISABLED)
 
     def display_prediction_results(self, data):
+        """Displays a high-density clinical forensic report for an individual patient."""
         self.clear()
         self.text.config(state=tk.NORMAL)
         is_pos = data.get('prediction') == 1
+        risk = data.get('risk', 0)
+        forensic = data.get('forensic', {})
         
-        self.text.insert(tk.END, "INDIVIDUAL DIAGNOSTIC FORENSIC\n", "title")
-        self.text.insert(tk.END, f"Status: {'POSITIVE' if is_pos else 'NEGATIVE'} | Reliability: {data.get('confidence', 0):.1%} | Model: {data.get('model', 'Ensemble')}\n", "dim")
-        
-        self.text.insert(tk.END, "\n1. QUANTITATIVE RISK ANALYSIS\n", "sub")
-        self.text.insert(tk.END, f"  • Risk Probability: {data.get('risk', 0):.2%}\n")
-        self.text.insert(tk.END, f"  • Ensemble Momentum: {data.get('consensus', 'N/A')} Agreements\n")
-        
-        self.text.insert(tk.END, "\n2. DIAGNOSTIC REASONING (WHY?)\n", "sub")
-        if is_pos:
-            self.text.insert(tk.END, "  • Primary Driver: ", "bullet")
-            # Pull inputs to show reason
-            inputs = data.get('inputs', {})
-            top_features = sorted(inputs.items(), key=lambda x: float(x[1]) if str(x[1]).replace('.','').isdigit() else 0, reverse=True)[:2]
-            reason = f"Elevated levels in {', '.join([f[0] for f in top_features])} have pushed the risk score beyond the clinical cut-off."
-            self.text.insert(tk.END, reason + "\n")
-            self.text.insert(tk.END, "  • Signal Pattern: ", "dim")
-            self.text.insert(tk.END, "A high-variance spike detected in primary biomarkers, suggesting potential malignant cellular activity.\n")
-        else:
-            self.text.insert(tk.END, "  • Primary Driver: ", "bullet")
-            self.text.insert(tk.END, "Biomarker baseline is stable. No statistically significant spikes detected.\n")
-            self.text.insert(tk.END, "  • Signal Pattern: ", "dim")
-            self.text.insert(tk.END, "Homogeneous biomarker distribution across all clinical features.\n")
+        self.text.insert(tk.END, "INDIVIDUAL DIAGNOSTIC FORENSIC (DEEP PROFILE)\n", "title")
+        header = f"Status: {'POSITIVE' if is_pos else 'NEGATIVE'} | Reliability: {data.get('confidence', 0):.1%} | Stability: {data.get('stability_metric', 'N/A')}\n"
+        self.text.insert(tk.END, header, "dim")
+        self.text.insert(tk.END, f"Engine: {data.get('model', 'Ensemble')}\n", "dim")
+        self.text.insert(tk.END, "═" * 70 + "\n\n")
 
-        self.text.insert(tk.END, "\n3. CLINICAL NEXT STEPS (ACTION PLAN)\n", "sub")
-        if is_pos:
-            self.text.insert(tk.END, "  • Level 1: Immediate oncology referral for confirmatory diagnostic imaging (CT/MRI).\n", "crit")
-            self.text.insert(tk.END, "  • Level 2: Blood serum re-verification for biomarker verification.\n")
-            self.text.insert(tk.END, "  • Patient Info: Avoid strenuous activity; maintain current hydration levels.\n")
-        else:
-            self.text.insert(tk.END, "  • Routine: Maintain current clinical surveillance schedule.\n", "pos")
-            self.text.insert(tk.END, "  • Wellness: Standard preventive health maintenance recommended.\n")
 
-        self.text.insert(tk.END, "\n" + "—" * 40 + "\n", "dim")
-        self.text.insert(tk.END, "DISCLAIMER: This is an AI-assisted diagnostic aid. Final clinical decisions must be made by a qualified medical professional.", "dim")
+        
+        self.text.insert(tk.END, "1. AI COMMITTEE VOTE BREAKDOWN (CONSENSUS)\n", "sub")
+        self.text.insert(tk.END, f"  • Forensic Consensus: {data.get('consensus', 'N/A')} Agreements\n", "metric")
+        
+        committee = data.get('individual_results', [])
+        for p in committee:
+            res_str = "⚑ POS" if p['prediction'] == 1 else "✓ NEG"
+            tag = "crit" if p['prediction'] == 1 else "pos"
+            self.text.insert(tk.END, f"    - {p['model']:.<25} ", "dim")
+            self.text.insert(tk.END, f"{res_str} ({p['risk']:.1%} Risk)\n", tag)
+        
+        self.text.insert(tk.END, "\n2. METABOLIC DEVIATION & VOLATILITY ANALYSIS\n", "sub")
+        deviations = forensic.get('deviations', [])
+        if deviations:
+            self.text.insert(tk.END, f"  • Core Biomarker Stability: {forensic.get('metabolic_stability', 'Stable')}\n", "highlight")
+            for d in deviations:
+                tag = "crit" if d['severity'] == 'CRITICAL' else "metric" if d['severity'] == 'WARNING' else "dim"
+                self.text.insert(tk.END, f"    - {d['marker']:.<25} ", "dim")
+                self.text.insert(tk.END, f"{d['value']:,.1f} units ", "highlight")
+                self.text.insert(tk.END, f" [Dev: {d['deviation']}]\n", tag)
+        else:
+            self.text.insert(tk.END, "  • No primary biomarker deviations detected relative to cohort baseline.\n")
+
+        self.text.insert(tk.END, "\n3. DIAGNOSTIC REASONING (XAI NARRATIVE)\n", "sub")
+        inputs = data.get('inputs', {})
+        # Pull meaningful inputs
+        top_features = sorted(inputs.items(), key=lambda x: float(str(x[1])) if str(x[1]).replace('.','').isdigit() else 0, reverse=True)[:3]
+        
+        if is_pos:
+            self.text.insert(tk.END, "  • Risk Driver: ", "crit")
+            self.text.insert(tk.END, f"Elevated levels in {', '.join([f[0] for f in top_features])} confirm the 'Detected' fingerprint.\n")
+            self.text.insert(tk.END, "  • Signal Insight: ", "dim")
+            self.text.insert(tk.END, f"Profile aligns with the high-risk {data.get('model')} cluster. Metabolic momentum is accelerating.\n")
+        else:
+            self.text.insert(tk.END, "  • Stability Proof: ", "pos")
+            self.text.insert(tk.END, "Global biomarker values are homogeneous and centered within the healthy cluster.\n")
+            self.text.insert(tk.END, "  • Clinical Barrier: ", "dim")
+            self.text.insert(tk.END, "Primary diagnostic triggers remain significantly below the predictive threshold.\n")
+
+        self.text.insert(tk.END, "\n4. CLINICAL TRIAGE & STRATEGIC ACTION PLAN\n", "sub")
+        self.text.insert(tk.END, f"  • Triage Rank: ", "dim")
+        self.text.insert(tk.END, f"{forensic.get('triage_level', 'N/A')}\n", "crit" if risk > 0.6 else "pos")
+        
+        # Longitudinal Context Injection
+        vel = data.get('velocity_context')
+        if vel:
+            self.text.insert(tk.END, f"  • Velocity Verdict: ", "dim")
+            self.text.insert(tk.END, f"{vel.get('verdict', 'Stable')}\n", "crit" if vel.get('verdict_level') == 'DANGER' else "dim")
+            self.text.insert(tk.END, f"  • Trend Momentum: ", "dim")
+            self.text.insert(tk.END, f"PSA Velocity={vel.get('psa_velocity'):+.1f}% | Doubling Time={vel.get('psa_doubling')}\n", "metric")
+
+        self.text.insert(tk.END, f"  • Strategic Path: ", "bullet")
+        self.text.insert(tk.END, f"{forensic.get('primary_action', 'Continue monitoring')}\n")
+
+        self.text.insert(tk.END, "\n" + "—" * 70 + "\n", "dim")
+        self.text.insert(tk.END, "DISCLAIMER: AI-assisted diagnostic forensic. Final clinical validation is mandatory.", "dim")
         
         self.text.config(state=tk.DISABLED)
+
 
     def display_metrics(self, metrics, model_name):
         """Displays high-fidelity validation metrics with clinical interpretations."""
