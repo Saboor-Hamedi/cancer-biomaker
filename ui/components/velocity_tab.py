@@ -129,6 +129,7 @@ class VelocityTab(ttk.Frame):
 
     def _render_plot(self):
         history = self.velocity_data['history']
+        forecast = self.velocity_data.get('forecast')
         
         months = [h['month'] for h in history]
         psa = [h['psa'] for h in history]
@@ -144,19 +145,41 @@ class VelocityTab(ttk.Frame):
             if other_ax != self.ax:
                 other_ax.remove()
 
-        # Plot Biomarkers on left axis
-        line1, = self.ax.plot(months, psa, marker='o', color='#3B82F6', label='PSA (pg/mL)', linewidth=2)
-        line2, = self.ax.plot(months, afp, marker='s', color='#10B981', label='AFP (pg/mL)', linewidth=2)
-        line3, = self.ax.plot(months, ca125, marker='^', color='#F59E0B', label='CA125 (U/mL)', linewidth=2)
-        
-        # Get theme colors
-        from ui.styles import StyleManager
-        # We need a way to get the current mode. 
-        # For simplicity, we assume refresh_theme was called and set fig/ax colors.
-        # text_color = self.fig.get_facecolor() # Just a proxy or we can use a more robust check
-        # Actually it's better to use a stored property or just check if it's black-ish
+        # ── 1. BACKGROUND CLINICAL ZONES ──
+        # We shade based on the standardized Risk axis (0.0 - 1.0)
+        ax2 = self.ax.twinx()
+        ax2.axhspan(0.0, 0.3, color='#10B981', alpha=0.04, label='Healthy Zone')
+        ax2.axhspan(0.3, 0.7, color='#F59E0B', alpha=0.04, label='Monitoring Zone')
+        ax2.axhspan(0.7, 1.0, color='#EF4444', alpha=0.04, label='Critical Zone')
+
+        # ── 2. HISTORICAL DATA ──
+        line1, = self.ax.plot(months, psa, marker='o', color='#3B82F6', label='PSA (Historical)', linewidth=2)
+        line2, = self.ax.plot(months, afp, marker='s', color='#10B981', label='AFP (Historical)', linewidth=2)
+        line3, = self.ax.plot(months, ca125, marker='^', color='#F59E0B', label='CA125 (Historical)', linewidth=2)
+        line4, = ax2.plot(months, risk, marker='D', color='#EF4444', label='AI Risk (Historical)', linewidth=2.5)
+
+        # ── 3. PREDICTIVE FORECASTING ──
+        if forecast:
+            f_months = [months[-1], forecast['month']]
+            # Plot dotted extensions
+            self.ax.plot(f_months, [psa[-1], forecast['psa']], '--', color='#3B82F6', alpha=0.5, label='PSA Forecast')
+            self.ax.plot(f_months, [afp[-1], forecast['afp']], '--', color='#10B981', alpha=0.5)
+            self.ax.plot(f_months, [ca125[-1], forecast['ca125']], '--', color='#F59E0B', alpha=0.5)
+            ax2.plot(f_months, [risk[-1], forecast['risk']], ':', color='#EF4444', alpha=0.6, linewidth=2, label='Risk Forecast')
+            
+            # Add "FORECAST" text label on X-axis
+            from ui.styles import StyleManager
+            is_dark = sum(self.fig.patch.get_facecolor()[:3]) < 1.0 
+            text_mute = "#94A3B8" if is_dark else "#64748B"
+            
+            self.ax.axvline(x=0, color=text_mute, linestyle='-', alpha=0.3, linewidth=1)
+            self.ax.text(forecast['month'], self.ax.get_ylim()[0], ' FORECAST', 
+                         color=text_mute, fontsize=8, fontweight='bold', va='bottom')
+
+        # Styling
         is_dark = sum(self.fig.patch.get_facecolor()[:3]) < 1.0 
         label_color = "#F8FAFC" if is_dark else "#475569"
+
         
         self.ax.set_xlabel("Time (Months from Present)", fontsize=10, color=label_color)
         self.ax.set_ylabel("Biomarker Concentration", fontsize=10, color=label_color)
@@ -165,17 +188,14 @@ class VelocityTab(ttk.Frame):
         self.ax.spines['right'].set_visible(False)
         self.ax.tick_params(colors=label_color)
         
-        # Plot Clinical Risk on right axis
-        ax2 = self.ax.twinx()
-        line4, = ax2.plot(months, risk, marker='D', color='#EF4444', label='AI Risk Score', linewidth=2, linestyle='--')
-        ax2.set_ylabel("Risk Score (0.0 - 1.0)", fontsize=10, color='#EF4444')
-        ax2.set_ylim(0, 1)
+        ax2.set_ylabel("Clinical Risk Score (0.0 - 1.0)", fontsize=10, color='#EF4444', fontweight='bold')
+        ax2.set_ylim(0, 1.05) # Slight headroom
         ax2.spines['top'].set_visible(False)
         ax2.tick_params(colors='#EF4444')
 
-        # Combine legends
-        lines = [line1, line2, line3, line4]
-        labels = [l.get_label() for l in lines]
+        # Legend (Selected items only for clarity)
+        lines = [line1, line4]
+        labels = ["Biomarkers", "AI Risk Score"]
         self.ax.legend(lines, labels, loc='upper left', frameon=True, fontsize=9,
                        facecolor=self.fig.patch.get_facecolor(), 
                        edgecolor="#334155" if is_dark else "#E2E8F0",
@@ -194,25 +214,51 @@ class VelocityTab(ttk.Frame):
         bg = "#18181B" if is_dark else "#F8FAFC"
         border = "#27272A" if is_dark else "#E2E8F0"
         
-        def make_metric(parent, label, value, is_percentage=True):
+        # ── 1. TREND VERDICT BOX (NEW) ──
+        verdict_frame = tk.Frame(self.metrics_grid, bg=bg, highlightthickness=1, 
+                                 highlightbackground=border, padx=15, pady=10)
+        verdict_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        level_colors = {"DANGER": "#EF4444", "WARNING": "#F59E0B", "SUCCESS": "#10B981", "INFO": "#3B82F6"}
+        v_color = level_colors.get(metrics.get('verdict_level', 'INFO'), "#3B82F6")
+        
+        tk.Label(verdict_frame, text="CLINICAL TREND VERDICT", font=('Inter', 8, 'bold'), 
+                 bg=bg, fg="#94A3B8" if is_dark else "#64748B").pack(anchor=tk.W)
+        tk.Label(verdict_frame, text=metrics.get('verdict', 'Data stable.'), 
+                 font=('Inter', 11, 'bold'), bg=bg, fg=v_color, wraplength=800, justify=tk.LEFT).pack(anchor=tk.W, pady=(2, 0))
+
+        # ── 2. METRICS CARDS ──
+        cards_container = ttk.Frame(self.metrics_grid, style='TFrame')
+        cards_container.pack(fill=tk.X)
+
+        def make_metric(parent, label, value, is_percentage=True, sub_label=None):
             f = tk.Frame(parent, bg=bg, highlightthickness=1, highlightbackground=border, padx=15, pady=12)
             tk.Label(f, text=label, font=('Inter', 9), bg=bg, fg="#94A3B8" if is_dark else "#64748B").pack(anchor=tk.W)
             
-            color = "#10B981" if value <= 0 else "#EF4444" 
-            sign = "+" if value > 0 else ""
-            fmt = f"{sign}{value:.1f}%" if is_percentage else f"{value}"
+            # Numeric value treatment
+            try:
+                num_val = float(value) if not isinstance(value, str) else 0
+                color = "#10B981" if num_val <= 0 else "#EF4444" 
+                sign = "+" if num_val > 0 else ""
+                fmt = f"{sign}{num_val:.1f}%" if is_percentage else str(value)
+            except:
+                color = "#3B82F6"
+                fmt = str(value)
             
             tk.Label(f, text=fmt, font=('Inter', 14, 'bold'), bg=bg, fg=color).pack(anchor=tk.W)
+            if sub_label:
+                tk.Label(f, text=sub_label, font=('Inter', 7, 'italic'), bg=bg, fg="#94A3B8").pack(anchor=tk.W)
             return f
 
-        m1 = make_metric(self.metrics_grid, "PSA 3-Month Velocity", metrics.get('psa_velocity', 0))
+        m1 = make_metric(cards_container, "PSA Velocity", metrics.get('psa_velocity', 0), sub_label="Shift in last 3 months")
         m1.pack(side=tk.LEFT, padx=(0, 15), fill=tk.X, expand=True)
         
-        m2 = make_metric(self.metrics_grid, "AFP 3-Month Velocity", metrics.get('afp_velocity', 0))
+        m2 = make_metric(cards_container, "PSA Doubling Time", metrics.get('psa_doubling', 'N/A'), is_percentage=False, sub_label="Clinical malignancy proxy")
         m2.pack(side=tk.LEFT, padx=(0, 15), fill=tk.X, expand=True)
 
-        m3 = make_metric(self.metrics_grid, "AI Risk Shift", metrics.get('risk_delta', 0))
+        m3 = make_metric(cards_container, "AI Risk Shift", metrics.get('risk_delta', 0), sub_label="Diagnostic momentum")
         m3.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
 
     def clear(self):
         """Reset tab to its initial state."""

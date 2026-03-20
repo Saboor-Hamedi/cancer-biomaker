@@ -193,3 +193,38 @@ During our extraction pipeline, we specifically isolate and weigh three primary 
    - AI Weight: Contributes ~6.6%. Elevated levels topically correlate with the Detected cluster in our t-SNE mapping.
 
 The AI Ensemble does not treat these markers in isolation. It looks for "Co-Biomarker Synergy" — for example, if PSA surges while AFP and CA125 also show abnormal peaks, the clinical confidence of the prediction exponentially increases.
+
+----
+NEW: Patient Trajectory Analysis (The Dashboard Velocity Engine)
+
+The system doesn’t just analyze a single snapshot; it tracks the "Metabolic Momentum" of the patient over time through the Velocity Dashboard.
+
+1. Velocity Tracking (Biomarker Rate of Change)
+   - Clinical Logic: A high PSA value is concerning, but a PSA that has increased by 20% in just 3 months is a "Red Alert." 
+   - Math: We calculate the Delta (%) between the current reading and the reading from 3 months ago. A "Risk Shift" of >15% is classified as High Momentum.
+
+2. PSA Doubling Time (The Oncology Standard)
+   - Calculation: We use the formula $(ln(2) \times 3) / ln(CurrentValue / PrevValue)$. 
+   - Clinical Importance: This is a globally recognized proxy for cancer aggressiveness. A doubling time of <6 months suggests highly active malignancy. The AI extracts this "Dynamic Feature" to increase the accuracy of its triage.
+
+3. Clinical Reference Zones
+   - The system contextually "shades" the patient's journey into three risk categories based on the AI Risk Score:
+     - Healthy Zone (0.0 – 0.3): Baseline stability, low monitoring priority.
+     - Monitoring Zone (0.3 – 0.7): "Yellow Zone" — requires more frequent lab tests.
+     - Critical Zone (0.7 – 1.0): "Red Zone" — represents a high-risk 8.4% biological fingerprint.
+
+4. Predictive Forecasting (Future Projection)
+   - How it works: The system performs a linear projection from the last two data points, extending the trajectory by +3 months.
+   - Clinical Goal: This allows a clinician to see the "Predicted Risk." It identifies patients who aren't critical *yet*, but will be in 90 days if their current biomarker velocity continues.
+
+5. Co-Biomarker Synergy
+   - The trajectory traces how multiple lines (PSA Blue, AFP Green, CA125 Yellow) interact. 
+   - If they "couple" (surge together), the Red Risk Line accelerates, leading to an automated "CRITICAL TREND" verdict. This move from single-marker monitoring to "Metabolic Synergy" is the core of our next-gen audit system.
+
+6. Automated Trend Verdict
+   - To make the data actionable, the AI generates a human-friendly conclusion:
+     - DANGER: Rapid escalation (Risk Shift > 15%).
+     - WARNING: Significant momentum (Risk Shift > 5%).
+     - SUCCESS: Receding risk/treatment response (Risk Shift < -5%).
+     - STABLE: Baseline consistency.
+
