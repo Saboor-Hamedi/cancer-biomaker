@@ -35,19 +35,19 @@ class Dashboard(ttk.Frame):
         # We'll use the default theme for initial values, or better, let main.py update these.
         # But for now, we remove the hardcoded #FFFFFF
         
-        # Header Main Title
-        header_frame = ttk.Frame(self, style='Card.TFrame', padding=(20, 15))
-        header_frame.pack(fill=tk.X, padx=15, pady=(15, 5))
-        
-        title_container = ttk.Frame(header_frame, style='Card.TFrame')
-        title_container.pack(side=tk.LEFT)
-        
-        ttk.Label(title_container, text="Cancer Biomarker AI", style='Header.TLabel').pack(anchor=tk.W)
-        ttk.Label(title_container, text="Predictive diagnostics & explainable clinical analysis", style='SubHeader.TLabel').pack(anchor=tk.W)
+        # Header Main Title - REMOVED per user request to save vertical space
+        # header_frame = ttk.Frame(self, style='Card.TFrame', padding=(20, 15))
+        # header_frame.pack(fill=tk.X, padx=15, pady=(15, 5))
+        # ...
 
-        # Status Bar with Grid Layout
+        # Status Bar with Grid Layout - FIXED HEIGHT to prevent UI shifts
         self.status_frame = ttk.Frame(self, style='Card.TFrame', padding=(15, 8))
         self.status_frame.pack(fill=tk.X, padx=15, pady=5)
+        self.status_frame.update_idletasks() # Ensure it calculates natural height
+        # Lock vertical growth
+        h = self.status_frame.winfo_reqheight()
+        self.status_frame.configure(height=h)
+        self.status_frame.pack_propagate(False)
         self.status_frame.columnconfigure(0, weight=1) # Status side
         self.status_frame.columnconfigure(1, weight=0) # Stats side
         

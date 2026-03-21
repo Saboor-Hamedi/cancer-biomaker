@@ -136,29 +136,45 @@ class CancerDetectionApp:
             'system_reset': self.model_controller.handle_system_reset,
             'show_counterfactual': self.visualization_controller.show_counterfactual_analysis,
             'show_biomarker_network': self.visualization_controller.show_biomarker_network,
+            'search': self.data_controller.handle_search,
+            'on_patient_selected': self.data_controller.on_patient_selected,
+            'show_ai_chat': self.show_ai_chat,
             'check_updates': lambda: self.update_manager.check_for_updates(silent=False),
             'refresh_styles': self.refresh_global_styles
         }
         self.layout_manager.callbacks.update(callbacks)
         self.layout_manager.setup_layout()
+        # Single style application after layout is complete
         self.refresh_global_styles()
         
-        if self.data_manager.restore_session():
-            path = self.data_manager.data_path
-            self.layout_manager.log_message(f"Auto-loaded dataset: {os.path.basename(path)}", level="INFO")
-            self.layout_manager.update_status(f"Dataset Ready: {os.path.basename(path)}")
-            self.layout_manager.refresh_data_tree()
-            df = self.data_manager.uploaded_df
-            if self.layout_manager.dashboard:
-                self.layout_manager.dashboard.update_data_info(rows=len(df), cols=len(df.columns), samples=len(df))
-        else:
-            self.layout_manager.update_status("No dataset loaded. Please upload to begin.")
+        # Session restoration moved to background thread inside _check_models_on_startup()
+        self.layout_manager.update_status("Initializing clinical environment...")
 
         self.event_handler.setup_event_bindings()
         self.menu_handler.build_menubar()
         self._check_models_on_startup()
         self.update_manager.check_for_updates(silent=True)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def show_ai_chat(self):
+        """Launches the AI Clinical Research Copilot without freezing the UI."""
+        self.layout_manager.update_status("Loading Clinical AI Specialists...", "orange")
+        
+        def _deferred_load_and_open():
+            try:
+                # Expensive imports happen in this background thread
+                from ai.modal.AIChatModal import AIChatModal
+                # Return to main thread to open the window
+                self.root.after(0, lambda: self._open_ai_modal(AIChatModal))
+            except Exception as e:
+                self.root.after(0, lambda: self.error_handler.log_and_notify("AI Loading Error", e))
+
+        threading.Thread(target=_deferred_load_and_open, daemon=True).start()
+
+    def _open_ai_modal(self, modal_class):
+        """Helper to actually open the modal after imports finish."""
+        self.layout_manager.update_status("AI Ready.", "#10B981")
+        modal_class(self.root, settings_manager=self.settings_manager)
 
     def refresh_global_styles(self):
         StyleManager.apply_styles(self.root, self.settings_manager.settings)
@@ -192,20 +208,25 @@ class CancerDetectionApp:
 
     def _check_models_on_startup(self):
         def check_task():
-            success, msg = self.model_manager.check_and_train_models("", self.layout_manager.update_status, force=False)
-            if success:
-                self.data_manager.restore_session()
-                self.data_controller.data_path = self.data_manager.data_path
-                self.root.after(0, lambda: self.layout_manager.refresh_input_features(self.model_manager.feature_names))
-                if self.data_manager.uploaded_df is not None:
-                    df = self.data_manager.uploaded_df
+            # 1. Restore previous session in the background
+            if self.data_manager.restore_session():
+                path = self.data_manager.data_path
+                self.data_controller.data_path = path
+                df = self.data_manager.uploaded_df
+                if df is not None:
                     self.root.after(0, self.layout_manager.refresh_data_tree)
                     self.root.after(0, lambda: self.layout_manager.dashboard.update_data_info(rows=len(df), cols=len(df.columns), samples=len(df)))
+                self.root.after(0, lambda: self.layout_manager.log_message(f"Auto-loaded: {os.path.basename(path)}", level="INFO"))
+
+            # 2. Check clinical model status
+            success, msg = self.model_manager.check_and_train_models("", self.layout_manager.update_status, force=False)
+            if success:
+                self.root.after(0, lambda: self.layout_manager.refresh_input_features(self.model_manager.feature_names))
                 self.root.after(0, lambda: self.layout_manager.update_status("System Ready — Models Loaded", "#10B981"))
                 self.root.after(0, lambda: self.error_handler.notify("Clinical models loaded and ready.", type='success'))
             else:
-                self.root.after(0, lambda: self.layout_manager.update_status("Welcome! Upload a dataset to train models.", "#3B82F6"))
-                self.root.after(0, lambda: self.error_handler.notify("No trained models found. Upload dataset and click Train Models.", type='info'))
+                self.root.after(0, lambda: self.layout_manager.update_status("Upload dataset to train models.", "#3B82F6"))
+                self.root.after(0, lambda: self.error_handler.notify("No trained models found.", type='info'))
         threading.Thread(target=check_task, daemon=True).start()
 
 class ClinicalLogRedirector:

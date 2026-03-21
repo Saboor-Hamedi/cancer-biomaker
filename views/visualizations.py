@@ -2,19 +2,12 @@ import os
 import time
 import tkinter as tk
 from tkinter import messagebox, ttk
-
-import matplotlib
-
-matplotlib.use('TkAgg')  # Use TkAgg backend for tkinter compatibility
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import psutil
-import seaborn as sns
 import textwrap
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from matplotlib.figure import Figure
-from scipy import stats
+
+# We remove top-level matplotlib/seaborn/scipy imports to prevent dashboard startup freeze.
+# These will be imported lazily inside the Visualizer methods.
 
 # ── Design System ─────────────────────────────────────────────────────────────
 DESIGN_PALETTE = {
@@ -42,6 +35,11 @@ class Visualizer:
 
     @staticmethod
     def _add_explanatory_note(fig, title, text):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """Adds a standardized explanatory note box to the bottom of the figure with wrapping."""
         # Wrap text to prevent horizontal overflow in fixed-size modals
         wrapped_text = textwrap.fill(text, width=105)
@@ -59,6 +57,11 @@ class Visualizer:
 
     @staticmethod
     def center_window(window, width, height):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         window.withdraw()
         window.update_idletasks()
         screen_width = window.winfo_screenwidth()
@@ -70,6 +73,11 @@ class Visualizer:
 
     @staticmethod
     def show_modal(parent, title, fig):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """Open a native-like centered chart window with modal properties."""
         modal = tk.Toplevel(parent)
         modal.title(f"XAI Analysis: {title}")
@@ -103,6 +111,11 @@ class Visualizer:
         Visualizer._open_modals.append(modal)
 
         def _close():
+            import matplotlib.pyplot as plt
+            import seaborn as sns
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+            from scipy import stats
             if modal in Visualizer._open_modals:
                 Visualizer._open_modals.remove(modal)
             modal.destroy()
@@ -112,6 +125,11 @@ class Visualizer:
 
     @staticmethod
     def close_all_modals():
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """Close all open modal windows"""
         for modal in Visualizer._open_modals[:]:  # Copy the list to avoid modification during iteration
             try:
@@ -122,6 +140,11 @@ class Visualizer:
 
     @staticmethod
     def plot_feature_importance(model, feature_names, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         fig = Figure(figsize=(10, 6), facecolor=DESIGN_PALETTE['bg'])
         ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
 
@@ -169,6 +192,11 @@ class Visualizer:
 
     @staticmethod
     def plot_confusion_matrix(metrics, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         tn = metrics.get('True Negatives', 0)
         fp = metrics.get('False Positives', 0)
         fn = metrics.get('False Negatives', 0)
@@ -200,6 +228,11 @@ class Visualizer:
 
     @staticmethod
     def plot_roc_curve(model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         fig = Figure(figsize=(8, 6), facecolor=DESIGN_PALETTE['bg'])
         ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
         fpr = np.linspace(0, 1, 100)
@@ -226,6 +259,11 @@ class Visualizer:
 
     @staticmethod
     def plot_precision_recall(model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         fig = Figure(figsize=(8, 6), facecolor=DESIGN_PALETTE['bg'])
         ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
         recall = np.linspace(0, 1, 100)
@@ -251,6 +289,11 @@ class Visualizer:
 
     @staticmethod
     def plot_model_comparison(results_df):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         fig = Figure(figsize=(10, 6), facecolor=DESIGN_PALETTE['bg'])
         ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
 
@@ -293,6 +336,11 @@ class Visualizer:
 
     @staticmethod
     def plot_accuracy_comparison(results_df):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         fig = Figure(figsize=(10, 6))
         ax = fig.add_subplot(111)
 
@@ -322,6 +370,11 @@ class Visualizer:
 
     @staticmethod
     def plot_statistical_comparison(cv_results_dict):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """
         Plot statistical comparison between models.
         """
@@ -375,6 +428,11 @@ class Visualizer:
 
     @staticmethod
     def plot_permutation_importance(model, X, y, feature_names, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """
         Plot permutation feature importance
         """
@@ -414,6 +472,11 @@ class Visualizer:
 
     @staticmethod
     def plot_shap_analysis(model, X, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """
         Plot SHAP summary plot for global feature importance
         """
@@ -469,6 +532,11 @@ class Visualizer:
 
     @staticmethod
     def plot_robustness_analysis(cv_results_dict):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """
         Plot robustness analysis showing variance across CV folds
         """
@@ -514,6 +582,11 @@ class Visualizer:
 
     @staticmethod
     def plot_sensitivity_analysis(model, X, y, feature_names, model_name, noise_levels=[0.01, 0.05, 0.1, 0.2]):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """
         Plot sensitivity to input noise
         """
@@ -545,6 +618,11 @@ class Visualizer:
 
     @staticmethod
     def get_shap_data(model, X, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """
          Get SHAP analysis data for display in tab
         """
@@ -579,6 +657,11 @@ class Visualizer:
 
     @staticmethod
     def get_permutation_data(model, X, y, feature_names, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """
         Get permutation importance data for display in tab
         """
@@ -607,6 +690,11 @@ class Visualizer:
 
     @staticmethod
     def get_robustness_data(cv_results_dict):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """
         Get robustness analysis data for display in tab
         """
@@ -638,6 +726,11 @@ class Visualizer:
 
     @staticmethod
     def get_sensitivity_data(model, X, y, feature_names, model_name, noise_levels=[0.01, 0.05, 0.1, 0.2]):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """
         Get sensitivity analysis data for display in tab
         """
@@ -676,6 +769,11 @@ class Visualizer:
 
     @staticmethod
     def plot_correlation_heatmap(df):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         # 1. Select numeric columns
         numeric_df = df.select_dtypes(include=[np.number]).drop(['sample_id', 'cancer_risk_class'], axis=1, errors='ignore')
         if numeric_df.empty:
@@ -722,6 +820,11 @@ class Visualizer:
 
     @staticmethod
     def plot_calibration_curve(y_true, y_probs, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         fig = Figure(figsize=(8, 6), facecolor=DESIGN_PALETTE['bg'])
         ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
         from sklearn.calibration import calibration_curve as sk_cal
@@ -748,6 +851,11 @@ class Visualizer:
 
     @staticmethod
     def plot_learning_curve(data, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         fig = Figure(figsize=(8, 6), facecolor=DESIGN_PALETTE['bg'])
         ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
         
@@ -772,6 +880,11 @@ class Visualizer:
 
     @staticmethod
     def plot_detailed_metrics(metrics, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         fig = Figure(figsize=(10, 6))
         ax = fig.add_subplot(111)
         key_metrics = {k: v for k, v in metrics.items() if isinstance(v, float)}
@@ -798,6 +911,11 @@ class Visualizer:
 
     @staticmethod
     def plot_counterfactual_analysis(data, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """Plot the before/after counterfactual scenarios or safety buffer."""
         fig = Figure(figsize=(9, 5), facecolor=DESIGN_PALETTE['bg'])
         ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
@@ -858,6 +976,11 @@ class Visualizer:
 
     @staticmethod
     def plot_biomarker_network(data, model_name="Graph Neural Network"):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """Visualize the GNN-mapped biological network of biomarkers."""
         fig = Figure(figsize=(9, 7), facecolor=DESIGN_PALETTE['bg'])
         ax = fig.add_subplot(111)
@@ -911,6 +1034,11 @@ class Visualizer:
 
     @staticmethod
     def plot_shap_summary(data, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         fig = Figure(figsize=(10, 6))
         ax = fig.add_subplot(111)
         feats, vals = zip(*data)
@@ -938,6 +1066,11 @@ class Visualizer:
 
     @staticmethod
     def plot_pr_threshold(data, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         fig = Figure(figsize=(8, 6))
         ax = fig.add_subplot(111)
         ax.plot(data['thresholds'], data['precision'][:-1], color=DESIGN_PALETTE['danger'], label='Precision')
@@ -951,6 +1084,11 @@ class Visualizer:
 
     @staticmethod
     def plot_model_stability(data, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         fig = Figure(figsize=(8, 6))
         ax = fig.add_subplot(111)
         ax.bar(range(1, 6), data['scores'] * 100, color=DESIGN_PALETTE['primary'], alpha=0.7)
@@ -963,6 +1101,11 @@ class Visualizer:
 
     @staticmethod
     def plot_tsne_map(data):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         fig = Figure(figsize=(9, 7))
         ax = fig.add_subplot(111)
         ax.scatter(data['x'], data['y'], c=data['labels'], cmap='coolwarm', alpha=0.6, edgecolors='w')
@@ -977,6 +1120,11 @@ class Visualizer:
 
     @staticmethod
     def plot_pdp(model, X, feature, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         fig = Figure(figsize=(8, 6))
         ax = fig.add_subplot(111)
         points = np.linspace(X[feature].min(), X[feature].max(), 50)
@@ -993,6 +1141,11 @@ class Visualizer:
 
     @staticmethod
     def plot_local_explanation(explanation, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """
         Two-Panel Impact Dashboard with standardized typography.
         """
@@ -1059,6 +1212,11 @@ class Visualizer:
 
     @staticmethod
     def get_patient_radar_data(inputs, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """
         Get patient biomarker data for display in tab.
         Returns dictionary with analysis data.
@@ -1103,6 +1261,11 @@ class Visualizer:
 
     @staticmethod
     def plot_patient_radar(inputs, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         items = list(inputs.items())[:8]
         labels = [i[0] for i in items]
         values = [float(i[1]) for i in items]
@@ -1142,6 +1305,11 @@ class Visualizer:
 
     @staticmethod
     def generate_diagnostic_report(data):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """Premium branded clinical diagnostic report figure."""
         fig = Figure(figsize=(8.5, 11), dpi=100, facecolor='#FFFFFF')
         ax = fig.add_subplot(111)
@@ -1156,6 +1324,11 @@ class Visualizer:
 
         y = 0.88
         def add_header(label, y_pos):
+            import matplotlib.pyplot as plt
+            import seaborn as sns
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+            from scipy import stats
             ax.text(0.05, y_pos, label.upper(), transform=ax.transAxes, fontsize=10, 
                     fontweight='bold', color='#64748B', fontfamily=STYLE_CONFIG['font_family'])
             ax.plot([0.05, 0.95], [y_pos-0.01, y_pos-0.01], transform=ax.transAxes, color='#E2E8F0', lw=1)
@@ -1206,6 +1379,11 @@ class Visualizer:
 
     @staticmethod
     def plot_population_risk_distribution(risks):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """KDE Plot showing where patients fall on the risk spectrum."""
         fig = Figure(figsize=(9, 6), facecolor=DESIGN_PALETTE['bg'])
         ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
@@ -1239,6 +1417,11 @@ class Visualizer:
 
     @staticmethod
     def plot_biomarker_violins(df, features):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """Standardized clinical violin plots with Inter typography."""
         plot_features = features[:4]
         fig = Figure(figsize=(10, 6), facecolor=DESIGN_PALETTE['bg'])
@@ -1280,6 +1463,11 @@ class Visualizer:
 
     @staticmethod
     def plot_model_robustness_benchmark(all_results):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """Multi-panel dashboard with standardized consistent typography."""
         fig = Figure(figsize=(10, 6), facecolor=DESIGN_PALETTE['bg'])
 
@@ -1334,6 +1522,11 @@ class Visualizer:
 
     @staticmethod
     def get_performance_data(models, X_train, y_train):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """
         Get performance analysis data without plotting.
         Returns list of performance dictionaries for each model.
@@ -1387,6 +1580,11 @@ class Visualizer:
 
     @staticmethod
     def plot_performance_analysis(models_dict, X_train, y_train):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """Standardized 3-panel computational efficiency report."""
         performance_results = Visualizer.get_performance_data(models_dict, X_train, y_train)
         df = pd.DataFrame(performance_results)
@@ -1435,6 +1633,11 @@ class Visualizer:
 
     @staticmethod
     def plot_multi_learning_curves(models, X_train, y_train, scaler):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """
         Plot learning curves for multiple models on the same figure.
 
@@ -1508,6 +1711,11 @@ class Visualizer:
 
     @staticmethod
     def plot_feature_distribution(df, feature_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """Plot the distribution of a specific feature, split by cancer risk class."""
         fig = Figure(figsize=(10, 7))
         ax = fig.add_subplot(111)
@@ -1566,6 +1774,11 @@ class Visualizer:
 
     @staticmethod
     def plot_model_selection_report(leaderboard):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from scipy import stats
         """Standardized 5-panel clinical leadership dashboard."""
         n = len(leaderboard)
         models      = [item['model'] for item in leaderboard]
@@ -1580,6 +1793,11 @@ class Visualizer:
         
         y_pos = np.arange(n)
         def _build_panel(idx, data, title, color_theme):
+            import matplotlib.pyplot as plt
+            import seaborn as sns
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+            from scipy import stats
             ax = fig.add_subplot(1, 5, idx)
             ax.set_facecolor(DESIGN_PALETTE['bg'])
             

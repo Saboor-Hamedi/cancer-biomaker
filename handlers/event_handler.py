@@ -70,7 +70,16 @@ class EventHandler:
 
     # Event handlers
     def handle_predict_single(self, silent=False):
-        """Handle single prediction."""
+        """Handle single prediction with smart redirect for cohorts."""
+        # SMART REDIRECT: If multiple patients are selected, escalate to Cohort analysis
+        try:
+            selection_count = len(self.data_controller.data_manager.selected_indices)
+            if selection_count > 1 and not silent:
+                self.layout_manager.update_status(f"Escalating to Cohort Analysis for {selection_count} profiles...", "orange")
+                self.handle_predict_file()
+                return
+        except:
+            pass
 
         model_name = self.layout_manager.sidebar.model_var.get()
         if not self._require_model(model_name):

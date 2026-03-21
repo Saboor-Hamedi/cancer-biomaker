@@ -23,3 +23,8 @@ openpyxl
 torch
 torch-geometric
 Pillow
+
+# AI Providers & LLM SDKs
+openai
+anthropic
+google-genai

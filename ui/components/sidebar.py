@@ -6,7 +6,7 @@ class Sidebar(ttk.Frame):
     Enhanced Sidebar with Scrollable Container for better responsiveness.
     """
     def __init__(self, parent, callbacks):
-        super().__init__(parent, style='Sidebar.TFrame', width=260)
+        super().__init__(parent, style='Sidebar.TFrame', width=280)
         self.callbacks = callbacks
         self.pack_propagate(False)
         
@@ -19,7 +19,7 @@ class Sidebar(ttk.Frame):
         self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.scroll_content = ttk.Frame(self.canvas, style='Sidebar.TFrame', borderwidth=0)
         
-        self.canvas.create_window((0, 0), window=self.scroll_content, anchor="nw", width=260)
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.scroll_content, anchor="nw", width=280)
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -69,10 +69,13 @@ class Sidebar(ttk.Frame):
         action_frame = ttk.LabelFrame(self.scroll_content, text="INTELLIGENCE", style='Sidebar.TLabelframe')
         action_frame.pack(fill=tk.X, padx=15, pady=10)
 
-        ttk.Button(action_frame, text="Predict Patient", style='Primary.TButton', 
+        ttk.Button(action_frame, text="Individual Diagnosis", style='Primary.TButton', 
                    command=self.callbacks.get('predict_single')).pack(fill=tk.X, padx=10, pady=(12, 6))
-        ttk.Button(action_frame, text="Batch Forensic", 
-                   command=self.callbacks.get('predict_file')).pack(fill=tk.X, padx=10, pady=(0, 12))
+        ttk.Button(action_frame, text="Cohort Forensic Audit", 
+                   command=self.callbacks.get('predict_file')).pack(fill=tk.X, padx=10, pady=(0, 6))
+        
+        ttk.Button(action_frame, text="🤖 AI Research Assistant", 
+                   command=self.callbacks.get('show_ai_chat')).pack(fill=tk.X, padx=10, pady=(0, 12))
 
         # ── Data Gen ──
         batch_frame = ttk.LabelFrame(self.scroll_content, text="DATA GEN", style='Sidebar.TLabelframe')
@@ -88,6 +91,22 @@ class Sidebar(ttk.Frame):
         self.spin.pack(side=tk.LEFT, padx=(0, 5), fill=tk.Y)
         
         ttk.Button(ctrl_frame, text="Gen Data", command=self.callbacks.get('sample')).pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # ── Specific Patient Search ──
+        search_frame = ttk.Frame(batch_frame, style='Sidebar.TFrame')
+        search_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        self.search_var = tk.StringVar()
+        self.search_entry = tk.Entry(
+            search_frame, textvariable=self.search_var, font=("Inter", 10),
+            relief='flat', borderwidth=0, width=15
+        )
+        self.search_entry.pack(side=tk.LEFT, padx=(0, 5), fill=tk.Y)
+        self.search_entry.insert(0, "Search ID (e.g. PAT-01)")
+        self.search_entry.bind("<FocusIn>", lambda e: self.search_entry.delete(0, tk.END) if self.search_var.get() == "Search ID (e.g. PAT-01)" else None)
+        
+        ttk.Button(search_frame, text="🔍", width=3,
+                   command=lambda: self.callbacks.get('search')(self.search_var.get())).pack(side=tk.RIGHT)
 
         # ── Clinical XAI ──
         analytics_frame = ttk.LabelFrame(self.scroll_content, text="CLINICAL XAI", style='Sidebar.TLabelframe')
@@ -126,6 +145,7 @@ class Sidebar(ttk.Frame):
         
         self.model_listbox.config(bg=sidebar_bg, fg=text_fg, selectbackground=palette['medic_brand'], selectforeground="white")
         self.spin.config(bg=entry_bg, fg=text_fg, buttonbackground=sidebar_bg, insertbackground=caret_color)
+        self.search_entry.config(bg=entry_bg, fg=text_fg, insertbackground=caret_color)
         
         # Colors for XAI buttons
         for btn in [self.btn_whatif, self.btn_biomarker]:

@@ -9,6 +9,7 @@ class DataManager:
         self.uploaded_df = None
         self.prediction_results = None
         self.mean_values = None
+        self.selected_indices = set()
         
         # Use provided user_data_path or fallback to script location
         self.user_data_dir = user_data_path or os.path.join(os.path.dirname(__file__), '..')

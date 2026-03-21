@@ -51,14 +51,18 @@ class StyleManager:
         f_header = (family, min(int(18 * scale), 20), 'bold')
         
         # Base widget configurations - Focus elimination
+        # Pure Resilience: Set fixed wraplength to ensure text wraps BEFORE hitting container edges
+        wrap_l = 220 
         style.configure('.', font=f_normal, background=palette['bg_main'], foreground=palette['text_main'], 
                         borderwidth=0, relief='flat', focuscolor='', highlightthickness=0)
         
         style.configure('TFrame', background=palette['bg_main'])
-        style.configure('TLabel', font=f_normal, background=palette['bg_main'], foreground=palette['text_main'])
+        style.configure('TLabel', font=f_normal, background=palette['bg_main'], foreground=palette['text_main'], 
+                        wraplength=wrap_l)
         
         # Button Styles - Fixed mapping for hover
-        style.configure('TButton', font=f_medium, padding=6, background=palette['border_light'], foreground=palette['text_main'], borderwidth=0)
+        style.configure('TButton', font=f_medium, padding=6, background=palette['border_light'], 
+                        foreground=palette['text_main'], borderwidth=0, wraplength=wrap_l)
         style.map('TButton', 
                   background=[('pressed', palette['medic_brand']), ('active', palette['medic_brand']), ('!disabled', palette['border_light'])],
                   foreground=[('active', 'white')])
@@ -123,6 +127,14 @@ class StyleManager:
 
         # Root background
         root.configure(bg=palette['bg_main'])
+
+        # Global Menu Styling - Standardize to 12px for both Menu bar and dropdown Cascades
+        root.option_add('*Menu.font', (family, 12))
+        root.option_add('*Menubutton.font', (family, 12))
+
+        # Ensure Combobox dropdown list matches the 12px requirement
+        root.option_add('*TCombobox*Listbox.font', (family, 12))
+        style.configure('TCombobox', font=(family, 12))
 
     @classmethod
     def get_palette(cls, theme_name='pure_dark'):

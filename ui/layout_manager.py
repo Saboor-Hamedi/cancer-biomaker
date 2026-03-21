@@ -71,7 +71,7 @@ class LayoutManager:
         self.tab_input = InputTab(self.dashboard.input_tab, features=self.model_manager.feature_names, data_manager=self.data_manager)
         self.tab_input.pack(fill=tk.BOTH, expand=True)
 
-        self.tab_data = DataTab(self.dashboard.data_tab)
+        self.tab_data = DataTab(self.dashboard.data_tab, on_select_callback=self.callbacks.get('on_patient_selected'))
         self.tab_data.pack(fill=tk.BOTH, expand=True)
 
         self.tab_analysis = AnalysisTab(self.dashboard.analysis_tab, version=self.version)
@@ -132,36 +132,35 @@ class LayoutManager:
             # Use all columns by default, but prioritize ID/Class at start if they exist
             all_cols = list(df.columns)
             
-            # Priority: ensure sample_id and results are visible first
-            priority = ['sample_id', 'cancer_risk_class', 'prediction', 'risk']
+            # Priority: ensure [✓], sample_id and results are visible first
+            priority = ['[✓]', 'sample_id', 'cancer_risk_class', 'prediction', 'risk']
             display_cols = []
-            for p in priority:
-                match = [c for c in all_cols if p in str(c).lower()]
-                if match: display_cols.append(match[0])
             
-            # Add remaining columns
-            remaining = [c for c in all_cols if c not in display_cols]
-            display_cols.extend(remaining)
-
-            # Limit to 30 columns to prevent UI freeze (User can scroll)
-            display_cols = display_cols[:30]
-
             # Clear existing columns and rows
             tree.delete(*tree.get_children())
             
             # Reconfigure columns
-            tree["columns"] = display_cols
+            tree["columns"] = priority + [c for c in all_cols if c not in priority][:25]
             tree["show"] = "headings"
             
-            for col in display_cols:
+            # Track selection indices from controller
+            selected_indices = getattr(self.callbacks.get('on_patient_selected', None), '__self__', None)
+            if selected_indices and hasattr(selected_indices, 'selected_indices'):
+                active_indices = selected_indices.selected_indices
+            else:
+                active_indices = set()
+
+            for col in tree["columns"]:
                 # Clean name for display if it's too long
                 clean_name = str(col).replace('_', ' ').title()
-                tree.heading(col, text=clean_name, anchor='w')
-                
-                # Auto-width: wide for feature names, medium for numbers
-                if 'id' in str(col).lower():
+                if col == '[✓]':
+                    tree.heading(col, text="[✓]", anchor='center')
+                    tree.column(col, width=60, anchor='center', stretch=False)
+                elif 'id' in str(col).lower():
+                    tree.heading(col, text=clean_name, anchor='w')
                     tree.column(col, width=120, anchor='w')
                 else:
+                    tree.heading(col, text=clean_name, anchor='center')
                     tree.column(col, width=140, anchor='center')
 
             # Chunker for background insertion
@@ -171,16 +170,28 @@ class LayoutManager:
 
             def _insert_chunk(start_idx):
                 end_idx = min(start_idx + chunk_size, total_rows)
+                tree.tag_configure('checked_patient', background="#BFDBFE" if self.settings_manager and self.settings_manager.theme == 'pure_light' else "#1E3A8A")
+                
                 for i in range(start_idx, end_idx):
-                    _, row = rows[i]
-                    vals = [row[c] for c in display_cols]
-                    formatted_vals = []
-                    for v in vals:
-                        if isinstance(v, (float, np.float64, np.float32)):
-                            formatted_vals.append(f"{v:.4f}")
+                    idx, row = rows[i]
+                    # Generate values for columns
+                    vals = []
+                    is_selected = idx in active_indices
+                    for c in tree["columns"]:
+                        if c == '[✓]':
+                            vals.append("[ ✔ ]" if is_selected else "[     ]")
                         else:
-                            formatted_vals.append(str(v))
-                    tree.insert("", tk.END, values=formatted_vals)
+                            v = row.get(c, "")
+                            if isinstance(v, (float, np.float64, np.float32)):
+                                vals.append(f"{v:.4f}")
+                            else:
+                                vals.append(str(v))
+                                
+                    tags = [str(idx)]
+                    if is_selected:
+                        tags.append('checked_patient')
+                        
+                    tree.insert("", tk.END, values=vals, tags=tuple(tags))
                 
                 if end_idx < total_rows:
                     self.root.after(10, lambda: _insert_chunk(end_idx))

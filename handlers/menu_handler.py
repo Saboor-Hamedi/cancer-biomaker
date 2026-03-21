@@ -86,8 +86,8 @@ class MenuHandler:
         analytics_menu.add_command(label="Precision-Recall Curve", command=self.visualization_controller.show_precision_recall)
         analytics_menu.add_command(label="PR-Threshold Analysis", command=self.visualization_controller.show_precision_recall_threshold)
         analytics_menu.add_separator()
-        analytics_menu.add_command(label="Patient Map (t-SNE)", command=self.visualization_controller.show_tsne_map)
-        analytics_menu.add_command(label="Biomarker Impact (PDP)", command=self.visualization_controller.show_pdp)
+        analytics_menu.add_separator()
+        analytics_menu.add_command(label="AI Clinical Copilot", command=self.layout_manager.callbacks.get('show_ai_chat'), accelerator="Ctrl+G")
         menubar.add_cascade(label="Analytics", menu=analytics_menu)
 
     def _build_statistics_menu(self, menubar):
@@ -127,6 +127,7 @@ class MenuHandler:
         self.root.bind_all("<Control-o>", lambda e: self.data_controller.handle_upload())
         self.root.bind_all("<Control-s>", lambda e: self.data_controller.handle_export())
         self.root.bind_all("<F1>", lambda e: self._show_help())
+        self.root.bind_all("<Control-g>", lambda e: self.layout_manager.callbacks.get('show_ai_chat')())
 
     def _handle_report(self):
         self.data_controller.handle_report()

@@ -23,6 +23,7 @@ class DataController:
         self.version = version
         self.async_runner = async_runner
         self.data_path = None
+        self.total_rows = 0
 
     def handle_upload(self):
         """Handle dataset upload (Excel or CSV) in the background."""
@@ -132,6 +133,17 @@ class DataController:
             except:
                 sample_size = 20
 
+        # Clinical Validation: Check if requested sample is valid for this dataset
+        if sample_size < 1:
+            messagebox.showwarning("Clinical Constraint", 
+                                 "Sampling Error: Minimum 1 sample required for bio-diagnostic analysis.")
+            return
+            
+        if self.total_rows > 0 and sample_size > self.total_rows:
+            messagebox.showwarning("Dataset Constraint", 
+                                 f"Sampling Error: Requested size ({sample_size}) exceeds total available records ({self.total_rows}).")
+            return
+
         def _sample_task():
             # load_sample logic moved here to run in thread
             return self.load_sample(sample_size)
@@ -146,34 +158,71 @@ class DataController:
             _sample_task()
             _on_finish(None)
 
-    def load_sample(self, sample_size):
-        """Load a sample of the dataset with smart sheet detection."""
-        if not os.path.exists(self.data_path):
-            raise FileNotFoundError(f"Dataset not found: {self.data_path}")
+    def on_patient_selected(self, selected_indices):
+        """Callback from UI when patient checkmarks are toggled."""
+        self.data_manager.selected_indices = set(selected_indices)
+        
+        # Update sampling count display in dashboard
+        self.update_ui_after_load(refresh_tree=False)
 
-        try:
-            full_df = pd.read_excel(self.data_path, sheet_name='Training_Data')
-        except ValueError:
-            xl = pd.ExcelFile(self.data_path)
-            sheets = xl.sheet_names
-            if not sheets:
-                raise ValueError("The dataset file appears to be empty.")
-            full_df = pd.read_excel(self.data_path, sheet_name=sheets[0])
-        full_row_count = len(full_df)
+    def handle_search(self, query):
+        """Search and select specific patients by ID (supports comma-separated)."""
+        if not self.data_path and self.data_manager.data_path:
+            self.data_path = self.data_manager.data_path
+            
+        if not self.data_path:
+            self.error_handler.require_data("Patient Search")
+            return
 
-        # Sample the data
-        if full_row_count > sample_size:
-            df = full_df.sample(n=sample_size, random_state=42).reset_index(drop=True)
+        if not query or query.strip() == "" or "Search ID" in query:
+            return
+
+        def _search_task():
+            try:
+                full_df, _ = self.data_manager.load_data(self.data_path)
+                if full_df is None: return None, "Failed to load master dataset."
+                
+                id_col = next((c for c in full_df.columns if any(p in str(c).lower() for p in ['sample_id', 'patient_id', 'id'])), None)
+                if not id_col:
+                    return None, "No Patient ID column found in dataset."
+                
+                target_ids = [s.strip().lower() for s in query.split(',')]
+                
+                # Case insensitive exact matching
+                matches = full_df[full_df[id_col].astype(str).str.lower().isin(target_ids)]
+                
+                if matches.empty:
+                    # Partial matching if no exact
+                    matches = full_df[full_df[id_col].astype(str).str.lower().str.contains('|'.join(target_ids))]
+                
+                if matches.empty:
+                    return None, f"No matches for: {query}"
+                
+                # Get the absolute indices from the master DF
+                indices = matches.index.tolist()
+                return (indices, full_df), None
+            except Exception as e:
+                return None, str(e)
+
+        def _on_finish(result):
+            res, error = result
+            if error:
+                self.layout_manager.update_status(f"Search: {error}", "red")
+            elif res:
+                indices, full_df = res
+                # Add found indices to the registry
+                self.data_manager.selected_indices.update(indices)
+                # Keep full DF as context if search was triggered from master
+                self.data_manager.uploaded_df = full_df 
+                self.update_ui_after_load(total_count=len(full_df), full_context_df=full_df)
+                self.layout_manager.update_status(f"Identified {len(indices)} profiles for cohort selection", "#10B981")
+
+        if self.async_runner:
+            self.async_runner.run_async("Searching Patients", _search_task, on_finish=_on_finish)
         else:
-            df = full_df
+            _on_finish(_search_task())
 
-        self.data_manager.uploaded_df = df
-        self.data_manager.data_path = self.data_path
-
-        # Update UI - Pass full_df for complete analytics auditing
-        self.update_ui_after_load(total_count=full_row_count, full_context_df=full_df)
-
-    def update_ui_after_load(self, total_count=None, full_context_df=None):
+    def update_ui_after_load(self, total_count=None, full_context_df=None, refresh_tree=True):
         """Update UI components after data loading."""
         df = self.data_manager.uploaded_df
         if df is None:
@@ -181,51 +230,64 @@ class DataController:
 
         # Validate data
         issues = self.data_manager.validate_data(df)
-        if issues:
+        if issues and refresh_tree:
             messagebox.showwarning("Data Quality Issues",
                                  f"Issues found:\n" + "\n".join(f"• {issue}" for issue in issues))
 
         # Update data info
-        total_rows = total_count if total_count is not None else len(df)
+        self.total_rows = total_count if total_count is not None else len(df)
         total_cols = len(df.columns)
-        current_samples = len(df)
-        self.layout_manager.update_data_info(total_rows, total_cols, current_samples)
+        
+        # SMART LOGIC: Show selection count if active, else current batch size
+        current_samples = len(self.data_manager.selected_indices) if self.data_manager.selected_indices else len(df)
+        
+        self.layout_manager.update_data_info(self.total_rows, total_cols, current_samples)
+        
+        # ALSO: Sync Sidebar Quantity to selection count to satisfy user requirement
+        if self.data_manager.selected_indices and self.layout_manager.sidebar:
+            try:
+                self.layout_manager.sidebar.sample_qty.set(current_samples)
+            except:
+                pass
 
-        # Update status and notify
-        status_msg = f"Imported {current_samples} samples for clinical analysis"
-        self.layout_manager.update_status(status_msg, "#10B981")
-        self.error_handler.notify(status_msg, type='success')
+        # Update status
+        if self.data_manager.selected_indices:
+            status_msg = f"Cohort Monitor: {len(self.data_manager.selected_indices)} clinical profiles selected"
+            self.layout_manager.update_status(status_msg, "#3B82F6")
+        else:
+            status_msg = f"Imported {current_samples} samples for clinical analysis"
+            self.layout_manager.update_status(status_msg, "#10B981")
 
         # Refresh data tree
-        self.layout_manager.refresh_data_tree()
+        if refresh_tree:
+            self.layout_manager.refresh_data_tree()
 
         # Populate longitudinal patient history
         if self.velocity_manager:
             self.velocity_manager.load_historical_data(full_context_df)
 
-        # Build feature list for Input Tab: All numeric columns except sample IDs and targets
+        # Build feature list for Input Tab
         features = [str(c) for c in df.select_dtypes(include=[np.number]).columns 
                     if not any(p in str(c).lower() for p in ['id', 'patient', 'target', 'class', 'label', 'cancer_risk'])]
         
-        # Priority sort: put specific peak markers at top if they exist
         target_keywords = ['psa', 'afp', 'ca125', 'peak', 'conc']
         features = sorted(features, key=lambda x: not any(k in x.lower() for k in target_keywords))
 
-        first_row = df.iloc[0] if len(df) > 0 else None
-        self.layout_manager.refresh_input_features(features, first_row=first_row)
-        
-        # Force a deep sync of all values
-        self._sync_first_row_to_input()
+        # IMPORTANT: Skip deep sync and tab focus if we are just toggling selection
+        if refresh_tree:
+            first_row = df.iloc[0] if len(df) > 0 else None
+            self.layout_manager.refresh_input_features(features, first_row=first_row)
+            self._sync_first_row_to_input()
 
-        # Update analysis tab with summary (Use full context if available)
-        report_df = full_context_df if full_context_df is not None else df
-        self._update_analysis_summary(report_df)
+            # Update analysis tab
+            report_df = full_context_df if full_context_df is not None else df
+            self._update_analysis_summary(report_df)
 
-        # Switch to Data View tab
-        try:
-            self.layout_manager.dashboard.notebook.select(self.layout_manager.dashboard.data_tab)
-        except:
-            pass
+            # Switch to Data View tab
+            try:
+                self.layout_manager.dashboard.notebook.select(self.layout_manager.dashboard.data_tab)
+            except:
+                pass
 
     def _sync_first_row_to_input(self):
         """Sync first row of loaded data to input tab."""
@@ -488,6 +550,7 @@ class DataController:
         self.data_manager.uploaded_df = None
         self.data_manager.prediction_results = None
         self.data_manager.mean_values = None
+        self.data_manager.selected_indices.clear()
         if hasattr(self.model_manager, 'reset_analytics'):
             self.model_manager.reset_analytics()
 

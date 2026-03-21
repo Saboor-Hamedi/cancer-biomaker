@@ -57,12 +57,9 @@ class InputTab(ttk.Frame):
     def _create_widgets(self):
         self.header = ttk.Frame(self, padding=(12, 8, 12, 4))
         self.header.pack(fill=tk.X)
-        self.title_label = ttk.Label(self.header, text="PATIENT BIOMARKER INPUT PANEL",
+        self.title_label = ttk.Label(self.header, text="BIOMARKER INPUT — Load data or double-click to edit",
                                      font=('Inter', 10, 'bold'))
         self.title_label.pack(side=tk.LEFT)
-        self.sub_label = ttk.Label(self.header, text="  —  Load a dataset or double-click a value to edit",
-                                   font=('Inter', 9))
-        self.sub_label.pack(side=tk.LEFT)
 
         container = ttk.Frame(self)
         container.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
@@ -200,7 +197,6 @@ class InputTab(ttk.Frame):
         self.configure(style='TFrame')
         self.header.configure(style='TFrame')
         self.title_label.config(foreground=palette['medic_brand'])
-        self.sub_label.config(foreground=palette['text_muted'])
         
         # Reset tags for high contrast
         row_bg = palette['card_bg'] # Pure black or white
@@ -212,9 +208,11 @@ class InputTab(ttk.Frame):
         self.tree.tag_configure('other', background=row_bg, foreground=palette['text_main'])
 
 class DataTab(ttk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, on_select_callback=None):
         super().__init__(parent)
         self.tree: ttk.Treeview = None # type: ignore
+        self.on_select_callback = on_select_callback
+        self.selection_indices = set()
         self._create_widgets()
 
     def _create_widgets(self):
@@ -227,6 +225,7 @@ class DataTab(ttk.Frame):
         top_container.pack(fill=tk.BOTH, expand=True)
         
         self.tree = ttk.Treeview(top_container, show="headings")
+        self.tree.bind("<Button-1>", self._on_tree_click)
         
         vsb = ttk.Scrollbar(top_container, orient=tk.VERTICAL, command=self.tree.yview)
         hsb = ttk.Scrollbar(main_container, orient=tk.HORIZONTAL, command=self.tree.xview)
@@ -236,17 +235,67 @@ class DataTab(ttk.Frame):
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         hsb.pack(side=tk.BOTTOM, fill=tk.X)
 
-    def update_data(self, df):
+    def _on_tree_click(self, event):
+        """Toggle checkmark when the [✓] column is clicked."""
+        region = self.tree.identify_region(event.x, event.y)
+        if region == "cell":
+            column = self.tree.identify_column(event.x)
+            if column == "#1": # The [✓] column
+                item = self.tree.identify_row(event.y)
+                if item:
+                    # Get the dataframe index from the item's tags
+                    tags = list(self.tree.item(item, "tags"))
+                    if not tags: return
+                    df_idx = int(tags[0])
+                    
+                    vals = list(self.tree.item(item, "values"))
+                    
+                    if df_idx in self.selection_indices:
+                        self.selection_indices.remove(df_idx)
+                        vals[0] = "[     ]"
+                        if 'checked_patient' in tags: tags.remove('checked_patient')
+                    else:
+                        self.selection_indices.add(df_idx)
+                        vals[0] = "[ ✔ ]"
+                        if 'checked_patient' not in tags: tags.append('checked_patient')
+                    
+                    self.tree.item(item, values=vals, tags=tuple(tags))
+                    if self.on_select_callback:
+                        self.on_select_callback(self.selection_indices)
+
+    def update_data(self, df, selection_indices=None):
+        self.selection_indices = set(selection_indices) if selection_indices else set()
         self.tree.delete(*self.tree.get_children())
-        self.tree["columns"] = list(df.columns)
+        
+        # High-visibility selection highlight
+        from ui.styles import StyleManager
+        is_dark = True # Default
+        try:
+           # Assuming we can find root/settings
+           is_dark = self.winfo_toplevel().settings_manager.theme == 'pure_dark'
+        except: pass
+        
+        highlight_bg = "#1E3A8A" if is_dark else "#BFDBFE"
+        self.tree.tag_configure('checked_patient', background=highlight_bg)
+
+        cols = ["[✓]"] + list(df.columns)
+        self.tree["columns"] = cols
+        
+        # [✓] Column header - increased width
+        self.tree.heading("[✓]", text="[✓]", anchor=tk.CENTER)
+        self.tree.column("[✓]", width=60, minwidth=60, anchor=tk.CENTER, stretch=False)
+        
         for col in df.columns:
             self.tree.heading(col, text=col.upper(), anchor=tk.CENTER)
             self.tree.column(col, width=120, minwidth=100, anchor=tk.CENTER, stretch=True)
         
-        # Force UI update to prevent "half-width" bug on tab switch
         self.tree.update_idletasks()
-        for _, row in df.iterrows():
-            self.tree.insert("", tk.END, values=list(row))
+        for _, (idx, row) in enumerate(df.iterrows()):
+            is_sel = idx in self.selection_indices
+            check = "[ ✔ ]" if is_sel else "[     ]"
+            tag_list = [str(idx)]
+            if is_sel: tag_list.append('checked_patient')
+            self.tree.insert("", tk.END, values=[check] + list(row), tags=tuple(tag_list))
 
     def clear(self):
         self.tree.delete(*self.tree.get_children())
@@ -685,12 +734,9 @@ class LeaderboardTab(ttk.Frame):
         top = ttk.Frame(outer, padding=(15, 12, 15, 6))
         top.pack(fill=tk.X)
 
-        self.title_label = ttk.Label(top, text="CLINICAL ALGORITHM COMPETITION LEADERBOARD",
-                                     font=('Inter', 12, 'bold'))
+        self.title_label = ttk.Label(top, text="ALGORITHM LEADERBOARD — Ranked by Clinical F1-Score & Stability",
+                                     font=('Inter', 11, 'bold'))
         self.title_label.pack(anchor=tk.W)
-        self.sub_label = ttk.Label(top, text="Ranked by clinical F1-Score & Cross-Validation Stability",
-                                   font=('Inter', 9))
-        self.sub_label.pack(anchor=tk.W)
 
         lb_frame = ttk.Frame(outer, padding=(15, 0, 15, 10))
         lb_frame.pack(fill=tk.X)
@@ -798,7 +844,6 @@ class LeaderboardTab(ttk.Frame):
         
         self.configure(style='TFrame')
         self.title_label.config(foreground=palette['text_main'])
-        self.sub_label.config(foreground=palette['text_muted'])
         self.insight_label.config(bg=palette['card_bg'], fg=palette['medic_brand'])
         
         # Champion tags

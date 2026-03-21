@@ -1,3 +1,4 @@
+import importlib.util
 import logging
 import os
 import io
@@ -13,51 +14,17 @@ from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.svm import SVC
 
-try:
-    from xgboost import XGBClassifier
-    HAS_XGB = True
-except ImportError:
-    HAS_XGB = False
-    class XGBClassifier:
-        def __init__(self, *args, **kwargs):
-            raise ImportError("XGBoost is not installed.")
+# --- High-Performance Lazy Detection ---
+# We check if libraries exist without actually importing their massive binaries.
+# This prevents the initial app freeze.
+HAS_XGB = importlib.util.find_spec("xgboost") is not None
+HAS_TORCH = importlib.util.find_spec("torch") is not None and importlib.util.find_spec("torch_geometric") is not None
 
-try:
-    import torch
-    import torch.nn.functional as F
-    from torch_geometric.data import Data
-    from torch_geometric.loader import DataLoader
-    from torch_geometric.nn import GCNConv, global_mean_pool
-    HAS_TORCH = True
-    torch_base = torch.nn.Module
-except Exception as e:
-    HAS_TORCH = False
-    class torch_base:
-        def __init__(self, *args, **kwargs): pass
-        def parameters(self): return []
-        def train(self): pass
-        def eval(self): pass
-        def __call__(self, *args, **kwargs): pass
-        def to(self, device): return self
-        def state_dict(self): return {}
-        def load_state_dict(self, sd): pass
-        
-    class Data:
-        y = None
-        def __init__(self, *args, **kwargs):
-            for k, v in kwargs.items(): setattr(self, k, v)
-    class DataLoader:
-        def __init__(self, *args, **kwargs): pass
-        def __iter__(self): return iter([])
-    def global_mean_pool(*args, **kwargs): pass
-    class GCNConv:
-        def __init__(self, *args, **kwargs): pass
-        def __call__(self, *args, **kwargs): return None
-    # log is defined below, so we use a local print or wait until log is ready
-    # However, since log is defined at line 57, we can just move it up or use a simple msg
-    HAS_TORCH_ERROR = str(e)
+# Placeholder for torch_base used as a type hint
+torch_base = object
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
+log = logging.getLogger(__name__)
 log = logging.getLogger(__name__)
 
 # Max rows for heavy unsupervised ops (t-SNE / SHAP) to avoid memory freeze

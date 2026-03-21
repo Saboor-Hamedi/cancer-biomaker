@@ -9,7 +9,14 @@ class SettingsManager:
         'font_scale': 1.0,
         'font_family': 'Inter',
         'high_contrast': False,
-        'animations_enabled': True
+        'animations_enabled': True,
+        'last_ai_provider': 'ChatGPT',
+        'ai_keys': {
+            'ChatGPT': '',
+            'Claude': '',
+            'DeepSeek': '',
+            'Gemini': ''
+        }
     }
     
     def __init__(self, user_data_path=None):
@@ -52,3 +59,22 @@ class SettingsManager:
     @property
     def font_scale(self):
         return self.get('font_scale')
+
+    @property
+    def last_ai_provider(self):
+        return self.get('last_ai_provider', 'ChatGPT')
+
+    def set_last_ai_provider(self, provider):
+        """Persist the last used AI provider."""
+        self.set('last_ai_provider', provider)
+
+    @property
+    def ai_keys(self):
+        """Returns the dictionary of AI API keys."""
+        return self.get('ai_keys', self.DEFAULT_SETTINGS['ai_keys'])
+
+    def set_ai_key(self, provider, key):
+        """Persist an AI API key."""
+        keys = self.ai_keys.copy()
+        keys[provider] = key
+        self.set('ai_keys', keys)

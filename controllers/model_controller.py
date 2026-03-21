@@ -298,6 +298,15 @@ class ModelController:
 
             # All heavy lifting moved to background task
             df = self.data_manager.uploaded_df.copy()
+            
+            # --- SELECTION COHORT FILTER ---
+            selected = self.data_manager.selected_indices
+            if selected and len(selected) > 0:
+                # Ensure we only use valid indices within the current DF range
+                # (in case the DF was swapped/sampled recently)
+                valid_selected = [i for i in selected if i < len(df)]
+                if valid_selected:
+                    df = df.iloc[valid_selected].reset_index(drop=True)
             models_list = self.layout_manager.callbacks.get('models', ["Random Forest", "Logistic Regression", "SVM"])
             
             # 1. Prediction routing
