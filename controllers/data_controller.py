@@ -59,13 +59,14 @@ class DataController:
                         qty = 20
                     
                     if full_count > qty:
-                        sampled_df = df.sample(n=qty, random_state=42).reset_index(drop=True)
+                        # CLINICAL AUDIT SYNC: Preserve original IDs throughout the pipeline
+                        sampled_df = df.sample(n=qty).sort_index()
                         self.data_manager.uploaded_df = sampled_df
                     else:
                         self.data_manager.uploaded_df = df
                     
                     # Clinical cohort auto-select: ensure newly uploaded batch starts as 'checked'
-                    self.data_manager.selected_indices = set(range(len(self.data_manager.uploaded_df)))
+                    self.data_manager.selected_indices = set(self.data_manager.uploaded_df.index.tolist())
                     
                     # Persist session
                     self.data_manager.save_session()
@@ -110,9 +111,13 @@ class DataController:
             qty = 20
             
         if full_row_count > qty:
-            df = df.sample(n=qty, random_state=42).reset_index(drop=True)
+            # CLINICAL AUDIT SYNC: Preserve original indices for forensic tracking
+            df = df.sample(n=qty).sort_index()
 
         self.data_manager.uploaded_df = df
+        
+        # Clinical cohort auto-select: ensure newly loaded batch starts as 'checked'
+        self.data_manager.selected_indices = set(df.index.tolist())
 
         # Persist data path for next session (so Analytics work on relaunch)
         self.data_manager.save_session()
@@ -154,10 +159,11 @@ class DataController:
                 master_count = len(full_df)
                 df = full_df
                 if len(df) > sample_size:
-                    df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
+                    # CLINICAL AUDIT SYNC: Preserve original indices for forensic tracking
+                    df = df.sample(n=sample_size).sort_index()
                 self.data_manager.uploaded_df = df
                 # Clinical cohort auto-select: automatically checkmark all sampled records
-                self.data_manager.selected_indices = set(range(len(df)))
+                self.data_manager.selected_indices = set(df.index.tolist())
                 # Clinical sync update: preserve master count for dashboard "Rows"
                 self.update_ui_after_load(total_count=master_count, full_context_df=full_df)
                 return True

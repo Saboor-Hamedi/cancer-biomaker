@@ -133,13 +133,25 @@ class LayoutManager:
             all_cols = list(df.columns)
             
             # Priority: ensure [✓], sample_id and results are visible first
-            priority = ['[✓]', 'sample_id', 'cancer_risk_class', 'prediction', 'risk']
-            display_cols = []
+            priority_keywords = {
+                'ID': ['sample_id', 'patient_id', 'index'],
+                'Ground Truth': ['rish', 'label', 'target', 'class'],
+                'AI Prediction': ['prediction', 'verdict', 'decision'],
+                'Risk Score': ['risk', 'probability']
+            }
+            
+            # Map ACTUAL column names from DF to priority order
+            priority = ['[✓]']
+            for cat, kws in priority_keywords.items():
+                for col in all_cols:
+                    if any(k in str(col).lower() for k in kws) and col not in priority:
+                        priority.append(col)
+                        break
             
             # Clear existing columns and rows
             tree.delete(*tree.get_children())
             
-            # Reconfigure columns
+            # Reconfigure columns (Priority first, then remaining)
             tree["columns"] = priority + [c for c in all_cols if c not in priority][:25]
             tree["show"] = "headings"
             

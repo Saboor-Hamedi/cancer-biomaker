@@ -452,7 +452,29 @@ class AnalysisTab(ttk.Frame):
             self.text.insert(tk.END, "  • Signal Independence: ", "bullet")
             self.text.insert(tk.END, "Biomarkers in this batch appear statistically independent.\n", "dim")
 
-        self.text.insert(tk.END, "\n5. STRATEGIC CLINICAL RECOMMENDATIONS\n", "sub")
+        # 5. LOCAL PERFORMANCE TABLE (Item #27 requested by User)
+        if metadata and 'scoreboard' in metadata:
+            self.text.insert(tk.END, "\n5. LOCAL PERFORMANCE METRICS (COHORT VALIDATION)\n", "sub")
+            h_line = f"  {'ALGORITHM':<20} │ {'LOCAL F1':^12} │ {'LOCAL ACC':^12} │ {'DETECTIONS':^12} │ {'STATUS':<15}\n"
+            divider = "  " + "—" * 75 + "\n"
+            
+            self.text.insert(tk.END, h_line, "table_head")
+            self.text.insert(tk.END, divider, "dim")
+            
+            for s in metadata['scoreboard']:
+                f1 = s.get('local_f1', 0)
+                acc = s.get('local_acc', 0)
+                f1_str = f"{f1:^12.2%}" if f1 > 0 else f"{'N/A':^12}"
+                acc_str = f"{acc:^12.2%}" if acc > 0 else f"{'N/A':^12}"
+                
+                status = "EXPERT" if f1 >= 0.9 else "STABLE" if f1 >= 0.7 else "REVIEW" if f1 > 0 else "NO LABELS"
+                row = f"  {s['model']:<20} │ {f1_str} │ {acc_str} │ {s['positives']:^12} │ {status:<15}\n"
+                
+                tag = "table_row_bold" if f1 >= 0.9 else "table_row"
+                self.text.insert(tk.END, row, tag)
+            self.text.insert(tk.END, divider, "dim")
+
+        self.text.insert(tk.END, "\n6. STRATEGIC CLINICAL RECOMMENDATIONS\n", "sub")
         if positives > 0:
             self.text.insert(tk.END, "  • Recommendation A: ", "bullet")
             self.text.insert(tk.END, "Prioritize PSA-surge patients for immediate urology / oncology consultation.\n")

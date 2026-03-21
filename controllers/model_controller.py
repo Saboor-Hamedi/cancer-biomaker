@@ -299,6 +299,23 @@ class ModelController:
             # All heavy lifting moved to background task
             df = self.data_manager.uploaded_df.copy()
             
+            # --- LOCAL EVALUATION: Identify Ground Truth (Labels) if present ---
+            target_col = None
+            for col in df.columns:
+                c_low = str(col).lower()
+                if any(k in c_low for k in ['target', 'class', 'label', 'rish', 'cancer']):
+                    target_col = col
+                    break
+            
+            y_true = None
+            if target_col is not None:
+                try:
+                    # Clean Ground Truth mapping
+                    mapping = {'POSITIVE': 1, 'NEGATIVE': 0, '1': 1, '0': 0, 1: 1, 0: 0}
+                    y_true = df[target_col].map(mapping).fillna(0).values
+                except:
+                    y_true = None
+            
             # --- SELECTION COHORT FILTER ---
             selected = self.data_manager.selected_indices
             if selected and len(selected) > 0:
@@ -334,8 +351,19 @@ class ModelController:
                     avg_risk = float(np.mean(r))
                     det_rate = (pos_count / len(df)) * 100 if len(df) > 0 else 0
                     
+                    # Compute LOCAL performance for this specific cohort
+                    l_f1 = 0.0
+                    l_acc = 0.0
+                    if y_true is not None and len(np.unique(y_true)) > 1:
+                        try:
+                            from sklearn.metrics import f1_score, accuracy_score
+                            l_f1 = float(f1_score(y_true, p))
+                            l_acc = float(accuracy_score(y_true, p))
+                        except: pass
+                    
                     batch_results_summary.append({
-                        'model': m_name, 'positives': pos_count, 'risk': avg_risk, 'rate': det_rate
+                        'model': m_name, 'positives': pos_count, 'risk': avg_risk, 
+                        'rate': det_rate, 'local_f1': l_f1, 'local_acc': l_acc
                     })
                 except: continue
 
@@ -349,7 +377,13 @@ class ModelController:
             avg_consensus = np.mean(agreement_counts) if len(agreement_counts) > 0 else 0
             consensus_str = f"{avg_consensus:.2f}/{total_models}"
             
-            leader_model = max(batch_results_summary, key=lambda x: x['risk'])['model'] if batch_results_summary else "N/A"
+            # Determine Champion: Prioritize highest LOCAL F1 if truth exists, else highest Avg Risk
+            if y_true is not None and any(res['local_f1'] > 0 for res in batch_results_summary):
+                 leader_model = max(batch_results_summary, key=lambda x: x['local_f1'])['model']
+            elif batch_results_summary:
+                 leader_model = max(batch_results_summary, key=lambda x: x['risk'])['model']
+            else:
+                 leader_model = "N/A"
             present_markers = [c for c in df.columns if any(k in str(c).lower() for k in ['psa', 'afp', 'ca125', 'peak', 'slope'])]
             top_markers = present_markers[:3] if present_markers else ["Global Distribution"]
 
@@ -466,6 +500,11 @@ class ModelController:
             
             # Refresh Leaderboard (Fast UI update only)
             self.layout_manager.tab_leaderboard.update_leaderboard(leaderboard)
+            
+            # Update AI Consensus (Validation Tab) - Show per-model cohort metrics
+            self.layout_manager.tab_validation.update_batch_comparison(
+                summary_metadata['scoreboard'], total_count
+            )
             
             # Update Analysis
             self.layout_manager.tab_analysis.display_batch_report(df, metadata=summary_metadata)
