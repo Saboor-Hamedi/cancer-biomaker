@@ -3,6 +3,7 @@ from tkinter import scrolledtext, messagebox, ttk
 import threading
 import sys
 import os
+import re
 from PIL import Image, ImageTk
 
 # Ensure the parent directory (ai/) is in sys.path for direct trial execution
@@ -160,6 +161,11 @@ class AIChatModal(tk.Toplevel):
         
         self.chat_display.tag_configure("content_user", font=("Inter", 11), spacing1=5)
         self.chat_display.tag_configure("content_ai", font=("Inter", 11), spacing1=5)
+        
+        # Markdown Component Tags
+        self.chat_display.tag_configure("bold", font=("Inter", 11, "bold"))
+        self.chat_display.tag_configure("h1", font=("Inter", 14, "bold"), foreground=self.colors['ai_header'], spacing1=15, spacing3=5)
+        self.chat_display.tag_configure("bullet_symbol", foreground=self.colors['accent'], font=("Inter", 11, "bold"))
         self.chat_display.tag_configure("error", foreground="#EF4444", font=("Inter", 10, "italic"))
 
         # Footer Input
@@ -167,7 +173,7 @@ class AIChatModal(tk.Toplevel):
         input_dock.pack(fill=tk.X, side=tk.BOTTOM)
         
         # 1. Textarea takes FULL WIDTH at the top
-        self.user_entry = tk.Text(input_dock, height=4, font=("Inter", 11), 
+        self.user_entry = tk.Text(input_dock, height=4, font=("Inter", 14), 
                                   bg=self.colors['bg'], fg=self.colors['ai_text'], 
                                   borderwidth=1, padx=15, pady=10, insertbackground=self.colors['ai_text'],
                                   highlightthickness=1, highlightbackground=self.colors['border'])
@@ -220,14 +226,65 @@ class AIChatModal(tk.Toplevel):
         
         tag_block = "ai_block" if is_ai else "user_block"
         tag_header = "ai_header" if is_ai else "user_header"
-        tag_content = "content_ai" if is_ai else "content_user"
+        base_tag = "content_ai" if is_ai else "content_user"
         
-        # Start Block
+        # Header (Researcher/Provider)
         self.chat_display.insert(tk.END, f"  {sender.upper()}\n", (tag_header, tag_block))
-        self.chat_display.insert(tk.END, f"  {message}\n", (tag_content, tag_block))
         
+        # Body with Markdown Support
+        self._render_markdown_logic(message, (base_tag, tag_block))
+        
+        self.chat_display.insert(tk.END, "\n") # Space after block
         self.chat_display.see(tk.END)
         self.chat_display.configure(state='disabled')
+
+    def _render_markdown_logic(self, text, base_tags):
+        # 0. Robust line splitting (handles both \r\n and \n)
+        lines = text.replace('\r\n', '\n').split('\n')
+        
+        for i, line in enumerate(lines):
+            working_line = line.strip()
+            
+            # Skip truly empty lines but preserve paragraph spacing
+            if not working_line:
+                if i < len(lines)-1: # Don't add trailing newline at the very end of block
+                    self.chat_display.insert(tk.END, "\n", base_tags)
+                continue
+            
+            # 1. Handle Headings (#, ##, ###)
+            if working_line.startswith('#'):
+                level = 0
+                while level < len(working_line) and working_line[level] == '#':
+                    level += 1
+                header_text = working_line[level:].strip().rstrip('#').strip()
+                self.chat_display.insert(tk.END, "  " + header_text + "\n", base_tags + ("h1",))
+            
+            # 2. Handle Bullets (- Bullet)
+            elif working_line.startswith('- ') or working_line.startswith('* '):
+                self.chat_display.insert(tk.END, "    • ", base_tags + ("bullet_symbol",))
+                self._render_inline(working_line[2:], base_tags)
+                self.chat_display.insert(tk.END, "\n", base_tags)
+            
+            # 3. Handle Normal Paragraphs & Bold-Only Titles
+            else:
+                self.chat_display.insert(tk.END, "  ", base_tags)
+                self._render_inline(line, base_tags)
+                self.chat_display.insert(tk.END, "\n", base_tags)
+
+    def _render_inline(self, text, base_tags):
+        """High-precision bolding for clinical reports."""
+        cursor = 0
+        # Use a more resilient non-greedy pattern that supports both styles
+        for match in re.finditer(r'(\*\*|__)(?P<content>.*?)\1', text):
+            # Lead text
+            self.chat_display.insert(tk.END, text[cursor:match.start()], base_tags)
+            # Bold segment
+            self.chat_display.insert(tk.END, match.group('content'), base_tags + ("bold",))
+            cursor = match.end()
+        
+        # Remaining tail text (IMPORTANT: ensure newlines and trailing subtext are kept)
+        if cursor < len(text):
+            self.chat_display.insert(tk.END, text[cursor:], base_tags)
 
     def handle_send(self):
         user_input = self.user_entry.get("1.0", tk.END).strip()

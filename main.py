@@ -158,7 +158,7 @@ class CancerDetectionApp:
 
     def show_ai_chat(self):
         """Launches the AI Clinical Research Copilot without freezing the UI."""
-        self.layout_manager.update_status("Loading Clinical AI Specialists...", "orange")
+        self.layout_manager.update_status("Opening AI Research Assistant...", "orange")
         
         def _deferred_load_and_open():
             try:
@@ -173,7 +173,7 @@ class CancerDetectionApp:
 
     def _open_ai_modal(self, modal_class):
         """Helper to actually open the modal after imports finish."""
-        self.layout_manager.update_status("AI Ready.", "#10B981")
+        self.layout_manager.update_status("AI Research Assistant: Active", "#10B981")
         modal_class(self.root, settings_manager=self.settings_manager)
 
     def refresh_global_styles(self):
