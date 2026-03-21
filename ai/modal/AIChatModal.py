@@ -80,7 +80,8 @@ Use these metrics to explain which models are the most reliable (prioritize High
 2. TONE: Professional, clinical, and data-driven. 
 3. DISCLAIMER: Always remind the user that your output is for research assistance and MUST be validated by a licensed physician.
 4. METRIC ENFORCEMENT: When citing a model's performance, ALWAYS include its F1-Score and AUC. Specify exact values (e.g. 100.00%) rather than generic terms.
-5. CONTEXT: If data exists, prioritize explaining how specific biomarker values relate to the risk prediction based on the performance of the top-ranked models.
+5. DATA INTEGRITY: Use ONLY the metrics provided in the [[ ALGORITHM LEADERBOARD ]] above. Even if you think a model 'usually' performs differently, you MUST report and analyze based strictly on the current research session data. Never hallucinate scores.
+6. CONTEXT: If data exists, prioritize explaining how specific biomarker values relate to the risk prediction based on the performance of the top-ranked models.
 """
 
     def __init__(self, parent, settings_manager=None, clinical_context=None):

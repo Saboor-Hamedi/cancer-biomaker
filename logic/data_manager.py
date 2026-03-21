@@ -143,9 +143,8 @@ class DataManager:
             # 1. Clean Column Names (Strip whitespace)
             df.columns = [str(c).strip() for c in df.columns]
 
-            # 2. Drop completely empty rows/cols
+            # 2. Drop completely empty rows (Stop dropping empty cols so placeholders remain)
             df.dropna(how='all', inplace=True)
-            df.dropna(axis=1, how='all', inplace=True)
 
             self.uploaded_df = df
             return df, None

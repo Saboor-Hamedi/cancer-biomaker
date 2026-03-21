@@ -162,11 +162,8 @@ class EventHandler:
                 row_data = df.iloc[idx]
                 self.data_controller.sync_row_to_input(row_data)
                 
-                # Switch to input tab
-                try:
-                    self.layout_manager.dashboard.notebook.select(self.layout_manager.dashboard.input_tab)
-                except:
-                    pass
+                # Only sync row to predictors, do NOT switch tabs (as per researcher request)
+                pass
 
     def handle_tree_right_click(self, event):
         """Handle right-click context menu on tree."""

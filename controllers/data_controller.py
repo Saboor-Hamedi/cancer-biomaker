@@ -64,6 +64,9 @@ class DataController:
                     else:
                         self.data_manager.uploaded_df = df
                     
+                    # Clinical cohort auto-select: ensure newly uploaded batch starts as 'checked'
+                    self.data_manager.selected_indices = set(range(len(self.data_manager.uploaded_df)))
+                    
                     # Persist session
                     self.data_manager.save_session()
                     
@@ -153,6 +156,8 @@ class DataController:
                 if len(df) > sample_size:
                     df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
                 self.data_manager.uploaded_df = df
+                # Clinical cohort auto-select: automatically checkmark all sampled records
+                self.data_manager.selected_indices = set(range(len(df)))
                 # Clinical sync update: preserve master count for dashboard "Rows"
                 self.update_ui_after_load(total_count=master_count, full_context_df=full_df)
                 return True
@@ -259,8 +264,8 @@ class DataController:
         
         self.layout_manager.update_data_info(self.total_rows, total_cols, current_samples)
         
-        # ALSO: Sync Sidebar Quantity to selection count to satisfy user requirement
-        if self.data_manager.selected_indices and self.layout_manager.sidebar:
+        # SMART SYNC: Ensure Sidebar Quantity always matches the current dashboard sample count
+        if self.layout_manager.sidebar:
             try:
                 self.layout_manager.sidebar.sample_qty.set(current_samples)
             except:
