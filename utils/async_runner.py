@@ -29,10 +29,10 @@ class AsyncRunner:
                     self.root.after(0, lambda: on_finish(result))
             except Exception as e:
                 if on_error:
-                    self.root.after(0, lambda: on_error(e))
+                    self.root.after(0, lambda err=e: on_error(err))
                 else:
                     # Default error handling
-                    self.root.after(0, lambda: print(f"Async task failed: {e}"))
+                    self.root.after(0, lambda err=e: print(f"Async task failed: {err}"))
 
         def update_status():
             # This would be handled by the caller, but we can provide a hook

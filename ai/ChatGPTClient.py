@@ -27,23 +27,34 @@ class ChatGPTClient(LLMProvider):
         ]
 
     def generate_response(self, prompt: str, system_instruction: str = "You are a helpful assistant.", temperature: float = 0.7, max_tokens: int = 1000) -> str:
-        """
-        Sends the prompt to OpenAI and returns the text response.
-        """
+        """Sends the prompt to OpenAI and returns the text response."""
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=self._prepare_messages(prompt, system_instruction),
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                stream=False
             )
             return response.choices[0].message.content
-        except openai.AuthenticationError:
-            return "Error: Invalid OpenAI API Key."
-        except openai.RateLimitError:
-            return "Error: OpenAI rate limit reached."
         except Exception as e:
-            return f"ChatGPT Error: {str(e)}"
+            return f"Client Error: {str(e)}"
+
+    def generate_stream(self, prompt: str, system_instruction: str = "You are a helpful assistant.", temperature: float = 0.7, max_tokens: int = 1000):
+        """Yields chunks of text as they arrive from OpenAI."""
+        try:
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=self._prepare_messages(prompt, system_instruction),
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=True
+            )
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        except Exception as e:
+            yield f"Stream Error: {str(e)}"
 
     def get_model_info(self) -> str:
         return f"Provider: OpenAI | Model: {self.model}"

@@ -115,6 +115,7 @@ class CancerDetectionApp:
 
         self.menu_handler = MenuHandler(self.root, self.data_controller, self.model_controller, self.visualization_controller, self.layout_manager)
         self.event_handler = EventHandler(self.root, self.data_controller, self.model_controller, self.visualization_controller, self.layout_manager)
+        self.ai_assistant = None
 
         callbacks = {
             'sample': lambda: self.data_controller.handle_sample(self.layout_manager.sidebar.sample_qty.get()),
@@ -172,9 +173,48 @@ class CancerDetectionApp:
         threading.Thread(target=_deferred_load_and_open, daemon=True).start()
 
     def _open_ai_modal(self, modal_class):
-        """Helper to actually open the modal after imports finish."""
-        self.layout_manager.update_status("AI Research Assistant: Active", "#10B981")
-        modal_class(self.root, settings_manager=self.settings_manager)
+        """Opens (or reveals) the non-modal AI Research Assistant with session persistence."""
+        self.layout_manager.update_status("AI Research Assistant: Syncing clinical data...", "orange")
+
+        def _sync_task():
+            # 1. Gather live clinical context (Patient biomarkers + Model stats)
+            ctx = {'features': {}, 'stats': {}, 'leaderboard': [], 'data_source': "Unknown"}
+            try:
+                # Capture UI values (Must be thread-safe for reading labels)
+                # Note: cget() is generally okay for reading on non-main threads in some Tk versions, 
+                # but it's safer to just gather what we need. 
+                if self.layout_manager.tab_input:
+                    ctx['features'] = self.layout_manager.tab_input.get_values()
+                if self.layout_manager.dashboard:
+                    d = self.layout_manager.dashboard
+                    ctx['stats'] = {
+                        'avg_risk': d.risk_card_val.cget('text'),
+                        'confidence': d.conf_card_val.cget('text'),
+                        'triage': d.triage_card_val.cget('text')
+                    }
+                if self.data_manager.data_path:
+                    ctx['data_source'] = os.path.basename(self.data_manager.data_path)
+                    # HEAVY: Global benchmark sharing (Uses Cross-Validation)
+                    ctx['leaderboard'] = self.model_manager.get_model_leaderboard(self.data_manager.data_path)
+            except Exception: pass
+            return ctx
+
+        def _on_finish(ctx):
+            # 2. Singleton Management: Keep conversation alive during session
+            if self.ai_assistant is None or not self.ai_assistant.winfo_exists():
+                self.ai_assistant = modal_class(self.root, settings_manager=self.settings_manager, clinical_context=ctx)
+            else:
+                self.ai_assistant.update_context(ctx) # Refresh with new patient context
+                self.ai_assistant.deiconify() # Restore if hidden
+                self.ai_assistant.lift()      # Bring to front
+                self.ai_assistant.focus_set()
+            self.layout_manager.update_status("AI Research Assistant: Ready", "#10B981")
+
+        if self.async_runner:
+            self.async_runner.run_async("AI Context Sync", _sync_task, on_finish=_on_finish)
+        else:
+            # Fallback
+            _on_finish(_sync_task())
 
     def refresh_global_styles(self):
         StyleManager.apply_styles(self.root, self.settings_manager.settings)
@@ -214,19 +254,30 @@ class CancerDetectionApp:
                 self.data_controller.data_path = path
                 df = self.data_manager.uploaded_df
                 if df is not None:
+                    # Capture current values to avoid NoneType/Scope errors in async call
+                    r_val, c_val = len(df), len(df.columns)
                     self.root.after(0, self.layout_manager.refresh_data_tree)
-                    self.root.after(0, lambda: self.layout_manager.dashboard.update_data_info(rows=len(df), cols=len(df.columns), samples=len(df)))
-                self.root.after(0, lambda: self.layout_manager.log_message(f"Auto-loaded: {os.path.basename(path)}", level="INFO"))
+                    self.root.after(0, lambda r=r_val, c=c_val: self.layout_manager.dashboard.update_data_info(rows=r, cols=c, samples=r))
+                
+                # Safe capture of path for the logger
+                p_name = os.path.basename(path) if path is not None else "Clinical Dataset"
+                self.root.after(0, lambda n=p_name: self.layout_manager.log_message(f"Auto-loaded: {n}", level="INFO"))
 
             # 2. Check clinical model status
-            success, msg = self.model_manager.check_and_train_models("", self.layout_manager.update_status, force=False)
+            # Create a thread-safe callback for the UI status bar
+            def _ui_status_cb(msg, color=None):
+                self.root.after(0, lambda m=msg, c=color: self.layout_manager.update_status(m, c))
+            
+            success, msg = self.model_manager.check_and_train_models("", _ui_status_cb, force=False)
             if success:
-                self.root.after(0, lambda: self.layout_manager.refresh_input_features(self.model_manager.feature_names))
+                f_names = self.model_manager.feature_names
+                self.root.after(0, lambda f=f_names: self.layout_manager.refresh_input_features(f))
                 self.root.after(0, lambda: self.layout_manager.update_status("System Ready — Models Loaded", "#10B981"))
                 self.root.after(0, lambda: self.error_handler.notify("Clinical models loaded and ready.", type='success'))
             else:
                 self.root.after(0, lambda: self.layout_manager.update_status("Upload dataset to train models.", "#3B82F6"))
                 self.root.after(0, lambda: self.error_handler.notify("No trained models found.", type='info'))
+        
         threading.Thread(target=check_task, daemon=True).start()
 
 class ClinicalLogRedirector:

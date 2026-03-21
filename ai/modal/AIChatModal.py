@@ -17,18 +17,21 @@ try:
     from ..ClaudeClient import ClaudeClient
     from ..DeepSeekClient import DeepSeekClient
     from ..GeminiClient import GeminiClient
+    from ..MultiAIManager import MultiAIManager
 except (ImportError, ValueError):
     try:
         from ChatGPTClient import ChatGPTClient
         from ClaudeClient import ClaudeClient
         from DeepSeekClient import DeepSeekClient
         from GeminiClient import GeminiClient
+        from MultiAIManager import MultiAIManager
     except ImportError:
         sys.path.append(parent_dir)
         from ChatGPTClient import ChatGPTClient
         from ClaudeClient import ClaudeClient
         from DeepSeekClient import DeepSeekClient
         from GeminiClient import GeminiClient
+        from MultiAIManager import MultiAIManager
 
 class AIChatModal(tk.Toplevel):
     """
@@ -36,16 +39,56 @@ class AIChatModal(tk.Toplevel):
     Remembers user preferences, manages language consistency, and features a premium chat layout.
     """
     
-    SYSTEM_PROMPT = (
-        "You are the 'Clinical Research Copilot', an expert assistant in medical data science and Oncology. "
-        "CRITICAL: Always respond in English unless the user specifically speaks to you in another language. "
-        "Match the language of the user's input. For DeepSeek specifically, ensure the output is purely clinical and professional."
-    )
+    def _build_system_prompt(self, context=None):
+        """Constructs a context-aware system instruction for the AI."""
+        ctx = context or {}
+        features_str = "N/A"
+        stats_str = "N/A"
+        leaderboard_str = "N/A"
+        
+        if ctx.get('features'):
+            features_str = "\n".join([f"- {f}: {v}" for f, v in ctx['features'].items()])
+        
+        if ctx.get('stats'):
+            s = ctx['stats']
+            stats_str = f"Risk Prob: {s.get('avg_risk')} | Confidence: {s.get('confidence')} | Triage: {s.get('triage')}"
 
-    def __init__(self, parent, settings_manager=None):
+        if ctx.get('leaderboard'):
+            lb_lines = []
+            for i, en in enumerate(ctx['leaderboard']):
+                m = f"- Rank #{i+1}: {en['model']} (F1: {en.get('f1',0):.2%}, AUC: {en.get('auc',0):.2%}, Acc: {en.get('accuracy',0):.2%}, Prec: {en.get('precision',0):.2%}, Rec: {en.get('recall',0):.2%})"
+                lb_lines.append(m)
+            leaderboard_str = "\n".join(lb_lines)
+
+        self.SYSTEM_PROMPT = f"""You are the 'Clinical Research Copilot' for the Cancer Biomarker XAI Dashboard.
+Your role is to assist oncology researchers in interpreting biomarker data and AI-driven risk predictions.
+
+[[ CLINICAL DATA FOR CURRENT PATIENT ]]
+Active Biomarkers:
+{features_str}
+
+Live Dashboard Diagnostics:
+{stats_str}
+
+[[ ALGORITHM LEADERBOARD (Performance Benchmarks) ]]
+The following models have been cross-validated on the research dataset ({ctx.get('data_source', 'Active Batch')}):
+{leaderboard_str}
+Use these metrics to explain which models are the most reliable (prioritize High F1/AUC) and if there is a discrepancy between algorithms.
+
+[[ RULES ]]
+1. LANGUAGE: Always respond in the SAME language as the user.
+2. TONE: Professional, clinical, and data-driven. 
+3. DISCLAIMER: Always remind the user that your output is for research assistance and MUST be validated by a licensed physician.
+4. METRIC ENFORCEMENT: When citing a model's performance, ALWAYS include its F1-Score and AUC. Specify exact values (e.g. 100.00%) rather than generic terms.
+5. CONTEXT: If data exists, prioritize explaining how specific biomarker values relate to the risk prediction based on the performance of the top-ranked models.
+"""
+
+    def __init__(self, parent, settings_manager=None, clinical_context=None):
         super().__init__(parent)
         self.parent = parent
         self.settings_manager = settings_manager
+        self.clinical_context = clinical_context
+        self._build_system_prompt(clinical_context)
         
         self.title("AI Clinical Research Assistant")
         self.geometry("800x900")
@@ -83,10 +126,11 @@ class AIChatModal(tk.Toplevel):
             }
 
         self.configure(bg=self.colors['bg'])
-        self.transient(parent)
-        self.grab_set()
+        # Persistent non-modal mode: remove grab_set and transient
+        self.protocol("WM_DELETE_WINDOW", self.on_hide)
 
         self.ai_clients = {}
+        self.stop_requested = False
         
         # Load Last Provider State
         self.initial_provider = settings_manager.last_ai_provider if settings_manager else "ChatGPT"
@@ -96,12 +140,27 @@ class AIChatModal(tk.Toplevel):
         self._setup_ui()
         self._load_saved_keys()
 
+    def update_context(self, clinical_context):
+        """Refreshes the internal clinical knowledge base without clearing the chat."""
+        self.clinical_context = clinical_context
+        self._build_system_prompt(clinical_context)
+        # We could also log a small internal message about the context update if desired
+        
+    def on_hide(self):
+        """Hide the assistant instead of destroying it to save conversation state."""
+        self.withdraw()
+
     def _center_modal(self):
         self.update_idletasks()
         w, h = 800, 900
         x = (self.winfo_screenwidth() // 2) - (w // 2)
         y = (self.winfo_screenheight() // 2) - (h // 2)
         self.geometry(f"{w}x{h}+{x}+{y}")
+
+    def _add_hover(self, widget, color_on, color_off):
+        """Standardizes interactive feedback across the clinical modal."""
+        widget.bind("<Enter>", lambda e: widget.config(bg=color_on))
+        widget.bind("<Leave>", lambda e: widget.config(bg=color_off))
 
     def _setup_window_icon(self):
         try:
@@ -138,6 +197,7 @@ class AIChatModal(tk.Toplevel):
                                   borderwidth=0, highlightthickness=1)
         self.key_entry.config(highlightbackground=self.colors['border'], highlightcolor=self.colors['accent'])
         self.key_entry.pack(side=tk.LEFT)
+        self._add_hover(self.key_entry, self.colors['surface'], self.colors['bg'])
         self.key_entry.bind("<FocusOut>", self._save_current_key)
 
         # Chat Area - Main Content
@@ -180,13 +240,32 @@ class AIChatModal(tk.Toplevel):
         self.user_entry.pack(side=tk.TOP, fill=tk.X, expand=True)
         self.user_entry.bind("<Return>", self._intercept_return)
         
-        # 2. Button stays below it on the RIGHT for a clean layout
-        self.send_btn = tk.Button(input_dock, text="SEND", bg=self.colors['accent'], 
+        # 2. Controls Area
+        controls = tk.Frame(input_dock, bg=self.colors['surface'])
+        controls.pack(side=tk.TOP, fill=tk.X, pady=(15, 0))
+        
+        self.export_btn = tk.Button(controls, text=" 💾 EXPORT RESEARCH NOTE ", bg=self.colors['surface'], 
+                                  fg=self.colors['accent'], font=("Inter", 9, "bold"), relief="flat",
+                                  activebackground=self.colors['border'], activeforeground=self.colors['ai_header'],
+                                  padx=15, pady=8, command=self.handle_export, cursor="hand2",
+                                  borderwidth=1, highlightthickness=0)
+        self.export_btn.pack(side=tk.LEFT)
+        self._add_hover(self.export_btn, self.colors['border'], self.colors['surface'])
+
+        self.send_btn = tk.Button(controls, text="SEND", bg=self.colors['accent'], 
                                   fg="white", font=("Inter", 11, "bold"), relief="raised",
                                   activebackground=self.colors['ai_header'], activeforeground="white",
                                   padx=40, pady=8, command=self.handle_send, cursor="hand2",
                                   width=12, highlightthickness=0) 
-        self.send_btn.pack(side=tk.TOP, anchor=tk.E, pady=(15, 0)) 
+        self.send_btn.pack(side=tk.RIGHT)
+        self._add_hover(self.send_btn, self.colors['ai_header'], self.colors['accent'])
+
+        self.stop_btn = tk.Button(controls, text="STOP", bg="#EF4444", 
+                                  fg="white", font=("Inter", 10, "bold"), relief="flat",
+                                  activebackground="#DC2626", activeforeground="white",
+                                  padx=20, pady=8, command=self.handle_stop, cursor="hand2",
+                                  state="disabled") 
+        self.stop_btn.pack(side=tk.RIGHT, padx=10)
 
     def _intercept_return(self, event):
         """Handle Enter for send, Shift+Enter for new line."""
@@ -238,6 +317,43 @@ class AIChatModal(tk.Toplevel):
         self.chat_display.see(tk.END)
         self.chat_display.configure(state='disabled')
 
+    def _start_ai_block(self, provider):
+        """Prep the UI for a streaming AI response."""
+        self.chat_display.configure(state='normal')
+        self.chat_display.insert(tk.END, f"  {provider.upper()}\n", ("ai_header", "ai_block"))
+        # Mark the start of the content so we can find it
+        self.chat_display.mark_set("stream_start", "insert")
+        self.chat_display.mark_gravity("stream_start", tk.LEFT)
+        self.chat_display.configure(state='disabled')
+        self.current_full_response = ""
+
+    def _append_ai_chunk(self, chunk):
+        """Append a chunk during streaming (Real-time)."""
+        self.chat_display.configure(state='normal')
+        self.current_full_response += chunk
+        
+        # We simplify live rendering to character-by-character appending
+        # Markdown is finalized once the full block arrives for maximum precision
+        self.chat_display.insert(tk.END, chunk, ("content_ai", "ai_block"))
+        
+        self.chat_display.see(tk.END)
+        self.chat_display.configure(state='disabled')
+
+    def _finalize_stream(self, provider):
+        """Clean up and perform a markdown pass on the finished stream."""
+        self.chat_display.configure(state='normal')
+        
+        # Remove the raw stream text to replace with formatted text
+        self.chat_display.delete("stream_start", tk.END)
+        
+        # Render properly with markdown
+        self._render_markdown_logic(self.current_full_response, ("content_ai", "ai_block"))
+        self.chat_display.insert(tk.END, "\n")
+        
+        self.send_btn.config(state="normal", text="SEND")
+        self.chat_display.see(tk.END)
+        self.chat_display.configure(state='disabled')
+
     def _render_markdown_logic(self, text, base_tags):
         # 0. Robust line splitting (handles both \r\n and \n)
         lines = text.replace('\r\n', '\n').split('\n')
@@ -286,6 +402,11 @@ class AIChatModal(tk.Toplevel):
         if cursor < len(text):
             self.chat_display.insert(tk.END, text[cursor:], base_tags)
 
+    def handle_stop(self):
+        """Halts the current clinical AI stream."""
+        self.stop_requested = True
+        self.stop_btn.config(state="disabled")
+
     def handle_send(self):
         user_input = self.user_entry.get("1.0", tk.END).strip()
         if not user_input: return
@@ -297,36 +418,103 @@ class AIChatModal(tk.Toplevel):
             messagebox.showwarning("System Error", "Clinical API Key required.")
             return
 
+        self.stop_requested = False
         self._save_current_key()
         self.user_entry.delete("1.0", tk.END)
         self.log_message("Researcher", user_input, is_ai=False)
         
         self.send_btn.config(state="disabled", text="ANALYZING...")
-        threading.Thread(target=self.fetch_ai_response, args=(provider, api_key, user_input), daemon=True).start()
+        self.stop_btn.config(state="normal")
+        threading.Thread(target=self.fetch_ai_stream, args=(provider, api_key, user_input), daemon=True).start()
 
-    def fetch_ai_response(self, provider, api_key, prompt):
+    def fetch_ai_stream(self, provider, api_key, prompt):
+        """Core clinical research engine - handles API orchestration and streaming."""
         try:
+            # 1. Multi-AI Factory Orchestration
             if provider not in self.ai_clients:
-                if provider == "DeepSeek": self.ai_clients[provider] = DeepSeekClient(api_key)
-                elif provider == "ChatGPT": self.ai_clients[provider] = ChatGPTClient(api_key)
-                elif provider == "Gemini": self.ai_clients[provider] = GeminiClient(api_key)
-                elif provider == "Claude": self.ai_clients[provider] = ClaudeClient(api_key)
+                client = MultiAIManager.create_client(provider, api_key)
+                if not client: raise ValueError(f"Provider '{provider}' not initialized correctly.")
+                self.ai_clients[provider] = client
             else:
+                # Update key for existing client
                 self.ai_clients[provider].client.api_key = api_key
 
-            # Force English and language matching via System Prompt
-            response = self.ai_clients[provider].generate_response(prompt, system_instruction=self.SYSTEM_PROMPT)
-            self.after(0, lambda: self._finalize_response(provider, response))
+            # 2. UI Preparation
+            self.after(0, lambda: self._start_ai_block(provider))
+            
+            # 3. Stream Response via Background Engine
+            for chunk in self.ai_clients[provider].generate_stream(prompt, system_instruction=self.SYSTEM_PROMPT):
+                if self.stop_requested:
+                    self.after(0, lambda: self._append_ai_chunk("\n\n[RESEARCH STREAM INTERRUPTED BY USER]"))
+                    break
+                self.after(0, lambda c=chunk: self._append_ai_chunk(c))
+                
+            # 4. Final Formatting Pass
+            self.after(0, lambda: self._finalize_stream(provider))
+            self.after(0, lambda: self.stop_btn.config(state="disabled"))
+            
         except Exception as e:
-            err_msg = str(e)
-            self.after(0, lambda: self._finalize_response("AI Error", err_msg, is_error=True))
+            self.after(0, lambda: self._handle_stream_error(provider, str(e)))
 
-    def _finalize_response(self, provider, response, is_error=False):
+    def handle_export(self):
+        """Compiles clinical data and chat log into a professional Markdown report."""
+        from tkinter import filedialog
+        from datetime import datetime
+        
+        # 1. Generate filename with timestamp
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        safe_ts = ts.replace(":", "-").replace(" ", "_")
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".md",
+            filetypes=[("Markdown Document", "*.md"), ("Professional Text", "*.txt")],
+            title="Export Clinical Research Note",
+            initialfile=f"Clinical_Research_{safe_ts}.md"
+        )
+        
+        if not filename: return
+
+        # 2. Assemble the Professional Report Header
+        report = []
+        report.append("# CANCER BIOMARKER XAI: CLINICAL RESEARCH NOTE")
+        report.append(f"**Generated**: {ts}")
+        report.append(f"**AI Analyst**: {self.provider_var.get()}")
+        report.append("\n---")
+
+        # 3. Inject Patient Context if available
+        if self.clinical_context:
+            report.append("\n## 🔬 ACTIVE PATIENT PROFILE")
+            features = self.clinical_context.get('features', {})
+            if features:
+                report.append("### Biomarkers:")
+                for f, v in features.items():
+                    report.append(f"- **{f}**: {v}")
+            
+            stats = self.clinical_context.get('stats', {})
+            if stats:
+                report.append(f"\n### Model Diagnostics ({stats.get('triage')} Risk Level):")
+                report.append(f"- **Average Risk Probability**: {stats.get('avg_risk')}")
+                report.append(f"- **Diagnostic Confidence**: {stats.get('confidence')}")
+            report.append("\n---")
+
+        # 4. Extract Chat History
+        report.append("\n## 💬 RESEARCH CONSULTATION LOG")
+        chat_raw = self.chat_display.get("1.0", tk.END).strip()
+        report.append(chat_raw)
+        
+        report.append("\n---")
+        report.append("\n*DISCLAIMER: This report is generated by an AI Research Assistant for research purposes. It is NOT a clinical diagnosis and must be reviewed by a licensed medical professional.*")
+
+        # 5. Save to disk
+        try:
+            with open(filename, "w", encoding='utf-8') as f:
+                f.write("\n".join(report))
+            messagebox.showinfo("Export Success", f"Professional Research Note saved to:\n{filename}")
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Critical failure saving report: {str(e)}")
+
+    def _handle_stream_error(self, provider, error_msg):
+        self.log_message(f"{provider} (Error)", error_msg)
         self.send_btn.config(state="normal", text="SEND")
-        if is_error:
-            self.log_message(provider, response, is_ai=True)
-        else:
-            self.log_message(provider, response, is_ai=True)
 
 if __name__ == "__main__":
     from logic.settings_manager import SettingsManager

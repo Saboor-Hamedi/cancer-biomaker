@@ -9,7 +9,14 @@ class LLMProvider(ABC):
     @abstractmethod
     def generate_response(self, prompt: str, **kwargs) -> str:
         """
-        Takes a user prompt and returns a response from the AI.
+        Takes a user prompt and returns a full response from the AI.
+        """
+        pass
+
+    @abstractmethod
+    def generate_stream(self, prompt: str, **kwargs):
+        """
+        Yields chunks of text as they arrive from the AI provider.
         """
         pass
 

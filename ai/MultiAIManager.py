@@ -20,6 +20,16 @@ class MultiAIManager:
     def __init__(self):
         self.clients: Dict[str, LLMProvider] = {}
 
+    @staticmethod
+    def create_client(provider_name: str, api_key: str) -> LLMProvider:
+        """Centralized factory for instantiating clinical LLM providers."""
+        name = provider_name.lower()
+        if "chatgpt" in name: return ChatGPTClient(api_key)
+        if "claude" in name: return ClaudeClient(api_key)
+        if "deepseek" in name: return DeepSeekClient(api_key)
+        if "gemini" in name: return GeminiClient(api_key)
+        return None
+
     def add_client(self, name: str, client: LLMProvider):
         self.clients[name.lower()] = client
 
@@ -29,6 +39,13 @@ class MultiAIManager:
         for name, client in self.clients.items():
             results[name] = client.generate_response(prompt)
         return results
+
+    def get_streaming_response(self, provider_name, prompt, **kwargs):
+        """Streams the response from a specific clinical provider."""
+        provider = str(provider_name).lower()
+        if provider in self.clients:
+            return self.clients[provider].generate_stream(prompt, **kwargs)
+        return None
 
 # --- SETUP & USAGE EXAMPLE ---
 if __name__ == "__main__":

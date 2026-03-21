@@ -17,11 +17,8 @@ class GeminiClient(LLMProvider):
         self.model = model
 
     def generate_response(self, prompt: str, system_instruction: str = "You are a helpful assistant.", temperature: float = 0.7, max_tokens: int = 1024) -> str:
-        """
-        Sends a request to Google Gemini and returns the text content.
-        """
+        """Sends a request to Google Gemini and returns the full text content."""
         try:
-            # Note: temperature and max_output_tokens are passed via config
             response = self.client.models.generate_content(
                 model=self.model,
                 contents=prompt,
@@ -31,15 +28,27 @@ class GeminiClient(LLMProvider):
                     'max_output_tokens': max_tokens,
                 }
             )
-            
-            # The SDK returns a response object where .text is a quick accessor
-            if response.text:
-                return response.text
-            else:
-                return "Gemini Error: No text returned (possible safety block)."
-                
+            return response.text if response.text else "Gemini Error: No text returned."
         except Exception as e:
-            return f"Gemini SDK Error: {str(e)}"
+            return f"Gemini Error: {str(e)}"
+
+    def generate_stream(self, prompt: str, system_instruction: str = "You are a helpful assistant.", temperature: float = 0.7, max_tokens: int = 1024):
+        """Yields chunks of text as they arrive from Google Gemini 2."""
+        try:
+            stream = self.client.models.generate_content_stream(
+                model=self.model,
+                contents=prompt,
+                config={
+                    'system_instruction': system_instruction,
+                    'temperature': temperature,
+                    'max_output_tokens': max_tokens,
+                }
+            )
+            for chunk in stream:
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            yield f"Gemini Stream Error: {str(e)}"
 
     def get_model_info(self) -> str:
         return f"Provider: Google | Model: {self.model}"

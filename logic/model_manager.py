@@ -20,8 +20,16 @@ from sklearn.svm import SVC
 HAS_XGB = importlib.util.find_spec("xgboost") is not None
 HAS_TORCH = importlib.util.find_spec("torch") is not None and importlib.util.find_spec("torch_geometric") is not None
 
-# Placeholder for torch_base used as a type hint
-torch_base = object
+if HAS_TORCH:
+    import torch
+    import torch.nn.functional as F
+    from torch_geometric.data import Data
+    from torch_geometric.loader import DataLoader
+    from torch_geometric.nn import GCNConv, global_mean_pool
+    torch_base = torch.nn.Module
+else:
+    # Placeholder for torch_base used as a type hint
+    torch_base = object
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
 log = logging.getLogger(__name__)
@@ -385,6 +393,7 @@ class ModelManager:
             ('svm_model.pkl', 'SVM',                  SVC(probability=True, random_state=42)),
         ]
         if HAS_XGB:
+            from xgboost import XGBClassifier
             models_data.append(('xgboost_model.pkl', 'XGBoost',
                                  XGBClassifier(eval_metric='logloss', random_state=42)))
         if HAS_TORCH:

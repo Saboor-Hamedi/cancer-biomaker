@@ -423,10 +423,28 @@ class ModelController:
             # This is extremely heavy due to Cross-Validation and was causing UI freezing
             leaderboard = self.model_manager.get_model_leaderboard(self.data_manager.data_path)
             
-            # Prepare final DF
-            df['Prediction'] = ['POSITIVE' if p == 1 else 'NEGATIVE' for p in predictions]
-            df['Confidence'] = confidences
-            df['Risk_Score'] = risks
+            # Smart-Sync diagnostics: overwrite existing columns if detected (even with typos)
+            def update_best_match(keywords, data):
+                for col in df.columns:
+                    c_low = str(col).lower()
+                    if any(k in c_low for k in keywords):
+                        df[col] = data
+                        return True
+                return False
+
+            # 1. Update Decision/Class
+            if not update_best_match(['prediction', 'rish', 'class', 'status', 'verdict'], 
+                                   ['POSITIVE' if p == 1 else 'NEGATIVE' for p in predictions]):
+                df['Prediction'] = ['POSITIVE' if p == 1 else 'NEGATIVE' for p in predictions]
+
+            # 2. Update Risk/Probability
+            if not update_best_match(['risk', 'probability', 'score'], risks):
+                df['Risk_Score'] = risks
+
+            # 3. Update Confidence/Reliability
+            if not update_best_match(['confidence', 'reliability', 'certainty'], confidences):
+                df['Confidence'] = confidences
+            
             df['Consensus_Count'] = agreement_counts
             
             return df, summary_metadata, consensus_str, leaderboard

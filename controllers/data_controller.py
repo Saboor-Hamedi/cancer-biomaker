@@ -145,11 +145,24 @@ class DataController:
             return
 
         def _sample_task():
-            # load_sample logic moved here to run in thread
-            return self.load_sample(sample_size)
+            # Standardised sampling logic: load master then sample
+            full_df, error = self.data_manager.load_data(self.data_path)
+            if full_df is not None:
+                master_count = len(full_df)
+                df = full_df
+                if len(df) > sample_size:
+                    df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
+                self.data_manager.uploaded_df = df
+                # Clinical sync update: preserve master count for dashboard "Rows"
+                self.update_ui_after_load(total_count=master_count, full_context_df=full_df)
+                return True
+            return False
 
-        def _on_finish(_):
-            self.layout_manager.update_status(f"Generated {sample_size} clinical samples", "#10B981")
+        def _on_finish(success):
+            if success:
+                self.layout_manager.update_status(f"Generated {sample_size} clinical samples", "#10B981")
+            else:
+                self.layout_manager.update_status("Sampling operation failed.", "red")
 
         self.layout_manager.update_status(f"Sampling {sample_size} records...", "orange")
         if self.async_runner:
@@ -234,8 +247,11 @@ class DataController:
             messagebox.showwarning("Data Quality Issues",
                                  f"Issues found:\n" + "\n".join(f"• {issue}" for issue in issues))
 
-        # Update data info
-        self.total_rows = total_count if total_count is not None else len(df)
+        # Update data info: Only reset master count if explicitly provided (new file load)
+        if total_count is not None:
+            self.total_rows = total_count
+        elif self.total_rows == 0:
+            self.total_rows = len(df)
         total_cols = len(df.columns)
         
         # SMART LOGIC: Show selection count if active, else current batch size
