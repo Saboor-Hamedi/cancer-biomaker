@@ -86,6 +86,7 @@ class MenuHandler:
         analytics_menu.add_command(label="Precision-Recall Curve", command=self.visualization_controller.show_precision_recall)
         analytics_menu.add_command(label="PR-Threshold Analysis", command=self.visualization_controller.show_precision_recall_threshold)
         analytics_menu.add_separator()
+        analytics_menu.add_command(label="Patient Similarity Map (t-SNE)", command=self.visualization_controller.show_tsne_map)
         analytics_menu.add_separator()
         analytics_menu.add_command(label="AI Clinical Copilot", command=self.layout_manager.callbacks.get('show_ai_chat'), accelerator="Ctrl+G")
         menubar.add_cascade(label="Analytics", menu=analytics_menu)
