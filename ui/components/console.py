@@ -26,7 +26,7 @@ class ConsoleTab(ttk.Frame):
         self.content_container = ttk.Frame(self)
         self.content_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        self.text = tk.Text(self.content_container, font=("Consolas", 10), wrap=tk.WORD, 
+        self.text = tk.Text(self.content_container, font=("Consolas", 12), wrap=tk.WORD, 
                             state=tk.DISABLED, undo=True, borderwidth=0, highlightthickness=0)
         scrollbar = ttk.Scrollbar(self.content_container, orient=tk.VERTICAL, command=self.text.yview)
         self.text.configure(yscrollcommand=scrollbar.set)
@@ -35,11 +35,11 @@ class ConsoleTab(ttk.Frame):
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Standard tags (will be updated in refresh_theme)
-        self.text.tag_configure("INFO", font=("Consolas", 10, "bold"))
-        self.text.tag_configure("SUCCESS", font=("Consolas", 10, "bold"))
-        self.text.tag_configure("WARNING", font=("Consolas", 10, "bold"))
-        self.text.tag_configure("ERROR", font=("Consolas", 10, "bold"))
-        self.text.tag_configure("TIMESTAMP", font=("Consolas", 10))
+        self.text.tag_configure("INFO", font=("Consolas", 12, "bold"))
+        self.text.tag_configure("SUCCESS", font=("Consolas", 12, "bold"))
+        self.text.tag_configure("WARNING", font=("Consolas", 12, "bold"))
+        self.text.tag_configure("ERROR", font=("Consolas", 12, "bold"))
+        self.text.tag_configure("TIMESTAMP", font=("Consolas", 12))
 
     def refresh_theme(self, theme_name):
         from ui.styles import StyleManager

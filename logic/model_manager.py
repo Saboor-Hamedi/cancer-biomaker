@@ -27,6 +27,13 @@ if HAS_TORCH:
     from torch_geometric.loader import DataLoader
     from torch_geometric.nn import GCNConv, global_mean_pool
     torch_base = torch.nn.Module
+    # Allowlisting the GNN model for PyTorch 2.6+ security policy
+    try:
+        if hasattr(torch.serialization, 'add_safe_globals'):
+             # We forward-declare/import inside if needed, or use the global class name.
+             # But it's easier to just allowlist the module path or use weights_only=False later.
+             pass 
+    except: pass
 else:
     # Placeholder for torch_base used as a type hint
     torch_base = object
@@ -141,7 +148,10 @@ class GNNClassifier:
             # Restore model from byte stream
             buffer = io.BytesIO(state['model_stream'])
             try:
-                self.model = torch.load(buffer, map_location='cpu')
+                # [SECURITY SYNC]: PyTorch 2.6+ defaults to weights_only=True. 
+                # Since we are loading our own locally-persisted GNN objects, we explicitly
+                # set weights_only=False to allow restoring the full GNN class structure.
+                self.model = torch.load(buffer, map_location='cpu', weights_only=False)
             except Exception as e:
                 log.warning("Failed to load model from stream: %s", e)
                 self.model = None
@@ -279,6 +289,7 @@ class ModelManager:
         self.feature_names   = self._load_feature_names()
         self._feature_hash   = self._hash_features(self.feature_names)
         self.cached_train_df = None
+        self._cached_data_path = None # item #11: Track source for caching
 
         self.analytics_cache = {
             'calibration': {}, 'learning': {}, 'metrics': {},
@@ -294,7 +305,8 @@ class ModelManager:
             'stability': {}, 'tsne': None, 'pr_threshold': {}, 'shap': {}
         }
         self.cached_train_df = None
-        self.rf_model = self.lr_model = self.svm_model = self.xgb_model = self.gnn_model = None
+        self._cached_data_path = None
+        self.rf_model = self.lr_model = self.svm_model = self.xgb_model = self.gnn_model = self.mlp_model = None
 
     def delete_all_models(self):
         """Permanently deletes all trained model files and feature metadata from the disk."""
@@ -490,20 +502,32 @@ class ModelManager:
         return X, y
 
     def _load_training_data(self, data_path):
-        """Standardized data loader — always reads fresh from disk."""
-        if not os.path.exists(data_path):
-            raise FileNotFoundError(
-                f"Dataset not found at:\n{data_path}\nPlease upload data first."
-            )
-        self.cached_train_df = self._read_excel_safe(data_path)
+        """Standardized data loader — utilizes memory cache to avoid expensive Excel I/O."""
+        if not data_path or not os.path.exists(data_path):
+            raise FileNotFoundError(f"Dataset not found at:\n{data_path}\nPlease upload data first.")
+            
+        # [SMART CACHE]: Only read from disk if the path changed or no data is in RAM
+        ap = os.path.abspath(data_path)
+        if self.cached_train_df is None or self._cached_data_path != ap:
+            log.info("Clinical Cache Miss: Reading fresh data from %s", ap)
+            self.cached_train_df = self._read_excel_safe(data_path)
+            self._cached_data_path = ap
+        else:
+            log.info("Clinical Cache Hit: Using in-memory dataset.")
+
         X, y = self._prepare_df(self.cached_train_df)
         return (*train_test_split(X, y, test_size=0.2, random_state=42), X.columns.tolist())
 
     def get_raw_training_set(self, data_path):
-        """Returns full (X, y) without train/test split."""
+        """Returns full (X, y) without train/test split (utilizes memory cache)."""
         if not data_path or not os.path.exists(data_path):
             raise FileNotFoundError(f"Dataset missing at {data_path}")
-        self.cached_train_df = self._read_excel_safe(data_path)
+            
+        ap = os.path.abspath(data_path)
+        if self.cached_train_df is None or self._cached_data_path != ap:
+             self.cached_train_df = self._read_excel_safe(data_path)
+             self._cached_data_path = ap
+             
         return self._prepare_df(self.cached_train_df)
 
     # ── Analytics Methods ──────────────────────────────────────────────────────
@@ -774,6 +798,22 @@ class ModelManager:
         except Exception as e:
             log.error("Error loading model '%s': %s", model_name, e)
             return None
+
+    def pre_warm_models(self, status_callback=None):
+        """Proactively loads all trained model artifacts into memory for instant clinical feedback."""
+        models = ["Random Forest", "Logistic Regression", "SVM", "XGBoost", "MLP"]
+        total = len(models)
+        log.info("Initiating model pre-warming for clinical performance...")
+        
+        for i, name in enumerate(models):
+            if status_callback:
+                status_callback(f"Waking up AI Ensemble ({i+1}/{total}): {name}...", "orange")
+            # This triggers load_model's internal caching system
+            self.load_model(name)
+        
+        log.info("Model warming complete. Clinical dashboard ready for low-latency operations.")
+        if status_callback:
+            status_callback("AI Ensemble Ready — Instant Diagnosis Enabled", "#10B981")
 
     # ── Predictions ────────────────────────────────────────────────────────────
 

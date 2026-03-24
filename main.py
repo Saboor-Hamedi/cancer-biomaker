@@ -294,7 +294,9 @@ class CancerDetectionApp:
             if success:
                 f_names = self.model_manager.feature_names
                 self.root.after(0, lambda f=f_names: self.layout_manager.refresh_input_features(f))
-                self.root.after(0, lambda: self.layout_manager.update_status("System Ready — Models Loaded", "#10B981"))
+                
+                # [PRE-WARM]: Proactively pull models into RAM for low-latency clinical tasks
+                self.model_manager.pre_warm_models(status_callback=_ui_status_cb)
             else:
                 self.root.after(0, lambda: self.layout_manager.update_status("Upload dataset to train models.", "#3B82F6"))
                 self.root.after(0, lambda: self.error_handler.notify("No trained models found.", type='info'))
