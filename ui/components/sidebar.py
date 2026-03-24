@@ -127,6 +127,10 @@ class Sidebar(ttk.Frame):
         ttk.Button(reset_frame, text="⚙️ SETTINGS", command=self.callbacks.get('show_settings')).pack(fill=tk.X, padx=10, pady=(0, 10))
         ttk.Button(reset_frame, text="SYSTEM RESET", style='Danger.TButton', command=self.callbacks.get('system_reset')).pack(fill=tk.X, padx=10)
 
+    def update_sample_qty(self, count):
+        """Update the spinbox value programmatically."""
+        self.sample_qty.set(count)
+
     def refresh_theme(self, theme_name):
         """Update static internal widgets to match theme."""
         from ui.styles import StyleManager

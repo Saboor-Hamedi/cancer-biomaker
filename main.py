@@ -41,7 +41,7 @@ warnings.filterwarnings('ignore', category=UserWarning, module='joblib')
 warnings.filterwarnings('ignore', message='.*X has feature names, but SVC was fitted without feature names.*')
 logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 
 def get_resource_path():
     if getattr(sys, 'frozen', False):
@@ -139,6 +139,7 @@ class CancerDetectionApp:
             'show_biomarker_network': self.visualization_controller.show_biomarker_network,
             'search': self.data_controller.handle_search,
             'on_patient_selected': self.data_controller.on_patient_selected,
+            'on_row_select': self.data_controller.sync_row_to_input,
             'show_ai_chat': self.show_ai_chat,
             'show_settings': self._show_settings,
             'check_updates': lambda: self.update_manager.check_for_updates(silent=False),
@@ -154,6 +155,10 @@ class CancerDetectionApp:
 
         self.event_handler.setup_event_bindings()
         self.menu_handler.build_menubar()
+        
+        # [DYNAMIC SYNC]: Link menu to layout so they can react to biomarker changes
+        self.layout_manager.menu_handler = self.menu_handler
+        
         self._check_models_on_startup()
         self.update_manager.check_for_updates(silent=True)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)

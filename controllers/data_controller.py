@@ -153,7 +153,7 @@ class DataController:
             return
 
         def _sample_task():
-            # Standardised sampling logic: load master then sample
+            # Standardised sampling logic: load master then sample (IO/Processing)
             full_df, error = self.data_manager.load_data(self.data_path)
             if full_df is not None:
                 master_count = len(full_df)
@@ -161,17 +161,20 @@ class DataController:
                 if len(df) > sample_size:
                     # CLINICAL AUDIT SYNC: Preserve original indices for forensic tracking
                     df = df.sample(n=sample_size).sort_index()
-                self.data_manager.raw_subset = df.copy() # Capture RAW state first
-                self.data_manager.uploaded_df = df
-                # Clinical cohort auto-select: automatically checkmark all sampled records
-                self.data_manager.selected_indices = set(df.index.tolist())
-                # Clinical sync update: preserve master count for dashboard "Rows"
-                self.update_ui_after_load(total_count=master_count, full_context_df=full_df)
-                return True
-            return False
+                # Return data for main-thread UI updates
+                return (df, full_df, master_count)
+            return None
 
-        def _on_finish(success):
-            if success:
+        def _on_finish(result):
+            if result:
+                sampled_df, master_df, master_count = result
+                # 1. Update Managers (Thread-safe)
+                self.data_manager.raw_subset = sampled_df.copy()
+                self.data_manager.uploaded_df = sampled_df
+                self.data_manager.selected_indices = set(sampled_df.index.tolist())
+                
+                # 2. Update UI (GUI Thread ONLY)
+                self.update_ui_after_load(total_count=master_count, full_context_df=master_df)
                 self.layout_manager.update_status(f"Generated {sample_size} clinical samples", "#10B981")
             else:
                 self.layout_manager.update_status("Sampling operation failed.", "red")
@@ -326,6 +329,10 @@ class DataController:
 
     def sync_row_to_input(self, row_data):
         """Sync a specific row dict/Series to input tab (handles new 3-column layout)."""
+        # CLINCAL SYNC: Ensure row_data is a Series for robust indexing
+        if isinstance(row_data, dict):
+            row_data = pd.Series(row_data)
+
         tree = self.layout_manager.tab_input.tree
         display_to_raw = getattr(self.layout_manager.tab_input, '_display_to_raw', {})
         found_count = 0
@@ -373,6 +380,19 @@ class DataController:
 
         if found_count > 0:
             self.layout_manager.update_status(f"Synced {found_count} features from patient record", "#10B981")
+        
+        # [VELOCITY SYNC]: Update longitudinal trajectory for the selected patient
+        if self.velocity_manager and getattr(self.layout_manager, 'tab_velocity', None):
+            id_col = next((c for c in row_data.index if any(p in str(c).lower() for p in ['sample_id', 'patient_id', 'id'])), None)
+            p_id = row_data[id_col] if id_col else "ActivePatient-01"
+            
+            # Fetch stored history
+            v_data = self.velocity_manager.get_patient_velocity(p_id)
+            if v_data:
+                self.layout_manager.tab_velocity.update_velocity_data(p_id, v_data)
+            else:
+                # If no history exists, clear it for transparency
+                self.layout_manager.tab_velocity.clear()
 
 
     def _update_analysis_summary(self, df):

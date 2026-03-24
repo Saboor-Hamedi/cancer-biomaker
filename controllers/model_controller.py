@@ -296,7 +296,7 @@ class ModelController:
         # ── Update Velocity Trajectory Tab ──
         if hasattr(self, 'velocity_manager') and self.velocity_manager:
             inputs = result.get('inputs', {})
-            patient_id = inputs.get('sample_id', "Current_Patient")
+            patient_id = inputs.get('sample_id', "ActivePatient-01")
             
             # Fuzzy match biomarker keys
             def get_val(keyword):

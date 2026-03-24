@@ -170,6 +170,24 @@ class VelocityTab(ttk.Frame):
             self.ax.text(forecast['month'], self.ax.get_ylim()[0], ' FORECAST', 
                          color=text_mute, fontsize=8, fontweight='bold', va='bottom')
 
+        # ── 4. INLINE LINE LABELS ──
+        # helper to add a small label at the end of the line
+        def add_line_label(axis, x, y, text, color):
+            axis.text(x + 0.2, y, text, color=color, fontsize=8, fontweight='bold', va='center')
+
+        # Plot labels either at forecast or historical end
+        end_m = forecast['month'] if forecast else months[-1]
+        if forecast:
+            add_line_label(self.ax, end_m, forecast['psa'], "PSA", '#3B82F6')
+            add_line_label(self.ax, end_m, forecast['afp'], "AFP", '#10B981')
+            add_line_label(self.ax, end_m, forecast['ca125'], "CA125", '#F59E0B')
+            add_line_label(ax2, end_m, forecast['risk'], " RISK", '#EF4444')
+        else:
+            add_line_label(self.ax, end_m, psa[-1], "PSA", '#3B82F6')
+            add_line_label(self.ax, end_m, afp[-1], "AFP", '#10B981')
+            add_line_label(self.ax, end_m, ca125[-1], "CA125", '#F59E0B')
+            add_line_label(ax2, end_m, risk[-1], " RISK", '#EF4444')
+
         # Styling
         is_dark = sum(self.fig.patch.get_facecolor()[:3]) < 1.0 
         label_color = "#F8FAFC" if is_dark else "#475569"

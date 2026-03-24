@@ -1388,7 +1388,15 @@ class Visualizer:
         fig = Figure(figsize=(9, 6), facecolor=DESIGN_PALETTE['bg'])
         ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
 
-        sns.kdeplot(risks, fill=True, color=DESIGN_PALETTE['primary'], alpha=0.5, ax=ax, lw=2)
+        # [KDE SAFETY CHECK]: gaussian_kde requires N > 1
+        if len(risks) > 1:
+            sns.kdeplot(risks, fill=True, color=DESIGN_PALETTE['primary'], alpha=0.5, ax=ax, lw=2)
+        else:
+            # Add a single vertical line if only one sample exists to show relative risk
+            ax.axvline(risks[0] if len(risks) > 0 else 50, color=DESIGN_PALETTE['primary'], ls='-', lw=4, alpha=0.6)
+            ax.text(risks[0] if len(risks) > 0 else 50, ax.get_ylim()[1]*0.5, " SINGLE DATA POINT", 
+                    color=DESIGN_PALETTE['primary'], ha='left', fontsize=8, fontweight='bold')
+
         ax.set_title('Population Risk Distribution', fontsize=STYLE_CONFIG['title_size'], 
                      fontweight='bold', pad=25, fontfamily=STYLE_CONFIG['font_family'], color=DESIGN_PALETTE['text'])
         ax.set_xlabel('Risk Percentage (%)', fontsize=STYLE_CONFIG['label_size'], fontfamily=STYLE_CONFIG['font_family'])
@@ -1444,9 +1452,22 @@ class Visualizer:
         melted = plot_df.melt(id_vars='Status', value_vars=plot_features)
         ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
         
-        sns.violinplot(data=melted, x='variable', y='value', hue='Status', split=True,
-                       palette={'Healthy': DESIGN_PALETTE['success'], 'Detected': DESIGN_PALETTE['danger'], 'Population': DESIGN_PALETTE['primary']},
-                       inner="quartile", ax=ax, alpha=0.7)
+        # [STATISTICAL SAFETY]: Violin plots require KDE (N > 1)
+        # If any status group has only 1 patient, we use a Stripplot or Boxplot instead.
+        can_use_violin = len(plot_df) > 1
+        if can_use_violin and 'Status' in plot_df.columns:
+            if (plot_df['Status'].value_counts() < 2).any():
+                can_use_violin = False
+
+        if can_use_violin:
+            sns.violinplot(data=melted, x='variable', y='value', hue='Status', split=True,
+                        palette={'Healthy': DESIGN_PALETTE['success'], 'Detected': DESIGN_PALETTE['danger'], 'Population': DESIGN_PALETTE['primary']},
+                        inner="quartile", ax=ax, alpha=0.7)
+        else:
+            # Fallback to scatter points (Stripplot) for small cohorts
+            sns.stripplot(data=melted, x='variable', y='value', hue='Status', 
+                          palette={'Healthy': DESIGN_PALETTE['success'], 'Detected': DESIGN_PALETTE['danger'], 'Population': DESIGN_PALETTE['primary']},
+                          dodge=True, ax=ax, alpha=0.9, size=10, linewidth=1, edgecolor='white')
 
         ax.set_title('Biomarker Range Separation (Normal vs Detected)', fontsize=STYLE_CONFIG['title_size'], 
                      fontweight='bold', pad=25, fontfamily=STYLE_CONFIG['font_family'], color=DESIGN_PALETTE['text'])
@@ -1729,17 +1750,25 @@ class Visualizer:
                     target_col = fb
                     break
         
+        # [KDE SAFETY CHECK]: gaussian_kde requires multiple elements (N > 1)
+        # We disable KDE if the dataset is too small or if a specific Hue group has < 2 samples.
+        use_kde = len(plot_df) > 1
+        if use_kde and 'Status' in plot_df.columns:
+            counts = plot_df['Status'].value_counts()
+            if (counts < 2).any():
+                use_kde = False
+
         if target_col in plot_df.columns:
             if plot_df[target_col].dtype in [np.int64, np.int32, float]:
                 plot_df['Status'] = plot_df[target_col].map({0: 'Healthy', 1: 'Detected'}).fillna('Unknown')
             else:
                 plot_df['Status'] = plot_df[target_col]
             
-            sns.histplot(data=plot_df, x=feature_name, hue='Status', kde=True, ax=ax, 
+            sns.histplot(data=plot_df, x=feature_name, hue='Status', kde=use_kde, ax=ax, 
                          palette={'Healthy': DESIGN_PALETTE['success'], 'Detected': DESIGN_PALETTE['danger']},
                          alpha=0.4, multiple="layer", element="bars", bins=25)
         else:
-            sns.histplot(data=plot_df, x=feature_name, kde=True, ax=ax, 
+            sns.histplot(data=plot_df, x=feature_name, kde=use_kde, ax=ax, 
                          color=DESIGN_PALETTE['primary'], alpha=0.4, bins=25)
 
         # 4. Smart Labeling: Only annotate significant bars to prevent "tiny" overlapping text

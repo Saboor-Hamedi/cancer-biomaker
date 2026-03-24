@@ -102,17 +102,34 @@ class MenuHandler:
         menubar.add_cascade(label="Statistics", menu=stats_menu)
 
     def _build_features_menu(self, menubar):
-        """Build the Features menu."""
-        features_menu = tk.Menu(menubar, tearoff=0)
-        biomarkers = [
-            'PSA_peak_height', 'min_slope', 'PSA_concentration_pg_per_ml',
-            'max_slope', 'current_at_-0.46V', 'min_current',
-            'PSA_actual_peak_current', 'mean_current', 'area_under_curve',
-            'peak_height_ratio_PSA_CA125'
-        ]
-        for feature in biomarkers:
-            features_menu.add_command(label=feature, command=lambda f=feature: self.visualization_controller.show_feature_analysis(f))
-        menubar.add_cascade(label="Features", menu=features_menu)
+        """Build the dynamic Features menu."""
+        self.features_menu = tk.Menu(menubar, tearoff=0)
+        self.refresh_features_menu()
+        menubar.add_cascade(label="Features", menu=self.features_menu)
+
+    def refresh_features_menu(self, biomarkers=None):
+        """Synchronizes the Features menu with the current clinical biomarker profile."""
+        if biomarkers is None:
+            biomarkers = self.layout_manager.model_manager.feature_names
+        
+        # Clear existing commands
+        try:
+            self.features_menu.delete(0, tk.END)
+        except:
+            return # Menu not built yet
+
+        if not biomarkers:
+            self.features_menu.add_command(label="No Biomarkers Loaded", state=tk.DISABLED)
+            return
+
+        # Use an alphabetical sort for better clinical navigation
+        sorted_biomarkers = sorted(biomarkers)
+        for feature in sorted_biomarkers:
+            # We use a default argument in lambda to capture the current feature name correctly in the loop
+            self.features_menu.add_command(
+                label=feature, 
+                command=lambda f=feature: self.visualization_controller.show_feature_analysis(f)
+            )
 
     def _build_help_menu(self, menubar):
         """Build the Help menu."""
@@ -151,8 +168,8 @@ class MenuHandler:
         help_win.title("SYSTEM DOCUMENTATION & CLINICAL GUIDE")
         help_win.geometry("900x800")
         help_win.configure(bg="#FFFFFF")
-        help_win.transient(self.root)
-        help_win.grab_set()
+        # [RESIZABLE SYNC]: Allow independent window management (min/max/resize)
+        help_win.resizable(True, True)
 
         # Center
         help_win.update_idletasks()
@@ -207,8 +224,12 @@ class MenuHandler:
                     content = f.read()
                     break
         
+        # [DYNAMIC VERSION SYNC]: Inject the current application version into the guide
+        app_version = getattr(self.layout_manager, 'version', '1.0.8')
+        content = content.replace("v1.0.8", f"v{app_version}")
+        
         if not content:
-            content = "# Help & Documentation\nDataset guide and troubleshooting."
+            content = f"# Help & Documentation\nDataset guide and troubleshooting. (Version {app_version})"
 
         # Better Markdown Parser
         text.config(state=tk.NORMAL)

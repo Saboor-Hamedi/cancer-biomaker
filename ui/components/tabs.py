@@ -208,10 +208,11 @@ class InputTab(ttk.Frame):
         self.tree.tag_configure('other', background=row_bg, foreground=palette['text_main'])
 
 class DataTab(ttk.Frame):
-    def __init__(self, parent, on_select_callback=None):
+    def __init__(self, parent, on_select_callback=None, on_row_select_callback=None):
         super().__init__(parent)
         self.tree: ttk.Treeview = None # type: ignore
         self.on_select_callback = on_select_callback
+        self.on_row_select_callback = on_row_select_callback # New for direct row sync
         self.selection_indices = set()
         self._create_widgets()
 
@@ -232,7 +233,10 @@ class DataTab(ttk.Frame):
         top_container.pack(fill=tk.BOTH, expand=True)
         
         self.tree = ttk.Treeview(top_container, show="headings", height=22)
+        # 1. Register click for checkboxes [✓]
         self.tree.bind("<Button-1>", self._on_tree_click)
+        # 2. Register selection for row-level details (Trajectory/XAI Sync)
+        self.tree.bind("<<TreeviewSelect>>", self._on_selection_change)
         
         vsb = ttk.Scrollbar(top_container, orient=tk.VERTICAL, command=self.tree.yview)
         hsb = ttk.Scrollbar(main_container, orient=tk.HORIZONTAL, command=self.tree.xview)
@@ -269,6 +273,24 @@ class DataTab(ttk.Frame):
                     self.tree.item(item, values=vals, tags=tuple(tags))
                     if self.on_select_callback:
                         self.on_select_callback(self.selection_indices)
+    def _on_selection_change(self, event):
+        """Broadcast row selection for dashboard-wide synchronization."""
+        item = self.tree.focus()
+        if not item: return
+        
+        # Pull clinical values to send to controllers
+        columns = self.tree["columns"]
+        values = self.tree.item(item, "values")
+        if not values: return
+        
+        # Create a dictionary of {column: value}
+        row_dict = {}
+        for col, val in zip(columns, values):
+            if col != '[✓]': # Skip the indicator
+                row_dict[col] = val
+        
+        if self.on_row_select_callback:
+            self.on_row_select_callback(row_dict)
 
     def update_data(self, df, selection_indices=None):
         self.selection_indices = set(selection_indices) if selection_indices else set()

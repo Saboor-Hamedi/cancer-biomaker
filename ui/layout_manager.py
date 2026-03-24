@@ -38,6 +38,8 @@ class LayoutManager:
         self.tab_velocity = None
         self.tab_console = None
         self.model_explorer = None
+        # Reference for dynamic menu updates
+        self.menu_handler = None
 
     def setup_layout(self):
         """Set up the main application layout."""
@@ -72,7 +74,11 @@ class LayoutManager:
         self.tab_input = InputTab(self.dashboard.input_tab, features=self.model_manager.feature_names, data_manager=self.data_manager)
         self.tab_input.pack(fill=tk.BOTH, expand=True)
 
-        self.tab_data = DataTab(self.dashboard.data_tab, on_select_callback=self.callbacks.get('on_patient_selected'))
+        self.tab_data = DataTab(
+            self.dashboard.data_tab, 
+            on_select_callback=self.callbacks.get('on_patient_selected'),
+            on_row_select_callback=self.callbacks.get('on_row_select')
+        )
         self.tab_data.pack(fill=tk.BOTH, expand=True)
 
         self.tab_analysis = AnalysisTab(self.dashboard.analysis_tab, version=self.version)
@@ -123,6 +129,10 @@ class LayoutManager:
         """Refresh the input features in the input tab."""
         if self.tab_input:
             self.tab_input.refresh_features(features, first_row=first_row)
+        
+        # [DYNAMIC SYNC]: Update the Features menu if possible
+        if self.menu_handler:
+            self.menu_handler.refresh_features_menu(features)
 
     def refresh_data_tree(self):
         """Refresh the data display tree - showing all relevant clinical columns."""
@@ -219,6 +229,10 @@ class LayoutManager:
             return
         if self.dashboard:
             self.dashboard.update_data_info(rows=rows, cols=cols, samples=samples)
+        
+        # [NEW]: Update Sidebar's sample count programmatically to stay in sync
+        if self.sidebar:
+            self.sidebar.update_sample_qty(samples)
 
     def clear_all_data(self):
         """Wipes all diagnostic data across all dashboard tabs (User Request)."""
