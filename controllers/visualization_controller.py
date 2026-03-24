@@ -23,9 +23,9 @@ class VisualizationController:
 
     def _require_data(self, context='analytics'):
         """Show a friendly warning and return False when no dataset is loaded."""
-        if not self.data_manager.data_path:
+        if not self.data_manager.data_path or self.data_manager.uploaded_df is None:
             from tkinter import messagebox
-            messagebox.showwarning("No Data", f"No dataset loaded. Please upload or load a sample first for {context}.")
+            messagebox.showwarning("Data Required", f"{context} requires a dataset to be loaded first.\nPlease upload a dataset via File → Upload Dataset.")
             return False
         return True
 
@@ -71,12 +71,14 @@ class VisualizationController:
         except:
             pass
 
+    def _run_async_task(self, label, func, on_finish=None):
+        """Unified async task runner for clinical visualizations."""
         if self.async_runner:
             self.async_runner.run_async(label, func, on_finish=on_finish)
         else:
             # Fallback legacy mode if no runner provided
             import threading
-            threading.Thread(target=task, daemon=True).start()
+            threading.Thread(target=lambda: on_finish(func()) if on_finish else func(), daemon=True).start()
 
     def show_feature_importance(self):
         """Show feature importance plot."""
@@ -977,7 +979,7 @@ class VisualizationController:
 
     def show_multi_learning_curves(self):
         """Show comparative learning curves and update analysis tab with maturity metrics."""
-        if not self._require_data("Learning Curves"):
+        if not self._require_data_and_model("Comparative Analytics"):
             return
 
         from logic.model_manager import HAS_XGB
@@ -1078,7 +1080,7 @@ class VisualizationController:
 
     def show_feature_analysis(self, feature_name):
         """Show distribution profile for a specific biomarker."""
-        if not self._require_data(f"Feature Audit: {feature_name}"):
+        if not self._require_data_and_model(f"Feature Audit: {feature_name}"):
             return
 
         df = self.data_manager.uploaded_df

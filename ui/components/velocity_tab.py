@@ -19,19 +19,14 @@ class VelocityTab(ttk.Frame):
         self._create_widgets()
 
     def _create_widgets(self):
-        # Header
-        self.header = ttk.Frame(self, padding=(15, 12, 15, 6))
+        self.header = ttk.Frame(self, padding=(12, 8, 12, 4))
         self.header.pack(fill=tk.X)
-        
-        self.title_label = ttk.Label(self.header, text="LONGITUDINAL BIOMARKER VELOCITY TRACKING",
-                                     font=('Inter', 12, 'bold'))
-        self.title_label.pack(anchor=tk.W)
-        self.sub_label = ttk.Label(self.header, text="Time-series trajectory of patient metabolic profile over time",
-                                   font=('Inter', 9))
-        self.sub_label.pack(anchor=tk.W)
+        self.title_label = ttk.Label(self.header, text="LONGITUDINAL BIOMARKER VELOCITY TRACKING — Predictive Patient Trajectory",
+                                     font=('Inter', 11, 'bold'))
+        self.title_label.pack(side=tk.LEFT)
 
         # Content split
-        self.content_frame = ttk.Frame(self, padding=(15, 10))
+        self.content_frame = ttk.Frame(self, padding=(15, 0, 15, 10)) # Standardized Padding
         self.content_frame.pack(fill=tk.BOTH, expand=True)
 
         # Plot frame
@@ -69,8 +64,7 @@ class VelocityTab(ttk.Frame):
         self.metrics_container.configure(style='TFrame')
         self.metrics_grid.configure(style='TFrame')
         
-        self.title_label.config(foreground=palette['text_main'])
-        self.sub_label.config(foreground=palette['text_muted'])
+        self.title_label.config(foreground=palette['medic_brand'])
         self.metrics_title.config(foreground=palette['medic_brand'])
         
         # Update Matplotlib

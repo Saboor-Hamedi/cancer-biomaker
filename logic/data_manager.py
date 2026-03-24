@@ -7,6 +7,7 @@ class DataManager:
     def __init__(self, data_path=None, user_data_path=None):
         self.data_path = data_path
         self.uploaded_df = None
+        self.raw_subset = None # Stores the raw data BEFORE preprocessing for non-destructive toggling
         self.prediction_results = None
         self.mean_values = None
         self.selected_indices = set()
@@ -255,5 +256,23 @@ class DataManager:
                 # Winsorization: Clip extreme values instead of dropping rows.
                 # This ensures positive cases (who HAVE high biomarker values) stay in the dataset.
                 new_df[col] = new_df[col].clip(lower=lower, upper=upper)
+            
+        return new_df
+
+    def get_processed_data(self, df, settings):
+        """Standardized processing pipeline that respects user settings."""
+        if df is None: return None
+        new_df = df.copy()
+        
+        # 1. Imputation (Default for NaN to prevent model crashes)
+        new_df = self.apply_imputation(new_df, 'mean')
+        
+        # 2. Outlier Removal (Respect user setting)
+        if settings.get('outlier_removal', True):
+            new_df = self.remove_outliers(new_df)
+            
+        # 3. Scaling (Respect user setting)
+        if settings.get('scaling_enabled', True):
+            new_df = self.apply_scaling(new_df, 'standard')
             
         return new_df

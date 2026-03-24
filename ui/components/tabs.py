@@ -57,16 +57,16 @@ class InputTab(ttk.Frame):
     def _create_widgets(self):
         self.header = ttk.Frame(self, padding=(12, 8, 12, 4))
         self.header.pack(fill=tk.X)
-        self.title_label = ttk.Label(self.header, text="BIOMARKER INPUT — Load data or double-click to edit",
-                                     font=('Inter', 10, 'bold'))
+        self.title_label = ttk.Label(self.header, text="BIOMARKER INPUT — Load Data or Edit Patient Profile",
+                                     font=('Inter', 11, 'bold'))
         self.title_label.pack(side=tk.LEFT)
 
-        container = ttk.Frame(self)
-        container.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
-
+        container = ttk.Frame(self, padding=(15, 0, 15, 10)) # Standardized Padding
+        container.pack(fill=tk.BOTH, expand=True)
+        
         # 3-column treeview
         cols = ("feature", "unit", "value")
-        self.tree = ttk.Treeview(container, columns=cols, show="headings", height=20)
+        self.tree = ttk.Treeview(container, columns=cols, show="headings", height=22)
 
         self.tree.heading("feature", text="BIOMARKER / FEATURE NAME", anchor=tk.CENTER)
         self.tree.heading("unit",    text="UNIT", anchor=tk.CENTER)
@@ -216,15 +216,22 @@ class DataTab(ttk.Frame):
         self._create_widgets()
 
     def _create_widgets(self):
+        # Header with Title
+        self.header = ttk.Frame(self, padding=(12, 8, 12, 4))
+        self.header.pack(fill=tk.X)
+        self.title_label = ttk.Label(self.header, text="CLINICAL DATA VIEW — Primary Patient Record Registry",
+                                     font=('Inter', 11, 'bold'))
+        self.title_label.pack(side=tk.LEFT)
+
         # Vertical Container for Tree + Horizontal Scrollbar
-        main_container = ttk.Frame(self)
+        main_container = ttk.Frame(self, padding=(15, 0, 15, 10)) # Standardized Padding
         main_container.pack(fill=tk.BOTH, expand=True)
         
         # Top part: Tree + Vertical Scrollbar
         top_container = ttk.Frame(main_container)
         top_container.pack(fill=tk.BOTH, expand=True)
         
-        self.tree = ttk.Treeview(top_container, show="headings")
+        self.tree = ttk.Treeview(top_container, show="headings", height=22)
         self.tree.bind("<Button-1>", self._on_tree_click)
         
         vsb = ttk.Scrollbar(top_container, orient=tk.VERTICAL, command=self.tree.yview)
@@ -302,7 +309,11 @@ class DataTab(ttk.Frame):
         self.tree["columns"] = []
 
     def refresh_theme(self, theme_name):
+        from ui.styles import StyleManager
+        palette = StyleManager.get_palette(theme_name)
         self.configure(style='TFrame')
+        if hasattr(self, 'header'): self.header.configure(style='TFrame')
+        if hasattr(self, 'title_label'): self.title_label.config(foreground=palette['medic_brand'])
 
 class AnalysisTab(ttk.Frame):
     """
@@ -316,7 +327,14 @@ class AnalysisTab(ttk.Frame):
         self._create_widgets()
 
     def _create_widgets(self):
-        container = ttk.Frame(self)
+        # Header with Title
+        self.header = ttk.Frame(self, padding=(12, 8, 12, 4))
+        self.header.pack(fill=tk.X)
+        self.title_label = ttk.Label(self.header, text="DIAGNOSTIC PERFORMANCE — Forensic Audit & AI Reasoning",
+                                     font=('Inter', 11, 'bold'))
+        self.title_label.pack(side=tk.LEFT)
+
+        container = ttk.Frame(self, padding=(15, 0, 15, 10)) # Standardized Padding
         container.pack(fill=tk.BOTH, expand=True)
 
         self.sb = ttk.Scrollbar(container)
@@ -409,12 +427,24 @@ class AnalysisTab(ttk.Frame):
             self.text.insert(tk.END, "\n")
 
         self.text.insert(tk.END, "3. ALGORITHMIC ARCHITECTURE & BIOMARKER SIGNAL ANALYSIS\n", "sub")
-        best_model = metadata.get('champion', 'Ensemble Lead') if metadata else 'Ensemble Lead'
+        metadata = metadata or {}
+        dynamic = metadata.get('dynamic_insights', {})
+        
+        # Dynamic Archetype Fingerprint
+        best_model = metadata.get('champion', 'Ensemble Lead')
+        archetype = dynamic.get('archetype', 'Atypical Presentation')
+        self.text.insert(tk.END, "  • Cohort Fingerprint: ", "bullet")
+        self.text.insert(tk.END, f"'{archetype}' — Categorized by batch-wide biomarker drift.\n")
+
         self.text.insert(tk.END, "  • Champion Algorithm: ", "bullet")
         self.text.insert(tk.END, f"'{best_model}' — Highest F1-Score in clinical batch evaluation.\n")
-
-        dynamic = metadata.get('dynamic_insights', {}) if metadata else {}
         
+        # Dynamic Clarity Calculation
+        clarity = dynamic.get('clarity', 0.0)
+        status = "High (Clean Signal)" if clarity > 0.7 else "Moderate (Metadata Noisy)" if clarity > 0.4 else "Low (Fragmented Population)"
+        self.text.insert(tk.END, "  • Diagnostic Clarity: ", "bullet")
+        self.text.insert(tk.END, f"{status} — {clarity*100:.1f}% Batch-wide Pattern Certainty.\n")
+
         # Dynamic Signal Strength
         signals = dynamic.get('signal_strength', [])
         if signals:
@@ -629,6 +659,9 @@ class AnalysisTab(ttk.Frame):
         is_dark = theme_name == 'pure_dark'
 
         self.configure(style='TFrame')
+        if hasattr(self, 'header'): self.header.configure(style='TFrame')
+        if hasattr(self, 'title_label'): self.title_label.config(foreground=palette['medic_brand'])
+        
         self.text.config(bg=palette['bg_main'], fg=palette['text_main'], 
                          selectbackground=palette['medic_brand'], selectforeground="white")
         
@@ -655,15 +688,22 @@ class ValidationTab(ttk.Frame):
         self._create_widgets()
 
     def _create_widgets(self):
+        # Header with Title
+        self.header = ttk.Frame(self, padding=(12, 8, 12, 4))
+        self.header.pack(fill=tk.X)
+        self.title_label = ttk.Label(self.header, text="AI COMMITTEE CONSENSUS — Multi-Algorithm Validation",
+                                     font=('Inter', 11, 'bold'))
+        self.title_label.pack(side=tk.LEFT)
+
         # Container for Tree and Scrollbar
-        container = ttk.Frame(self)
+        container = ttk.Frame(self, padding=(15, 0, 15, 10))
         container.pack(fill=tk.BOTH, expand=True)
 
-        self.tree = ttk.Treeview(container, columns=("m", "d", "r", "f", "a", "gf", "ga", "s"), show="headings")
+        self.tree = ttk.Treeview(container, columns=("m", "d", "r", "f", "a", "gf", "ga", "s"), show="headings", height=22)
         headers = ("ALGORITHM", "COHORT RATE", "AVG RISK", "BATCH F1", "BATCH ACC", "EXPERT F1", "EXPERT AUC", "STATUS")
         for c, h in zip(("m", "d", "r", "f", "a", "gf", "ga", "s"), headers):
             self.tree.heading(c, text=h)
-            self.tree.column(c, anchor=tk.CENTER, width=110)
+            self.tree.column(c, anchor=tk.CENTER, width=110, stretch=True)
         
         vsb = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=vsb.set)
@@ -747,6 +787,9 @@ class ValidationTab(ttk.Frame):
         from ui.styles import StyleManager
         palette = StyleManager.get_palette(theme_name)
         self.configure(style='TFrame')
+        if hasattr(self, 'header'): self.header.configure(style='TFrame')
+        if hasattr(self, 'title_label'): self.title_label.config(foreground=palette['medic_brand'])
+        
         self.tree.tag_configure('pos', foreground="#EF4444")
         self.tree.tag_configure('neg', foreground="#10B981")
         self.tree.tag_configure('summary', foreground=palette['text_muted'])
@@ -768,15 +811,15 @@ class LeaderboardTab(ttk.Frame):
         outer.pack(fill=tk.BOTH, expand=True)
 
         # ── Leaderboard Section ────────────────────────────────────────
-        top = ttk.Frame(outer, padding=(15, 12, 15, 6))
-        top.pack(fill=tk.X)
+        self.header = ttk.Frame(outer, padding=(12, 8, 12, 4))
+        self.header.pack(fill=tk.X)
 
-        self.title_label = ttk.Label(top, text="ALGORITHM LEADERBOARD — Ranked by Clinical F1-Score & Stability",
+        self.title_label = ttk.Label(self.header, text="ALGORITHM LEADERBOARD — Ranked by Clinical F1-Score & Stability",
                                      font=('Inter', 11, 'bold'))
-        self.title_label.pack(anchor=tk.W)
+        self.title_label.pack(side=tk.LEFT)
 
         lb_frame = ttk.Frame(outer, padding=(15, 0, 15, 10))
-        lb_frame.pack(fill=tk.X)
+        lb_frame.pack(fill=tk.BOTH, expand=True) # Full width expansion
 
         cols = ("rank", "model", "acc", "f1", "auc", "prec", "rec", "spec", "cv", "badge")
         headers = ("RANK", "AI ALGORITHM", "ACCURACY", "F1 SCORE", "ROC-AUC", "PRECISION", "RECALL", "SPECIFICITY", "CV STABILITY", "BADGE")
@@ -784,12 +827,12 @@ class LeaderboardTab(ttk.Frame):
 
         lb_vsb = ttk.Scrollbar(lb_frame, orient=tk.VERTICAL)
         # Give more height since we have extra space now
-        self.lb_tree = ttk.Treeview(lb_frame, columns=cols, show="headings", height=15, yscrollcommand=lb_vsb.set)
+        self.lb_tree = ttk.Treeview(lb_frame, columns=cols, show="headings", height=8, yscrollcommand=lb_vsb.set)
         lb_vsb.config(command=self.lb_tree.yview)
 
         for c, h, w in zip(cols, headers, widths):
             self.lb_tree.heading(c, text=h)
-            self.lb_tree.column(c, width=w, anchor=tk.CENTER)
+            self.lb_tree.column(c, width=w, anchor=tk.CENTER, stretch=True)
 
         self.lb_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         lb_vsb.pack(side=tk.RIGHT, fill=tk.Y)
@@ -880,7 +923,8 @@ class LeaderboardTab(ttk.Frame):
         is_dark = theme_name == 'pure_dark'
         
         self.configure(style='TFrame')
-        self.title_label.config(foreground=palette['text_main'])
+        if hasattr(self, 'header'): self.header.configure(style='TFrame')
+        self.title_label.config(foreground=palette['medic_brand'])
         self.insight_label.config(bg=palette['card_bg'], fg=palette['medic_brand'])
         
         # Champion tags

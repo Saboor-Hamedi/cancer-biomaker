@@ -63,7 +63,6 @@ class ModelController:
                 
                 status_msg = "All clinical models re-trained successfully"
                 self.layout_manager.update_status(status_msg, "#10B981")
-                self.error_handler.notify(status_msg, type='success')
             else:
                 msg = result[1] if isinstance(result, tuple) else "Unknown error"
                 self.layout_manager.update_status(f"Training failed: {msg}", "red")
@@ -139,7 +138,8 @@ class ModelController:
             # This involves 122+ secondary predictions which can cause UI lag.
             result['stability_metric'] = "Calculating..."
             
-            def _stability_task():
+            def _robustness_analysis_task():
+                # 1. Stability Check
                 perturb_stable = True
                 try:
                     for feat, val in feature_values.items():
@@ -149,26 +149,37 @@ class ModelController:
                             temp_inp[feat] = v * perturb
                             p_temp, _, _ = self.model_manager.predict_single(model_name, temp_inp)
                             if p_temp != result['prediction']:
-                                return False
-                    return True
+                                perturb_stable = False
+                                break
+                        if not perturb_stable: break
+                    
+                    # 2. Counterfactual Resilience (New clinical feature)
+                    resilience = self._find_counterfactual_resilience(model_name, feature_values, result['risk'])
+                    
+                    return perturb_stable, resilience
                 except:
-                    return True
+                    return True, "N/A"
 
-            def _on_stability_finish(stable):
+            def _on_analysis_finish(res_tuple):
+                stable, resilience = res_tuple
                 result['stability_metric'] = "98% Robust" if stable else "Low (Sensitivity detected)"
+                result['resilience_delta'] = resilience
+                
                 if not silent:
-                    self.layout_manager.update_status(f"Clinical stability verified: {result['stability_metric']}", "#10B981")
+                    msg = f"Forensic Verified: {result['stability_metric']} | {resilience}"
+                    self.layout_manager.update_status(msg, "#10B981")
+                    
                 # Persist result if audit supported
                 if hasattr(self.data_manager, 'save_prospective_audit'):
                     self.data_manager.save_prospective_audit(result)
 
             if not silent:
-                self.layout_manager.update_status("Analyzing clinical robustness...", "orange")
+                self.layout_manager.update_status("Performing Advanced Forensic Analysis...", "orange")
 
             if self.async_runner:
-                self.async_runner.run_async("Robustness Check", _stability_task, on_finish=_on_stability_finish)
+                self.async_runner.run_async("Forensic Analysis", _robustness_analysis_task, on_finish=_on_analysis_finish)
             else:
-                _on_stability_finish(_stability_task())
+                _on_analysis_finish(_robustness_analysis_task())
 
             # 6. Longitudinal Context Injection
             patient_id = feature_values.get('sample_id', 'ActivePatient-01')
@@ -196,6 +207,37 @@ class ModelController:
         except Exception as e:
             self.error_handler.log_and_notify("Single Prediction", e, "Prediction Error")
             return None
+
+    def _find_counterfactual_resilience(self, model_name, feature_values, base_risk):
+        """
+        Estimate the smallest biomarker reduction required to drop risk by a clinical category.
+        This provides doctors with a 'target' for medical de-escalation.
+        """
+        if base_risk < 0.35: return "Baseline Resilience (Stable / Monitoring)"
+        
+        # Clinical Target: Decrease risk by ~50% or below Level 4 (0.35 threshold)
+        for feat in ['PSA', 'AFP', 'CA125']:
+            # Fuzzy match feature names in the input keys
+            match = [k for k in feature_values.keys() if feat.lower() in str(k).lower()]
+            if not match: continue
+            
+            f_col = match[0]
+            try:
+                orig_val = float(feature_values[f_col])
+                if orig_val <= 0: continue
+                
+                # Test reductions (15%, 30%, 50%)
+                for reduction_factor in [0.85, 0.70, 0.50]:
+                    test_inp = feature_values.copy()
+                    test_inp[f_col] = orig_val * reduction_factor
+                    _, _, r_test = self.model_manager.predict_single(model_name, test_inp)
+                    
+                    if r_test < 0.35 or r_test < (base_risk * 0.7):
+                        delta_pct = int((1.0 - reduction_factor) * 100)
+                        return f"Resilience Target: -{delta_pct}% {feat}"
+            except: continue
+            
+        return "Systemic Resilience (Requires multi-biomarker reduction)"
 
     def _update_ui_with_prediction(self, result):
         """Update UI with prediction results."""

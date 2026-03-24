@@ -92,42 +92,31 @@ Use these metrics to explain which models are the most reliable (prioritize High
         self._build_system_prompt(clinical_context)
         
         self.title("AI Clinical Research Assistant")
-        self.geometry("800x900")
-        
-        # Theme Integration
+        # Theme & Styling Synchronization
+        from ui.styles import StyleManager
         self.theme = settings_manager.theme if settings_manager else 'pure_dark'
+        self.palette = StyleManager.get_palette(self.theme)
         self.is_dark = (self.theme == 'pure_dark')
         
-        # Advanced Professional Palette
-        if self.is_dark:
-            self.colors = {
-                'bg': '#020617',         # Slate-950
-                'surface': '#0F172A',    # Slate-900
-                'border': '#1E293B',     # Slate-800
-                'user_header': '#3B82F6', # blue-500
-                'ai_header': '#10B981',   # emerald-500
-                'user_text': '#F8FAFC',
-                'ai_text': '#E2E8F0',
-                'accent': '#6366F1',     # Indigo-500
-                'input_area': '#0F172A',
-                'user_bubble': '#1E293B'
-            }
-        else:
-            self.colors = {
-                'bg': '#F8FAFC',         # Slate-50
-                'surface': '#FFFFFF',    # White
-                'border': '#E2E8F0',     # Slate-200
-                'user_header': '#2563EB', # blue-600
-                'ai_header': '#059669',   # emerald-600
-                'user_text': '#1E293B',
-                'ai_text': '#334155',
-                'accent': '#4F46E5',
-                'input_area': '#FFFFFF',
-                'user_bubble': '#F1F5F9'
-            }
+        # Scale & Font Family
+        self.font_scale = settings_manager.get('font_scale', 1.0) if settings_manager else 1.0
+        self.font_family = "Inter"
+
+        # Dynamically Mapped Palette for Premium Clinical View
+        self.colors = {
+            'bg': self.palette['bg_main'],
+            'surface': self.palette['card_bg'],
+            'border': self.palette['border_light'],
+            'user_header': self.palette['medic_brand'],
+            'ai_header': '#10B981' if self.is_dark else '#059669', # Professional Clinical Green
+            'user_text': self.palette['text_main'],
+            'ai_text': self.palette['text_main'],
+            'accent': self.palette['medic_brand'],
+            'input_area': self.palette['bg_main'],
+            'user_bubble': self.palette['border_light'] if self.is_dark else '#F1F5F9'
+        }
 
         self.configure(bg=self.colors['bg'])
-        # Persistent non-modal mode: remove grab_set and transient
         self.protocol("WM_DELETE_WINDOW", self.on_hide)
 
         self.ai_clients = {}
@@ -153,10 +142,28 @@ Use these metrics to explain which models are the most reliable (prioritize High
 
     def _center_modal(self):
         self.update_idletasks()
-        w, h = 800, 900
-        x = (self.winfo_screenwidth() // 2) - (w // 2)
-        y = (self.winfo_screenheight() // 2) - (h // 2)
-        self.geometry(f"{w}x{h}+{x}+{y}")
+        w, h = 800, 850 # Slightly smaller for better fit
+        
+        try:
+            # Sync with Main App Window
+            p_x = self.parent.winfo_rootx()
+            p_y = self.parent.winfo_rooty()
+            p_w = self.parent.winfo_width()
+            p_h = self.parent.winfo_height()
+            
+            x = p_x + (p_w // 2) - (w // 2)
+            y = p_y + (p_h // 2) - (h // 2)
+            
+            # Ensure it doesn't spill off screen
+            x = max(10, min(x, self.winfo_screenwidth() - w - 10))
+            y = max(10, min(y, self.winfo_screenheight() - h - 10))
+            
+            self.geometry(f"{w}x{h}+{x}+{y}")
+        except:
+            # Emergency Fallback to screen center
+            x = (self.winfo_screenwidth() // 2) - (w // 2)
+            y = (self.winfo_screenheight() // 2) - (h // 2)
+            self.geometry(f"{w}x{h}+{x}+{y}")
 
     def _add_hover(self, widget, color_on, color_off):
         """Standardizes interactive feedback across the clinical modal."""
@@ -179,7 +186,7 @@ Use these metrics to explain which models are the most reliable (prioritize High
         header.pack(fill=tk.X)
         header.pack_propagate(False)
 
-        tk.Label(header, text=" CLINICAL RESEARCH COPILOT", font=("Inter", 13, "bold"), 
+        tk.Label(header, text=" CLINICAL RESEARCH COPILOT", font=(self.font_family, int(13 * self.font_scale), "bold"), 
                  fg=self.colors['ai_header'], bg=self.colors['surface']).pack(side=tk.LEFT, padx=30)
         
         # Settings Dock
@@ -193,7 +200,7 @@ Use these metrics to explain which models are the most reliable (prioritize High
         self.provider_menu.pack(side=tk.LEFT, padx=10)
         self.provider_menu.bind("<<ComboboxSelected>>", self._on_provider_change)
 
-        self.key_entry = tk.Entry(config_dock, show="*", width=25, font=("Consolas", 10), 
+        self.key_entry = tk.Entry(config_dock, show="*", width=25, font=("Consolas", int(10 * self.font_scale)), 
                                   bg=self.colors['bg'], fg=self.colors['ai_text'], 
                                   borderwidth=0, highlightthickness=1)
         self.key_entry.config(highlightbackground=self.colors['border'], highlightcolor=self.colors['accent'])
@@ -206,7 +213,7 @@ Use these metrics to explain which models are the most reliable (prioritize High
         chat_container.pack(fill=tk.BOTH, expand=True)
         
         self.chat_display = scrolledtext.ScrolledText(chat_container, wrap=tk.WORD, state='disabled', 
-                                                       font=("Inter", 11), bg=self.colors['bg'], 
+                                                       font=(self.font_family, int(11 * self.font_scale)), bg=self.colors['bg'], 
                                                        fg=self.colors['ai_text'], borderwidth=0, 
                                                        padx=20, pady=20, highlightthickness=0)
         self.chat_display.pack(fill=tk.BOTH, expand=True)
@@ -217,28 +224,44 @@ Use these metrics to explain which models are the most reliable (prioritize High
                                         lmargin1=20, rmargin=20)
         self.chat_display.tag_configure("ai_block", spacing1=20, spacing3=20, lmargin1=20, rmargin=20)
         
-        self.chat_display.tag_configure("user_header", font=("Inter", 11, "bold"), foreground=self.colors['user_header'])
-        self.chat_display.tag_configure("ai_header", font=("Inter", 11, "bold"), foreground=self.colors['ai_header'])
+        self.chat_display.tag_configure("user_header", font=(self.font_family, int(11 * self.font_scale), "bold"), foreground=self.colors['user_header'])
+        self.chat_display.tag_configure("ai_header", font=(self.font_family, int(11 * self.font_scale), "bold"), foreground=self.colors['ai_header'])
         
-        self.chat_display.tag_configure("content_user", font=("Inter", 11), spacing1=5)
-        self.chat_display.tag_configure("content_ai", font=("Inter", 11), spacing1=5)
+        self.chat_display.tag_configure("content_user", font=(self.font_family, int(11 * self.font_scale)), spacing1=5)
+        self.chat_display.tag_configure("content_ai", font=(self.font_family, int(11 * self.font_scale)), spacing1=5)
         
         # Markdown Component Tags
-        self.chat_display.tag_configure("bold", font=("Inter", 11, "bold"))
-        self.chat_display.tag_configure("h1", font=("Inter", 14, "bold"), foreground=self.colors['ai_header'], spacing1=15, spacing3=5)
-        self.chat_display.tag_configure("bullet_symbol", foreground=self.colors['accent'], font=("Inter", 11, "bold"))
-        self.chat_display.tag_configure("error", foreground="#EF4444", font=("Inter", 10, "italic"))
+        self.chat_display.tag_configure("bold", font=(self.font_family, int(11 * self.font_scale), "bold"))
+        self.chat_display.tag_configure("h1", font=(self.font_family, int(14 * self.font_scale), "bold"), foreground=self.colors['ai_header'], spacing1=15, spacing3=5)
+        self.chat_display.tag_configure("bullet_symbol", foreground=self.colors['accent'], font=(self.font_family, int(11 * self.font_scale), "bold"))
+        self.chat_display.tag_configure("error", foreground="#EF4444", font=(self.font_family, int(10 * self.font_scale), "italic"))
 
         # Footer Input
         input_dock = tk.Frame(self, bg=self.colors['surface'], pady=20, padx=30, borderwidth=1, relief="flat")
         input_dock.pack(fill=tk.X, side=tk.BOTTOM)
         
-        # 1. Textarea takes FULL WIDTH at the top
-        self.user_entry = tk.Text(input_dock, height=4, font=("Inter", 14), 
+        # 1. Underline-Only Entry Container
+        entry_container = tk.Frame(input_dock, bg=self.colors['bg'])
+        entry_container.pack(side=tk.TOP, fill=tk.X, expand=True)
+
+        self.user_entry = tk.Text(entry_container, height=4, font=(self.font_family, int(14 * self.font_scale)), 
                                   bg=self.colors['bg'], fg=self.colors['ai_text'], 
-                                  borderwidth=1, padx=15, pady=10, insertbackground=self.colors['ai_text'],
-                                  highlightthickness=1, highlightbackground=self.colors['border'])
+                                  borderwidth=0, padx=15, pady=10, insertbackground=self.colors['ai_text'],
+                                  highlightthickness=0, selectbackground=self.colors['accent'],
+                                  selectforeground="white", undo=True)
         self.user_entry.pack(side=tk.TOP, fill=tk.X, expand=True)
+        
+        # Professional Bottom Border (Underline)
+        self.underline = tk.Frame(entry_container, height=2, bg=self.colors['border'])
+        self.underline.pack(side=tk.TOP, fill=tk.X)
+
+        # Placeholder System
+        self.placeholder = "Describe patient profile or ask clinical analysis..."
+        self.user_entry.insert("1.0", self.placeholder)
+        self.user_entry.config(fg=self.palette['text_muted'])
+
+        self.user_entry.bind("<FocusIn>", self._on_focus_in)
+        self.user_entry.bind("<FocusOut>", self._on_focus_out)
         self.user_entry.bind("<Return>", self._intercept_return)
         
         # 2. Controls Area
@@ -246,7 +269,7 @@ Use these metrics to explain which models are the most reliable (prioritize High
         controls.pack(side=tk.TOP, fill=tk.X, pady=(15, 0))
         
         self.export_btn = tk.Button(controls, text=" 💾 EXPORT RESEARCH NOTE ", bg=self.colors['surface'], 
-                                  fg=self.colors['accent'], font=("Inter", 9, "bold"), relief="flat",
+                                  fg=self.colors['accent'], font=(self.font_family, int(9 * self.font_scale), "bold"), relief="flat",
                                   activebackground=self.colors['border'], activeforeground=self.colors['ai_header'],
                                   padx=15, pady=8, command=self.handle_export, cursor="hand2",
                                   borderwidth=1, highlightthickness=0)
@@ -254,7 +277,7 @@ Use these metrics to explain which models are the most reliable (prioritize High
         self._add_hover(self.export_btn, self.colors['border'], self.colors['surface'])
 
         self.send_btn = tk.Button(controls, text="SEND", bg=self.colors['accent'], 
-                                  fg="white", font=("Inter", 11, "bold"), relief="raised",
+                                  fg="white", font=(self.font_family, int(11 * self.font_scale), "bold"), relief="raised",
                                   activebackground=self.colors['ai_header'], activeforeground="white",
                                   padx=40, pady=8, command=self.handle_send, cursor="hand2",
                                   width=12, highlightthickness=0) 
@@ -262,11 +285,23 @@ Use these metrics to explain which models are the most reliable (prioritize High
         self._add_hover(self.send_btn, self.colors['ai_header'], self.colors['accent'])
 
         self.stop_btn = tk.Button(controls, text="STOP", bg="#EF4444", 
-                                  fg="white", font=("Inter", 10, "bold"), relief="flat",
+                                  fg="white", font=(self.font_family, int(10 * self.font_scale), "bold"), relief="flat",
                                   activebackground="#DC2626", activeforeground="white",
                                   padx=20, pady=8, command=self.handle_stop, cursor="hand2",
                                   state="disabled") 
         self.stop_btn.pack(side=tk.RIGHT, padx=10)
+
+    def _on_focus_in(self, event):
+        if self.user_entry.get("1.0", tk.END).strip() == self.placeholder:
+            self.user_entry.delete("1.0", tk.END)
+            self.user_entry.config(fg=self.colors['ai_text'])
+        self.underline.config(bg=self.colors['accent'])
+
+    def _on_focus_out(self, event):
+        if not self.user_entry.get("1.0", tk.END).strip():
+            self.user_entry.insert("1.0", self.placeholder)
+            self.user_entry.config(fg=self.palette['text_muted'])
+        self.underline.config(bg=self.colors['border'])
 
     def _intercept_return(self, event):
         """Handle Enter for send, Shift+Enter for new line."""
@@ -410,7 +445,7 @@ Use these metrics to explain which models are the most reliable (prioritize High
 
     def handle_send(self):
         user_input = self.user_entry.get("1.0", tk.END).strip()
-        if not user_input: return
+        if not user_input or user_input == self.placeholder: return
         
         provider = self.provider_var.get()
         api_key = self.key_entry.get().strip()

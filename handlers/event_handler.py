@@ -142,7 +142,7 @@ class EventHandler:
 
             if item and column:
                 col_index = int(column[1:]) - 1  # Remove '#' prefix
-                if col_index == 1:  # Value column
+                if col_index == 2:  # VALUE column (feature=0, unit=1, value=2)
                     self._edit_tree_cell(item, col_index)
 
     def handle_data_tree_double_click(self, event):
@@ -173,7 +173,7 @@ class EventHandler:
         if item:
             # Create context menu
             menu = tk.Menu(self.root, tearoff=0)
-            menu.add_command(label="Edit Value", command=lambda: self._edit_tree_cell(item, 1))
+            menu.add_command(label="Edit Value", command=lambda: self._edit_tree_cell(item, 2))
             menu.add_command(label="Set to Default", command=lambda: self._set_default_value(item))
             menu.add_separator()
             menu.add_command(label="Copy Value", command=lambda: self._copy_tree_value(item))
@@ -281,7 +281,7 @@ class EventHandler:
 
         # Update tree
         values = list(tree.item(item, 'values'))
-        values[1] = str(default_value)
+        values[2] = str(default_value) # Value column
         tree.item(item, values=values)
 
         # Update internal data
@@ -290,7 +290,7 @@ class EventHandler:
     def _copy_tree_value(self, item):
         """Copy value from tree cell."""
         tree = self.layout_manager.get_components()['tab_input'].tree
-        value = tree.item(item, 'values')[1]  # Value column
+        value = tree.item(item, 'values')[2]  # Value column
         self.root.clipboard_clear()
         self.root.clipboard_append(value)
 
@@ -302,7 +302,7 @@ class EventHandler:
 
             tree = self.layout_manager.get_components()['tab_input'].tree
             values = list(tree.item(item, 'values'))
-            values[1] = value
+            values[2] = value # Value column
             tree.item(item, values=values)
 
             # Update internal data

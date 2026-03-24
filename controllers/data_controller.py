@@ -161,6 +161,7 @@ class DataController:
                 if len(df) > sample_size:
                     # CLINICAL AUDIT SYNC: Preserve original indices for forensic tracking
                     df = df.sample(n=sample_size).sort_index()
+                self.data_manager.raw_subset = df.copy() # Capture RAW state first
                 self.data_manager.uploaded_df = df
                 # Clinical cohort auto-select: automatically checkmark all sampled records
                 self.data_manager.selected_indices = set(df.index.tolist())
@@ -495,7 +496,7 @@ class DataController:
                 self.error_handler.log_and_notify("Export", e, "Export Error")
 
     def show_preprocessing(self):
-        """Show preprocessing dialog."""
+        """Show persistent data optimization dialog."""
         if self.data_manager.uploaded_df is None:
             messagebox.showwarning("Warning", "No dataset loaded. Please upload a dataset first.")
             return
@@ -506,24 +507,31 @@ class DataController:
             'nan': self.data_manager.uploaded_df.isnull().sum().sum()
         }
         from views.dialogs import PreprocessingDialog
-        PreprocessingDialog(self.layout_manager.root, status, self.apply_preprocessing)
+        PreprocessingDialog(self.layout_manager.root, status, self.layout_manager.settings_manager, self.apply_preprocessing)
 
     def apply_preprocessing(self, options):
-        """Apply preprocessing options to the data."""
-        df = self.data_manager.uploaded_df
-        if df is None:
-            return
+        """Apply persistent clinical optimization to the current cohort."""
+        # 1. Capture Raw Baseline if not already exists (for "reverting" effects)
+        if self.data_manager.raw_subset is None and self.data_manager.uploaded_df is not None:
+            self.data_manager.raw_subset = self.data_manager.uploaded_df.copy()
 
-        if options['normalize']:
-            df = self.data_manager.apply_scaling(df, 'normalize')
-        if options.get('scale'):
-            df = self.data_manager.apply_scaling(df, 'standard')
-        if options.get('outlier'):
-            df = self.data_manager.remove_outliers(df)
+        # 2. Persist to Clinical Settings
+        self.layout_manager.settings_manager.set('outlier_removal', options.get('outlier', False))
+        self.layout_manager.settings_manager.set('scaling_enabled', options.get('scale', False))
 
-        self.data_manager.uploaded_df = df
-        self.layout_manager.refresh_data_tree()
-        self.layout_manager.update_status(f"Preprocessing applied. {len(df)} rows remain.", "green")
+        # 3. Execute Non-Destructive Re-Processing
+        raw_df = self.data_manager.raw_subset
+        if raw_df is not None:
+            processed_df = self.data_manager.get_processed_data(raw_df, {
+                'outlier_removal': options.get('outlier', False),
+                'scaling_enabled': options.get('scale', False)
+            })
+            self.data_manager.uploaded_df = processed_df
+            
+            # Sync UI
+            self.layout_manager.refresh_data_tree()
+            self.layout_manager.update_status("Clinical Data Optimization Synchronization Complete.", "#10B981")
+            self.error_handler.notify("Biomarker optimization saved and applied.", type='success')
 
     def handle_report(self):
         """Handle diagnostic report generation."""

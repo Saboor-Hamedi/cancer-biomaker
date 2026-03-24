@@ -27,9 +27,72 @@ class DiagnosticEngine:
             'correlations': self._get_biomarker_correlations(numeric_df),
             'drift': self._detect_population_drift(numeric_df),
             'signal_strength': self._calculate_signal_strength(numeric_df),
-            'confidence_zones': self._analyze_confidence_zones(df)
+            'confidence_zones': self._analyze_confidence_zones(df),
+            'archetype': self._identify_cohort_archetype(df),
+            'clarity': self._calculate_diagnostic_entropy(df)
         }
         return results
+
+    def _calculate_diagnostic_entropy(self, df):
+        """Measure the Shannon entropy of risks to assess batch clarity (Signal-to-Noise)."""
+        if 'Risk_Score' not in df.columns: return 0.0
+        
+        risks = pd.to_numeric(df['Risk_Score'], errors='coerce').fillna(0)
+        if len(risks) < 10: return 0.5 # Default for small cohorts
+        
+        # Quantize risks into 10 clinical buckets (0-10, 10-20...)
+        counts, _ = np.histogram(risks, bins=10, range=(0, 1))
+        probs = counts / len(risks)
+        probs = probs[probs > 0] # Shannon entropy ignoring zero bins
+        
+        entropy = -np.sum(probs * np.log2(probs))
+        # Max entropy for 10 bins is log2(10) ~= 3.32
+        max_entropy = np.log2(10)
+        
+        # Clarity is the inverse of Normalized Entropy
+        clarity = 1.0 - (entropy / max_entropy)
+        return float(np.clip(clarity, 0, 1))
+
+    def _identify_cohort_archetype(self, df):
+        """Categorize the entire batch into a clinical fingerprint archetype."""
+        if df is None or df.empty: return "Unknown"
+        
+        # 1. Gather Aggregates
+        avg_risk = 0
+        if 'Risk_Score' in df.columns:
+            avg_risk = pd.to_numeric(df['Risk_Score'], errors='coerce').mean()
+            
+        z_scores = {}
+        for marker, baseline in self.baseline_stats.items():
+            match = [c for c in df.columns if marker.lower() in str(c).lower()]
+            if match:
+                batch_mean = df[match[0]].mean()
+                std = baseline.get('std', 1.0)
+                if std == 0: std = 1.0
+                z_scores[marker] = (batch_mean - baseline['mean']) / std
+        
+        # 2. Archetype Mapping Logic
+        psa_z = z_scores.get('PSA', 0)
+        afp_z = z_scores.get('AFP', 0)
+        ca125_z = z_scores.get('CA125', 0)
+        
+        total_drift = abs(psa_z) + abs(afp_z) + abs(ca125_z)
+        
+        if avg_risk > 0.65:
+            if psa_z > 1.5 and (afp_z > 1.5 or ca125_z > 1.5):
+                return "Malignant-Aggressive (Multi-Biomarker Convergence)"
+            return "High-Risk Suspicious (Targeted Signal)"
+        
+        if total_drift > 4.0 and avg_risk < 0.4:
+            return "Inflammatory / Metabolic Noise (High Drift / Low Risk)"
+            
+        if total_drift < 1.0 and avg_risk < 0.3:
+            return "Stable Clinical Baseline"
+            
+        if (psa_z < -1.5 or afp_z < -1.5):
+            return "Atrophic / Systemic Suppression"
+            
+        return "Variant Presentation (Atypical Mixture)"
 
     def _get_biomarker_correlations(self, df):
         """Identify strong co-occurrence patterns between biomarkers."""
@@ -135,10 +198,45 @@ class DiagnosticEngine:
             triage = "Level 4: Routine Wellness Observation"
             action = "Standard annual clinical surveillance recommended."
             
+        # Clinical Forensic Reasoning Tags
+        tags = self._generate_forensic_tags(biomarker_deviations, risk_score)
+            
         return {
             'deviations': sorted(biomarker_deviations, key=lambda x: abs(x['z_score']), reverse=True),
             'triage_level': triage,
             'primary_action': action,
-            'metabolic_stability': "Unstable" if any(d['severity'] == 'CRITICAL' for d in biomarker_deviations) else "Stable"
+            'metabolic_stability': "Unstable" if any(d['severity'] == 'CRITICAL' for d in biomarker_deviations) else "Stable",
+            'tags': tags
         }
+
+    def _generate_forensic_tags(self, deviations, risk):
+        """Analyze deviations vs risk to provide qualitative forensic labels."""
+        tags = []
+        if not deviations: return tags
+        
+        z_dict = {d['marker']: d['z_score'] for d in deviations}
+        psa_z = z_dict.get('PSA', 0)
+        afp_z = z_dict.get('AFP', 0)
+        ca125_z = z_dict.get('CA125', 0)
+        
+        high_biomarkers = sum(1 for z in z_dict.values() if z > 1.5)
+        all_normal = all(abs(z) < 1.2 for z in z_dict.values())
+        
+        # 1. Mismatch Analysis
+        if risk > 0.8:
+            if all_normal: tags.append("Atypical Presentation (Hidden Signal)")
+            elif high_biomarkers >= 2: tags.append("Multi-Biomarker Convergence")
+            else: tags.append("Classical Malignant Signal")
+        
+        # 2. Inflammatory Recognition
+        if risk < 0.4 and psa_z > 2.0:
+            tags.append("Non-Malignant Inflammatory Spike")
+            
+        # 3. Systemic Profiles
+        if all_normal and risk < 0.2:
+            tags.append("Clinical Homeostasis")
+        elif psa_z < -1.5 and afp_z < -1.5:
+            tags.append("Systemic Suppression Profile")
+            
+        return tags
 

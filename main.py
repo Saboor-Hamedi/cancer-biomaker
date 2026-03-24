@@ -140,6 +140,7 @@ class CancerDetectionApp:
             'search': self.data_controller.handle_search,
             'on_patient_selected': self.data_controller.on_patient_selected,
             'show_ai_chat': self.show_ai_chat,
+            'show_settings': self._show_settings,
             'check_updates': lambda: self.update_manager.check_for_updates(silent=False),
             'refresh_styles': self.refresh_global_styles
         }
@@ -197,6 +198,10 @@ class CancerDetectionApp:
             
             if self.data_manager.data_path:
                 ui_ctx['data_source'] = os.path.basename(self.data_manager.data_path)
+            
+            # Phase 5: Advanced Forensic Sync
+            if self.model_controller and self.model_controller.current_prediction_data:
+                ui_ctx['forensics'] = self.model_controller.current_prediction_data
         except Exception:
             pass
 
@@ -227,6 +232,11 @@ class CancerDetectionApp:
         else:
             # Fallback
             _on_finish(_sync_task())
+
+    def _show_settings(self):
+        """Show the global UI customization dialog."""
+        from views.dialogs import SettingsDialog
+        SettingsDialog(self.root, self.settings_manager, on_change=self.refresh_global_styles)
 
     def refresh_global_styles(self):
         StyleManager.apply_styles(self.root, self.settings_manager.settings)
@@ -285,7 +295,6 @@ class CancerDetectionApp:
                 f_names = self.model_manager.feature_names
                 self.root.after(0, lambda f=f_names: self.layout_manager.refresh_input_features(f))
                 self.root.after(0, lambda: self.layout_manager.update_status("System Ready — Models Loaded", "#10B981"))
-                self.root.after(0, lambda: self.error_handler.notify("Clinical models loaded and ready.", type='success'))
             else:
                 self.root.after(0, lambda: self.layout_manager.update_status("Upload dataset to train models.", "#3B82F6"))
                 self.root.after(0, lambda: self.error_handler.notify("No trained models found.", type='info'))

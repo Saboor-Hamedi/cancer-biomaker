@@ -37,11 +37,11 @@ This document tracks the incremental improvements to the Clinical AI Assistant f
 
 ### Phase 5: Advanced Forensic Analysis (Strategy) 🧬
 
-- [ ] **Cohort Fingerprinting**: Categorize batches into clinical archetypes (e.g., Inflammatory vs. Aggressive).
-- [ ] **Counterfactual Resilience**: Identify the "Delta" required to move a patient to a lower triage level.
-- [ ] **Diagnostic Entropy**: Measure batch "Signal Clarity" using information theory.
-- [ ] **Predictive Trajectories**: Estimate "Time-to-Threshold" based on biomarker velocity.
-- [ ] **Reasoning Injection**: Generate "Forensic Tags" for atypical presentations (e.g., "High Risk / Low PSA").
+- [x] **Cohort Fingerprinting**: Categorize batches into clinical archetypes (e.g., Inflammatory vs. Aggressive).
+- [x] **Counterfactual Resilience**: Identify the "Delta" required to move a patient to a lower triage level.
+- [x] **Diagnostic Entropy**: Measure batch "Signal Clarity" using information theory.
+- [x] **Predictive Trajectories**: Estimate "Time-to-Threshold" based on biomarker velocity.
+- [x] **Reasoning Injection**: Generate "Forensic Tags" for atypical presentations (e.g., "High Risk / Low PSA").
 
 ---
 

@@ -114,11 +114,27 @@ class VelocityManager:
             verdict = "ℹ️ STABLE: Biomarker levels are consistent with baseline. Maintain routine surveillance."
             level = "INFO"
             
+        # 5. Predictive Trajectories (Time-to-Threshold)
+        # Estimates months until the patient crosses the Level 1 Triage threshold (0.85 risk)
+        def calc_time_to_threshold(current_risk, prev_risk, threshold=0.85, months_gap=3):
+            if current_risk >= threshold: return "AT THRESHOLD"
+            if current_risk <= prev_risk: return "> 12 Mo (N/A)"
+            
+            slope = (current_risk - prev_risk) / months_gap
+            if slope <= 0: return "> 12 Mo (Stable)"
+            
+            months_to_go = (threshold - current_risk) / slope
+            if months_to_go > 12: return "> 12 Mo"
+            return f"~{months_to_go:.1f} Mo"
+
+        time_to_risk = calc_time_to_threshold(last['risk'], prev['risk'])
+
         velocity_metrics = {
             "psa_velocity": psa_v,
             "psa_doubling": psa_double,
             "afp_velocity": afp_v,
             "risk_delta": risk_v,
+            "time_to_threshold": time_to_risk,
             "verdict": verdict,
             "verdict_level": level
         }

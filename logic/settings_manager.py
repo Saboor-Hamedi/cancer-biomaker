@@ -10,6 +10,8 @@ class SettingsManager:
         'font_family': 'Inter',
         'high_contrast': False,
         'animations_enabled': True,
+        'outlier_removal': True,
+        'scaling_enabled': True,
         'last_ai_provider': 'ChatGPT',
         'ai_keys': {
             'ChatGPT': '',

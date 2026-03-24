@@ -3,41 +3,77 @@ import numpy as np
 from tkinter import ttk, messagebox
 
 class PreprocessingDialog:
-    def __init__(self, parent, data_status, on_apply):
+    """Professional clinical data optimization dialog."""
+    def __init__(self, parent, data_status, settings_manager, on_apply):
         self.modal = tk.Toplevel(parent)
-        self.modal.withdraw() # Prevents top-left flicker
-        self.modal.title("Preprocessing Options")
-        
-        # Center the window
-        width, height = 500, 400
-        self.modal.update_idletasks()
-        screen_width = self.modal.winfo_screenwidth()
-        screen_height = self.modal.winfo_screenheight()
-        x = (screen_width // 2) - (width // 2)
-        y = (screen_height // 2) - (height // 2)
-        self.modal.geometry(f'{width}x{height}+{x}+{y}')
-        self.modal.deiconify() # Show only when centered
-        
+        self.modal.withdraw()
+        self.modal.title("BIO-OPTIMIZATION REGISTRY")
+        self.settings_manager = settings_manager
         self.on_apply = on_apply
-
-        ttk.Label(self.modal, text="Data Preprocessing", font=('Arial', 12, 'bold')).pack(pady=10)
         
-        status_text = f"Samples: {data_status['rows']} | Features: {data_status['cols']} | NaN: {data_status['nan']}"
-        ttk.Label(self.modal, text=status_text, foreground="blue").pack(pady=5)
+        from ui.styles import StyleManager
+        self.palette = StyleManager.get_palette(settings_manager.theme)
+        self.modal.configure(bg=self.palette['bg_main'])
+        self.modal.resizable(False, False)
+        
+        # Geometry: Center relative to Parent
+        width, height = 400, 420
+        self.modal.update_idletasks()
+        
+        p_x = parent.winfo_rootx()
+        p_y = parent.winfo_rooty()
+        p_w = parent.winfo_width()
+        p_h = parent.winfo_height()
+        
+        x = p_x + (p_w // 2) - (width // 2)
+        y = p_y + (p_h // 2) - (height // 2)
+        self.modal.geometry(f'{width}x{height}+{x}+{y}')
+        
+        self._setup_ui(data_status)
+        self.modal.deiconify()
+        self.modal.grab_set()
 
-        self.normalize_var = tk.BooleanVar(value=True)
-        self.scale_var = tk.BooleanVar(value=False)
-        self.outlier_var = tk.BooleanVar(value=False)
+    def _setup_ui(self, data_status):
+        palette = self.palette
+        container = tk.Frame(self.modal, bg=palette['bg_main'], padx=30, pady=25)
+        container.pack(fill=tk.BOTH, expand=True)
+        
+        # Header
+        tk.Label(container, text="CLINICAL DATA OPTIMIZATION", font=("Inter", 12, "bold"), 
+                 bg=palette['bg_main'], fg=palette['medic_brand']).pack(pady=(0, 5))
+        
+        status_text = f"RECORDS: {data_status['rows']} | MISSING (NaN): {data_status['nan']}"
+        tk.Label(container, text=status_text, font=("Inter", 8, "bold"), 
+                 bg=palette['bg_main'], fg=palette['text_muted']).pack(pady=(0, 25))
 
-        ttk.Checkbutton(self.modal, text="Normalize features (0-1)", variable=self.normalize_var).pack(anchor=tk.W, padx=50, pady=5)
-        ttk.Checkbutton(self.modal, text="Standard scaling (z-score)", variable=self.scale_var).pack(anchor=tk.W, padx=50, pady=5)
-        ttk.Checkbutton(self.modal, text="Handle outliers (IQR Clipping)", variable=self.outlier_var).pack(anchor=tk.W, padx=50, pady=5)
+        # Custom Themed Checkbuttons
+        self.scale_var = tk.BooleanVar(value=self.settings_manager.get('scaling_enabled', True))
+        self.outlier_var = tk.BooleanVar(value=self.settings_manager.get('outlier_removal', True))
 
-        ttk.Button(self.modal, text="Apply Changes", command=self._apply).pack(pady=20)
+        checks = [
+            ("Apply Standard Scaling (Z-Score)", self.scale_var),
+            ("Auto Outlier IQR Clipping (3.0 \u03c3)", self.outlier_var)
+        ]
+
+        for text, var in checks:
+            cb = tk.Checkbutton(container, text=text, variable=var,
+                               bg=palette['bg_main'], fg=palette['text_main'], selectcolor=palette['card_bg'],
+                               activebackground=palette['bg_main'], activeforeground=palette['medic_brand'],
+                               highlightthickness=0, borderwidth=0,
+                               font=("Inter", 10), pady=10)
+            cb.pack(anchor=tk.W)
+
+        # Guidance
+        tk.Label(container, text="These settings ensure mathematical stability for the AI Committee across disparate biomarker scales.", 
+                 bg=palette['bg_main'], fg=palette['text_muted'], font=("Inter", 8), wraplength=340, justify=tk.LEFT).pack(pady=30)
+
+        # Controls
+        tk.Button(container, text="Apply Changes & Sync", command=self._apply, 
+                 bg=palette['medic_brand'], fg="white", font=("Inter", 10, "bold"), 
+                 relief='flat', padx=20, pady=10).pack(side=tk.BOTTOM, fill=tk.X)
 
     def _apply(self):
         options = {
-            'normalize': self.normalize_var.get(),
             'scale': self.scale_var.get(),
             'outlier': self.outlier_var.get()
         }
