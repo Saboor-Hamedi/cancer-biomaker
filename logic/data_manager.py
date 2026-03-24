@@ -146,6 +146,13 @@ class DataManager:
             # 2. Drop completely empty rows (Stop dropping empty cols so placeholders remain)
             df.dropna(how='all', inplace=True)
 
+            # 3. Clinical Placeholder Injection (Ensure results columns always exist)
+            placeholders = ['Prediction', 'Risk_Score', 'Cancer Rish Class']
+            for p in placeholders:
+                # Fuzzy check to avoid duplicates if columns exist with slightly different names
+                if not any(str(p).lower() in str(c).lower() for c in df.columns):
+                    df[p] = "" 
+
             self.uploaded_df = df
             return df, None
         except Exception as e:
@@ -162,9 +169,15 @@ class DataManager:
             nan_cols = df.columns[df.isnull().any()].tolist()
             issues.append(f"Found {nan_count} NaN values in: {', '.join(nan_cols)}")
 
-        # Check for non-numeric columns
+        # Check for non-numeric columns (Exclude patient metadata and diagnostic placeholders)
         numeric_cols = df.select_dtypes(include=[np.number]).columns
-        non_numeric_cols = [col for col in df.columns if col not in numeric_cols and col not in ['sample_id', 'cancer_risk_class']]
+        ignore_keywords = ['id', 'sample', 'rish', 'class', 'prediction', 'risk', 'score', 'verdict']
+        
+        non_numeric_cols = [
+            col for col in df.columns 
+            if col not in numeric_cols and not any(k in str(col).lower() for k in ignore_keywords)
+        ]
+        
         if non_numeric_cols:
             issues.append(f"Non-numeric columns detected: {', '.join(non_numeric_cols)}")
 

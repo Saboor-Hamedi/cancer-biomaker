@@ -659,10 +659,11 @@ class ValidationTab(ttk.Frame):
         container = ttk.Frame(self)
         container.pack(fill=tk.BOTH, expand=True)
 
-        self.tree = ttk.Treeview(container, columns=("m", "d", "r", "s"), show="headings")
-        for c, h in zip(("m", "d", "r", "s"), ("ALGORITHM", "DECISION", "RISK ESTIMATE", "BATCH STATUS")):
+        self.tree = ttk.Treeview(container, columns=("m", "d", "r", "f", "a", "gf", "ga", "s"), show="headings")
+        headers = ("ALGORITHM", "COHORT RATE", "AVG RISK", "BATCH F1", "BATCH ACC", "EXPERT F1", "EXPERT AUC", "STATUS")
+        for c, h in zip(("m", "d", "r", "f", "a", "gf", "ga", "s"), headers):
             self.tree.heading(c, text=h)
-            self.tree.column(c, anchor=tk.CENTER)
+            self.tree.column(c, anchor=tk.CENTER, width=110)
         
         vsb = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=vsb.set)
@@ -694,7 +695,7 @@ class ValidationTab(ttk.Frame):
             matches = res['prediction'] == ensemble_decision
             status = f"✔ MAJORITY ({agree_count}/{total})" if matches else f"✘ DISSENTER"
             tag = 'pos' if is_pos else 'neg'
-            self.tree.insert("", tk.END, values=(res['model'], decision, f"{res['risk']:.1%}", status), tags=(tag,))
+            self.tree.insert("", tk.END, values=(res['model'], decision, f"{res['risk']:.1%}", "", "", "", "", status), tags=(tag,))
         
         # Summary separator row
         consensus_label = "STRONG" if agree_count >= total else "WEAK" if agree_count <= total // 2 else "MODERATE"
@@ -702,6 +703,7 @@ class ValidationTab(ttk.Frame):
             "─── AI COMMITTEE",
             f"ENSEMBLE: {'POSITIVE' if ensemble_decision == 1 else 'NEGATIVE'}",
             f"{data.get('risk', 0):.1%} Risk",
+            "", "", "", "",
             f"{consensus_label} CONSENSUS ({agree_count}/{total})"
         ), tags=('summary',))
 
@@ -714,8 +716,21 @@ class ValidationTab(ttk.Frame):
             rate_val = (s['positives'] / total_records) if total_records > 0 else 0
             rate_str = f"{rate_val:.1%}"
             status = f"{s['positives']}/{total_records} FLAGGED"
+            f1 = s.get('local_f1', 0)
+            acc = s.get('local_acc', 0)
+            
+            f1_str = f"{f1:^8.2%}" if f1 > 0 else "N/A"
+            acc_str = f"{acc:^8.2%}" if acc > 0 else "N/A"
+            
+            # Global labels
+            g_f1_str = f"{s.get('global_f1', 0):^8.2%}"
+            g_auc_str = f"{s.get('global_auc', 0):^8.2%}"
+            
             tag = 'pos' if s['positives'] > 0 else 'neg'
-            self.tree.insert("", tk.END, values=(s['model'], rate_str, f"{s['risk']:.1%}", status), tags=(tag,))
+            self.tree.insert("", tk.END, values=(
+                s['model'], rate_str, f"{s['risk']:.1%}", 
+                f1_str, acc_str, g_f1_str, g_auc_str, status
+            ), tags=(tag,))
 
         # Grand totals row
         if summaries:

@@ -83,8 +83,10 @@ class DiagnosticEngine:
         if 'Risk_Score' not in df.columns:
             return {'certain': 0, 'ambiguous': 0, 'total': len(df)}
             
-        risks = df['Risk_Score']
-        # Ambiguous is between 40% and 60% risk
+        # Clinical Conversion: Ensure Risk_Score is numeric (coerce placeholder strings to 0)
+        risks = pd.to_numeric(df['Risk_Score'], errors='coerce').fillna(0)
+        
+        # Ambiguous is between 40% and 60% risk (The clinical 'Grey Zone')
         ambiguous = len(risks[(risks > 0.4) & (risks < 0.6)])
         certain = len(df) - ambiguous
         

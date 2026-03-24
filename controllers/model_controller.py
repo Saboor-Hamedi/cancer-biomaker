@@ -42,26 +42,37 @@ class ModelController:
 
         self.layout_manager.update_status("Initiating clinical model training...", "orange")
 
-        def task():
+        def _train_task():
             success, msg = self.model_manager.check_and_train_models(
                 self.data_manager.data_path if hasattr(self.data_manager, 'data_path') else None,
                 self.layout_manager.update_status,
                 force=True
             )
-            if success:
-                self.layout_manager.root.after(0, lambda: self.layout_manager.refresh_input_features(self.model_manager.feature_names))
+            if not success:
+                return False, msg
                 
-                # Update Leaderboard
-                leaderboard = self.model_manager.get_model_leaderboard(self.data_manager.data_path)
-                self.layout_manager.root.after(0, lambda: self.layout_manager.tab_leaderboard.update_leaderboard(leaderboard))
+            # Update Leaderboard (Heavy calculation - keep in background)
+            leaderboard = self.model_manager.get_model_leaderboard(self.data_manager.data_path)
+            return True, (leaderboard, self.model_manager.feature_names)
+
+        def _on_finish(result):
+            if isinstance(result, tuple) and result[0] is True:
+                leaderboard, features = result[1]
+                self.layout_manager.refresh_input_features(features)
+                self.layout_manager.tab_leaderboard.update_leaderboard(leaderboard)
                 
                 status_msg = "All clinical models re-trained successfully"
-                self.layout_manager.root.after(0, lambda: self.layout_manager.update_status(status_msg, "#10B981"))
-                self.layout_manager.root.after(0, lambda: self.error_handler.notify(status_msg, type='success'))
+                self.layout_manager.update_status(status_msg, "#10B981")
+                self.error_handler.notify(status_msg, type='success')
             else:
-                self.layout_manager.root.after(0, lambda: self.layout_manager.update_status(f"Training failed: {msg}", "red"))
+                msg = result[1] if isinstance(result, tuple) else "Unknown error"
+                self.layout_manager.update_status(f"Training failed: {msg}", "red")
 
-        threading.Thread(target=task, daemon=True).start()
+        # Start Async Task
+        if self.async_runner:
+            self.async_runner.run_async("Training AI Committee", _train_task, on_finish=_on_finish)
+        else:
+            threading.Thread(target=lambda: _on_finish(_train_task()), daemon=True).start()
 
     def predict_single(self, feature_values, silent=False):
         """Perform single prediction."""
@@ -311,19 +322,27 @@ class ModelController:
             if target_col is not None:
                 try:
                     # Clean Ground Truth mapping
-                    mapping = {'POSITIVE': 1, 'NEGATIVE': 0, '1': 1, '0': 0, 1: 1, 0: 0}
-                    y_true = df[target_col].map(mapping).fillna(0).values
+                    # Clean Ground Truth mapping - Handle empty strings as UNKNOWN
+                    mapping = {'POSITIVE': 1, 'NEGATIVE': 0, '1': 1, '0': 0, 1: 1, 0: 0, 'positive': 1, 'negative': 0}
+                    raw_y = df[target_col].astype(str).str.upper().str.strip()
+                    y_true = np.array([mapping.get(v, -1) for v in raw_y])
+                    
+                    # Only allow F1 if there are valid labels (not all -1)
+                    if (y_true == -1).all():
+                        y_true = None
                 except:
                     y_true = None
             
             # --- SELECTION COHORT FILTER ---
             selected = self.data_manager.selected_indices
             if selected and len(selected) > 0:
-                # Ensure we only use valid indices within the current DF range
-                # (in case the DF was swapped/sampled recently)
-                valid_selected = [i for i in selected if i < len(df)]
-                if valid_selected:
-                    df = df.iloc[valid_selected].reset_index(drop=True)
+                # CLINICAL AUDIT SYNC: Use label-based selection to preserve absolute spreadsheet IDs
+                # This prevents ID shifting (e.g. ID 34 showing PSA of row 7)
+                current_indices = df.index.tolist()
+                valid_ids = [i for i in selected if i in current_indices]
+                if valid_ids:
+                    df = df.loc[valid_ids].copy()
+                    # CRITICAL: Do NOT reset_index here, or we lose the clinical trail
             models_list = self.layout_manager.callbacks.get('models', ["Random Forest", "Logistic Regression", "SVM"])
             
             # 1. Prediction routing
@@ -361,9 +380,15 @@ class ModelController:
                             l_acc = float(accuracy_score(y_true, p))
                         except: pass
                     
+                    # Retrieve GLOBAL metrics for comparison
+                    global_m = self.model_manager.get_detailed_metrics(m_name, self.data_manager.data_path)
+                    g_f1 = global_m.get('F1-Score', 0) if global_m else 0
+                    g_auc = global_m.get('AUC', 0) if global_m else 0
+                    
                     batch_results_summary.append({
                         'model': m_name, 'positives': pos_count, 'risk': avg_risk, 
-                        'rate': det_rate, 'local_f1': l_f1, 'local_acc': l_acc
+                        'rate': det_rate, 'local_f1': l_f1, 'local_acc': l_acc,
+                        'global_f1': g_f1, 'global_auc': g_auc
                     })
                 except: continue
 
