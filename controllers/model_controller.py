@@ -135,21 +135,40 @@ class ModelController:
             # 4. Generate Clinical Forensic Data
             result['forensic'] = self.diagnostic_engine.get_individual_forensic(feature_values, risk)
 
-            # 5. Prediction Stability Check
-            perturb_stable = True
-            for feat, val in feature_values.items():
+            # 5. Prediction Stability Check (Asynchronous)
+            # This involves 122+ secondary predictions which can cause UI lag.
+            result['stability_metric'] = "Calculating..."
+            
+            def _stability_task():
+                perturb_stable = True
                 try:
-                    v = float(val)
-                    for perturb in [0.98, 1.02]:
-                        temp_inp = feature_values.copy()
-                        temp_inp[feat] = v * perturb
-                        p_temp, _, _ = self.model_manager.predict_single(model_name, temp_inp)
-                        if p_temp != prediction:
-                            perturb_stable = False
-                            break
-                    if not perturb_stable: break
-                except: pass
-            result['stability_metric'] = "98% Robust" if perturb_stable else "Low (Sensitivity detected)"
+                    for feat, val in feature_values.items():
+                        v = float(val)
+                        for perturb in [0.98, 1.02]:
+                            temp_inp = feature_values.copy()
+                            temp_inp[feat] = v * perturb
+                            p_temp, _, _ = self.model_manager.predict_single(model_name, temp_inp)
+                            if p_temp != result['prediction']:
+                                return False
+                    return True
+                except:
+                    return True
+
+            def _on_stability_finish(stable):
+                result['stability_metric'] = "98% Robust" if stable else "Low (Sensitivity detected)"
+                if not silent:
+                    self.layout_manager.update_status(f"Clinical stability verified: {result['stability_metric']}", "#10B981")
+                # Persist result if audit supported
+                if hasattr(self.data_manager, 'save_prospective_audit'):
+                    self.data_manager.save_prospective_audit(result)
+
+            if not silent:
+                self.layout_manager.update_status("Analyzing clinical robustness...", "orange")
+
+            if self.async_runner:
+                self.async_runner.run_async("Robustness Check", _stability_task, on_finish=_on_stability_finish)
+            else:
+                _on_stability_finish(_stability_task())
 
             # 6. Longitudinal Context Injection
             patient_id = feature_values.get('sample_id', 'ActivePatient-01')
@@ -468,20 +487,6 @@ class ModelController:
 
             summary_metadata['audit_registry'] = detailed_audit_data
             
-            # 3.5 Dynamic Diagnostic Analysis (Signal Drift & Strength)
-            try:
-                from logic.diagnostic_engine import DiagnosticEngine
-                engine = DiagnosticEngine()
-                dynamic_insights = engine.analyze_batch(df)
-                summary_metadata['dynamic_insights'] = dynamic_insights
-            except Exception as e:
-                log.error("Dynamic Analysis failed: %s", e)
-                summary_metadata['dynamic_insights'] = {}
-            
-            # 4. Move Leaderboard Calculation to Background
-            # This is extremely heavy due to Cross-Validation and was causing UI freezing
-            leaderboard = self.model_manager.get_model_leaderboard(self.data_manager.data_path)
-            
             # Smart-Sync diagnostics: overwrite existing columns if detected (even with typos)
             def update_best_match(keywords, data):
                 for col in df.columns:
@@ -492,7 +497,7 @@ class ModelController:
                 return False
 
             # 1. Update Decision/Class
-            if not update_best_match(['prediction', 'rish', 'class', 'status', 'verdict'], 
+            if not update_best_match(['prediction', 'risk', 'class', 'status', 'verdict'], 
                                    ['POSITIVE' if p == 1 else 'NEGATIVE' for p in predictions]):
                 df['Prediction'] = ['POSITIVE' if p == 1 else 'NEGATIVE' for p in predictions]
 
@@ -505,6 +510,22 @@ class ModelController:
                 df['Confidence'] = confidences
             
             df['Consensus_Count'] = agreement_counts
+
+            # 3.5 Dynamic Diagnostic Analysis (Signal Drift & Strength)
+            # CRITICAL: This MUST happen after updating columns (Prediction, Risk_Score) 
+            # so the engine can calculate confidence zones and triage correctly.
+            try:
+                from logic.diagnostic_engine import DiagnosticEngine
+                engine = DiagnosticEngine()
+                dynamic_insights = engine.analyze_batch(df)
+                summary_metadata['dynamic_insights'] = dynamic_insights
+            except Exception as e:
+                log.error("Dynamic Analysis failed: %s", e)
+                summary_metadata['dynamic_insights'] = {}
+            
+            # 4. Move Leaderboard Calculation to Background
+            # This is extremely heavy due to Cross-Validation and was causing UI freezing
+            leaderboard = self.model_manager.get_model_leaderboard(self.data_manager.data_path)
             
             return df, summary_metadata, consensus_str, leaderboard
 
@@ -561,6 +582,10 @@ class ModelController:
                                  "clear all patient data, and reset the environment. Proceed?"):
             return
 
+        # CANCEL ALL BACKGROUND TASKS: Ensure pending training/predictions don't overwrite the purge
+        if self.async_runner:
+            self.async_runner.cancel_all()
+
         def task():
             # 1. Purge models from disk
             self.model_manager.delete_all_models()
@@ -571,14 +596,19 @@ class ModelController:
             self.data_manager.prediction_results = None
             
             # 3. Wipe UI Components
-            self.layout_manager.root.after(0, self.layout_manager.clear_all_data)
-            
-            status_msg = "SYSTEM RESET COMPLETE: All clinical artifacts purged."
-            self.layout_manager.root.after(0, lambda: self.layout_manager.update_status(status_msg, "#475569"))
-            self.layout_manager.root.after(0, lambda: self.error_handler.notify(status_msg, type='info'))
-            self.layout_manager.root.after(0, lambda: self.layout_manager.dashboard.update_narrative("Awaiting clinical data... System has been reset to factory defaults.", "INFO"))
+            return "SUCCESS"
 
-        threading.Thread(target=task, daemon=True).start()
+        def _on_finish(res):
+            self.layout_manager.clear_all_data()
+            status_msg = "SYSTEM RESET COMPLETE: All clinical artifacts purged."
+            self.layout_manager.update_status(status_msg, "#475569")
+            self.error_handler.notify(status_msg, type='info')
+            self.layout_manager.dashboard.update_narrative("Awaiting clinical data... System has been reset to factory defaults.", "INFO")
+
+        if self.async_runner:
+            self.async_runner.run_async("System Reset", task, on_finish=_on_finish)
+        else:
+            threading.Thread(target=lambda: _on_finish(task()), daemon=True).start()
 
     def get_analytics_data(self, analysis_type, **kwargs):
         """Get data for various analytics."""

@@ -3,6 +3,7 @@ Centralized error handling and user notification utility.
 """
 
 import logging
+import threading
 import tkinter.messagebox as messagebox
 
 
@@ -27,7 +28,10 @@ class ErrorHandler:
             self.notify(error_msg, type='error')
 
     def notify(self, message, type='info'):
-        """Show a non-intrusive internal notification."""
+        """Show a non-intrusive internal notification (Thread Safe)."""
+        if self.root and threading.current_thread() is not threading.main_thread():
+            self.root.after(0, lambda: self.notify(message, type))
+            return
         # 1. Internal Status Bar (Primary)
         if self.status_callback:
             color = "#10B981" if type == 'success' else "#EF4444" if type == 'error' else "#3B82F6"

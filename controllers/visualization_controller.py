@@ -13,12 +13,13 @@ from views.visualizations import Visualizer
 class VisualizationController:
     """Controller for all visualization and plotting operations."""
 
-    def __init__(self, model_manager, data_manager, layout_manager, error_handler=None, model_controller=None):
+    def __init__(self, model_manager, data_manager, layout_manager, error_handler=None, model_controller=None, async_runner=None):
         self.model_manager = model_manager
         self.data_manager = data_manager
         self.layout_manager = layout_manager
         self.error_handler = error_handler or ErrorHandler()
         self.model_controller = model_controller
+        self.async_runner = async_runner
 
     def _require_data(self, context='analytics'):
         """Show a friendly warning and return False when no dataset is loaded."""
@@ -70,23 +71,12 @@ class VisualizationController:
         except:
             pass
 
-    def _run_async_task(self, label, func, on_finish=None):
-        """Unified helper to run background tasks with GUI status management."""
-        self.layout_manager.dashboard.update_status(f"Calculating {label}…", "orange")
-
-        def task():
-            try:
-                result = func()
-                if on_finish:
-                    self.layout_manager.root.after(0, lambda: on_finish(result))
-                self.layout_manager.root.after(0, lambda: self.layout_manager.dashboard.update_status(f"{label} Complete", "#10B981"))
-                self.layout_manager.root.after(0, lambda: self.error_handler.notify(f"{label} calculated successfully", type='success'))
-            except Exception as e:
-                self.error_handler.log_and_notify(f"{label} Task", e)
-                self.layout_manager.root.after(0, lambda: self.layout_manager.dashboard.update_status(f"Error: {label} failed", "red"))
-
-        import threading
-        threading.Thread(target=task, daemon=True).start()
+        if self.async_runner:
+            self.async_runner.run_async(label, func, on_finish=on_finish)
+        else:
+            # Fallback legacy mode if no runner provided
+            import threading
+            threading.Thread(target=task, daemon=True).start()
 
     def show_feature_importance(self):
         """Show feature importance plot."""

@@ -57,7 +57,10 @@ class DiagnosticEngine:
             if match:
                 col = match[0]
                 batch_mean = df[col].mean()
-                z_score = (batch_mean - baseline['mean']) / baseline['std']
+                # ROBUSTNESS FIX: Guard against division by zero if std is not provided or zero
+                std = baseline.get('std', 1.0)
+                if std == 0: std = 1.0 
+                z_score = (batch_mean - baseline['mean']) / std
                 
                 if abs(z_score) > 1.5:
                     direction = "HIGHER" if z_score > 0 else "LOWER"
@@ -106,7 +109,10 @@ class DiagnosticEngine:
             match = [k for k in inputs.keys() if marker.lower() in str(k).lower()]
             if match:
                 val = float(inputs[match[0]])
-                z_score = (val - baseline['mean']) / baseline['std']
+                # ROBUSTNESS FIX: Guard against division by zero
+                std = baseline.get('std', 1.0)
+                if std == 0: std = 1.0
+                z_score = (val - baseline['mean']) / std
                 biomarker_deviations.append({
                     'marker': marker,
                     'value': val,

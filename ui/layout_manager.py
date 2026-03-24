@@ -4,6 +4,7 @@ UI Layout Manager - Assembles and manages the main application layout.
 
 import tkinter as tk
 import numpy as np
+import threading
 
 from ui.components.dashboard import Dashboard
 from ui.components.sidebar import Sidebar
@@ -135,7 +136,7 @@ class LayoutManager:
             # Priority: ensure [✓], sample_id and results are visible first
             priority_keywords = {
                 'ID': ['sample_id', 'patient_id', 'index'],
-                'Ground Truth': ['rish', 'label', 'target', 'class'],
+                'Ground Truth': ['risk', 'label', 'target', 'class'],
                 'AI Prediction': ['prediction', 'verdict', 'decision'],
                 'Risk Score': ['risk', 'probability']
             }
@@ -213,6 +214,9 @@ class LayoutManager:
 
     def update_data_info(self, rows, cols, samples):
         """Update the data information display."""
+        if self.root and threading.current_thread() is not threading.main_thread():
+            self.root.after(0, lambda: self.update_data_info(rows, cols, samples))
+            return
         if self.dashboard:
             self.dashboard.update_data_info(rows=rows, cols=cols, samples=samples)
 
@@ -233,6 +237,9 @@ class LayoutManager:
 
     def update_metrics(self, confidence=0.0, risk=0.0, triage="Pending", consensus="N/A", **kwargs):
         """Update the metrics display using clinical terminology."""
+        if self.root and threading.current_thread() is not threading.main_thread():
+            self.root.after(0, lambda: self.update_metrics(confidence, risk, triage, consensus, **kwargs))
+            return
         if self.dashboard:
             self.dashboard.update_metrics(
                 risk=risk,
@@ -243,11 +250,17 @@ class LayoutManager:
 
     def update_status(self, message, color="#64748B"):
         """Update the status bar."""
+        if self.root and threading.current_thread() is not threading.main_thread():
+            self.root.after(0, lambda: self.update_status(message, color))
+            return
         if self.dashboard:
             self.dashboard.update_status(message, color)
 
     def log_message(self, message, level="INFO"):
         """Log a message to the persistent system console."""
+        if self.root and threading.current_thread() is not threading.main_thread():
+            self.root.after(0, lambda: self.log_message(message, level))
+            return
         if self.dashboard:
             self.dashboard.log_message(message, level)
     

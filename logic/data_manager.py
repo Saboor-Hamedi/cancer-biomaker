@@ -147,7 +147,7 @@ class DataManager:
             df.dropna(how='all', inplace=True)
 
             # 3. Clinical Placeholder Injection (Ensure results columns always exist)
-            placeholders = ['Prediction', 'Risk_Score', 'Cancer Rish Class']
+            placeholders = ['Prediction', 'Risk_Score', 'Cancer Risk Class']
             for p in placeholders:
                 # Fuzzy check to avoid duplicates if columns exist with slightly different names
                 if not any(str(p).lower() in str(c).lower() for c in df.columns):
@@ -247,12 +247,13 @@ class DataManager:
             Q3 = new_df[col].quantile(0.75)
             IQR = Q3 - Q1
             
-            # Use factor 3.0 for extreme outliers only
-            lower = Q1 - factor * IQR
-            upper = Q3 + factor * IQR
-            
-            # Winsorization: Clip extreme values instead of dropping rows.
-            # This ensures positive cases (who HAVE high biomarker values) stay in the dataset.
-            new_df[col] = new_df[col].clip(lower=lower, upper=upper)
+            # ROBUSTNESS FIX: Only apply clipping if there's enough variance to calculate a meaningful IQR
+            if IQR > 0:
+                lower = Q1 - factor * IQR
+                upper = Q3 + factor * IQR
+                
+                # Winsorization: Clip extreme values instead of dropping rows.
+                # This ensures positive cases (who HAVE high biomarker values) stay in the dataset.
+                new_df[col] = new_df[col].clip(lower=lower, upper=upper)
             
         return new_df

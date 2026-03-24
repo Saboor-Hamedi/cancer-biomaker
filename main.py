@@ -110,7 +110,7 @@ class CancerDetectionApp:
 
         self.data_controller = DataController(self.data_manager, self.layout_manager, self.error_handler, model_manager=self.model_manager, velocity_manager=self.velocity_manager, version=self.version, async_runner=self.async_runner)
         self.model_controller = ModelController(self.model_manager, self.data_manager, self.layout_manager, self.error_handler, velocity_manager=self.velocity_manager, async_runner=self.async_runner)
-        self.visualization_controller = VisualizationController(self.model_manager, self.data_manager, self.layout_manager, self.error_handler, model_controller=self.model_controller)
+        self.visualization_controller = VisualizationController(self.model_manager, self.data_manager, self.layout_manager, self.error_handler, model_controller=self.model_controller, async_runner=self.async_runner)
         self.display_formatter = DisplayFormatter(self.layout_manager)
 
         self.menu_handler = MenuHandler(self.root, self.data_controller, self.model_controller, self.visualization_controller, self.layout_manager)
@@ -176,24 +176,36 @@ class CancerDetectionApp:
         """Opens (or reveals) the non-modal AI Research Assistant with session persistence."""
         self.layout_manager.update_status("AI Research Assistant: Syncing clinical data...", "orange")
 
+        # THREAD-SAFETY FIX: Gather UI values on the main thread BEFORE starting background task
+        # This prevents illegal access from the _sync_task thread.
+        ui_ctx = {
+            'features': {},
+            'stats': {},
+            'data_source': "Unknown"
+        }
+        try:
+            if self.layout_manager.tab_input:
+                ui_ctx['features'] = self.layout_manager.tab_input.get_values()
+            
+            if self.layout_manager.dashboard:
+                d = self.layout_manager.dashboard
+                ui_ctx['stats'] = {
+                    'avg_risk': d.risk_card_val.cget('text'),
+                    'confidence': d.conf_card_val.cget('text'),
+                    'triage': d.triage_card_val.cget('text')
+                }
+            
+            if self.data_manager.data_path:
+                ui_ctx['data_source'] = os.path.basename(self.data_manager.data_path)
+        except Exception:
+            pass
+
         def _sync_task():
-            # 1. Gather live clinical context (Patient biomarkers + Model stats)
-            ctx = {'features': {}, 'stats': {}, 'leaderboard': [], 'data_source': "Unknown"}
+            # Gather HEAVY context in background (Cross-validation leaderboard)
+            ctx = ui_ctx.copy()
+            ctx['leaderboard'] = []
             try:
-                # Capture UI values (Must be thread-safe for reading labels)
-                # Note: cget() is generally okay for reading on non-main threads in some Tk versions, 
-                # but it's safer to just gather what we need. 
-                if self.layout_manager.tab_input:
-                    ctx['features'] = self.layout_manager.tab_input.get_values()
-                if self.layout_manager.dashboard:
-                    d = self.layout_manager.dashboard
-                    ctx['stats'] = {
-                        'avg_risk': d.risk_card_val.cget('text'),
-                        'confidence': d.conf_card_val.cget('text'),
-                        'triage': d.triage_card_val.cget('text')
-                    }
                 if self.data_manager.data_path:
-                    ctx['data_source'] = os.path.basename(self.data_manager.data_path)
                     # HEAVY: Global benchmark sharing (Uses Cross-Validation)
                     ctx['leaderboard'] = self.model_manager.get_model_leaderboard(self.data_manager.data_path)
             except Exception: pass
