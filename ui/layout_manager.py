@@ -12,6 +12,7 @@ from ui.components.model_explorer import ModelExplorer
 from views.dialogs import PreprocessingDialog, SettingsDialog
 from ui.components.tabs import AnalysisTab, DataTab, InputTab, ValidationTab, LeaderboardTab
 from ui.components.velocity_tab import VelocityTab
+from ui.components.audit_tab import AuditTab
 from ui.components.console import ConsoleTab
 from logic.model_manager import HAS_XGB
 
@@ -36,6 +37,7 @@ class LayoutManager:
         self.tab_validation = None
         self.tab_leaderboard = None
         self.tab_velocity = None
+        self.tab_audit = None
         self.tab_console = None
         self.model_explorer = None
         # Reference for dynamic menu updates
@@ -92,6 +94,9 @@ class LayoutManager:
 
         self.tab_velocity = VelocityTab(self.dashboard.velocity_tab, self.callbacks)
         self.tab_velocity.pack(fill=tk.BOTH, expand=True)
+
+        self.tab_audit = AuditTab(self.dashboard.audit_tab)
+        self.tab_audit.pack(fill=tk.BOTH, expand=True)
 
         self.tab_console = ConsoleTab(self.dashboard.log_tab_frame)
         self.tab_console.pack(fill=tk.BOTH, expand=True)

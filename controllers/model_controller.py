@@ -597,6 +597,10 @@ class ModelController:
             # Update Analysis
             self.layout_manager.tab_analysis.display_batch_report(df, metadata=summary_metadata)
             
+            # [NEW] Update Clinical Audit Tab (Mismatches)
+            if hasattr(self.layout_manager, 'tab_audit'):
+                self.layout_manager.tab_audit.update_audit_data(df)
+            
             # Switch view
             try: self.layout_manager.dashboard.notebook.select(self.layout_manager.dashboard.analysis_tab)
             except: pass

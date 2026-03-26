@@ -21,6 +21,7 @@ class Dashboard(ttk.Frame):
         self.validation_tab = None
         self.leaderboard_tab = None
         self.velocity_tab = None
+        self.audit_tab = None
         self.analysis_tab = None
         self.settings_tab = None
         self.log_tab_frame = None
@@ -106,6 +107,7 @@ class Dashboard(ttk.Frame):
         self.validation_tab = ttk.Frame(self.notebook)
         self.leaderboard_tab = ttk.Frame(self.notebook)
         self.velocity_tab = ttk.Frame(self.notebook)
+        self.audit_tab = ttk.Frame(self.notebook) # Initialized as a simple Frame
         self.analysis_tab = ttk.Frame(self.notebook)
         self.log_tab_frame = ttk.Frame(self.notebook)
 
@@ -114,6 +116,7 @@ class Dashboard(ttk.Frame):
         self.notebook.add(self.validation_tab, text="AI Consensus", sticky='nsew')
         self.notebook.add(self.leaderboard_tab, text="Algorithm Leaderboard", sticky='nsew')
         self.notebook.add(self.velocity_tab, text="Patient Trajectory", sticky='nsew')
+        self.notebook.add(self.audit_tab, text="Clinical Audit", sticky='nsew')
         self.notebook.add(self.analysis_tab, text="Performance Analysis", sticky='nsew')
         self.notebook.add(self.log_tab_frame, text="System Logs", sticky='nsew')
 

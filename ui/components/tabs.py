@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import numpy as np
+import pandas as pd
 
 class InputTab(ttk.Frame):
     """Handles patient biomarker entry — 3-column layout with unit extraction and clean names."""
@@ -61,6 +62,16 @@ class InputTab(ttk.Frame):
                                      font=('Inter', 11, 'bold'))
         self.title_label.pack(side=tk.LEFT)
 
+        # Footer Actions - Packed first with side=BOTTOM to ensure it stays pinned
+        self.footer = ttk.Frame(self, padding=(15, 0, 15, 12))
+        self.footer.pack(fill=tk.X, side=tk.BOTTOM)
+        
+        ttk.Button(self.footer, text="Export CSV", style='Primary.TButton', command=lambda: self._export_data('csv')).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.footer, text="Export Excel", style='Primary.TButton', command=lambda: self._export_data('excel')).pack(side=tk.LEFT, padx=2)
+        
+        ttk.Button(self.footer, text="Reset Values", command=self.clear_table).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(self.footer, text="Copy Values", command=self._copy_table).pack(side=tk.RIGHT, padx=5)
+
         container = ttk.Frame(self, padding=(15, 0, 15, 10)) # Standardized Padding
         container.pack(fill=tk.BOTH, expand=True)
         
@@ -92,9 +103,8 @@ class InputTab(ttk.Frame):
         container.rowconfigure(0, weight=1)
         container.columnconfigure(0, weight=1)
 
-        btn_frame = ttk.Frame(self, padding=(10, 4))
-        btn_frame.pack(fill=tk.X)
-        ttk.Button(btn_frame, text="Reset Values", command=self.clear_table).pack(side=tk.RIGHT, padx=5)
+        container.rowconfigure(0, weight=1)
+        container.columnconfigure(0, weight=1)
 
     def refresh_features(self, features, first_row=None):
         """Populate the 3-column table. Values come from first_row or data_manager's first row."""
@@ -146,6 +156,38 @@ class InputTab(ttk.Frame):
     def refresh_display(self):
         if self.features and not self.tree.get_children():
             self.refresh_features(self.features)
+
+    def _export_data(self, fmt):
+        items = self.tree.get_children()
+        if not items: return
+        headers = ["BIOMARKER / FEATURE NAME", "UNIT", "VALUE"]
+        rows = [self.tree.item(i)['values'] for i in items]
+        df = pd.DataFrame(rows, columns=headers)
+        self._run_export_dialog(df, fmt, "Input_Profile")
+
+    def _copy_table(self):
+        items = self.tree.get_children()
+        if not items: return
+        headers = ["BIOMARKER", "UNIT", "VALUE"]
+        rows = [self.tree.item(i)['values'] for i in items]
+        df = pd.DataFrame(rows, columns=headers)
+        self.clipboard_clear()
+        self.clipboard_append(df.to_csv(sep='\t', index=False))
+        from tkinter import messagebox
+        messagebox.showinfo("Copied", "Biomarker profile copied to clipboard.")
+
+    def _run_export_dialog(self, df, fmt, name):
+        from tkinter import filedialog, messagebox
+        import pandas as pd
+        ext = ".csv" if fmt == 'csv' else ".xlsx"
+        path = filedialog.asksaveasfilename(defaultextension=ext, initialfile=f"{name}{ext}")
+        if not path: return
+        try:
+            if fmt == 'csv': df.to_csv(path, index=False)
+            else: df.to_excel(path, index=False)
+            messagebox.showinfo("Success", f"Data exported: {path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Export failed: {e}")
 
     def get_values(self) -> dict:
         """Return {raw_feature_name: float_value} for model prediction."""
@@ -710,6 +752,13 @@ class ValidationTab(ttk.Frame):
         self._create_widgets()
 
     def _create_widgets(self):
+        # Footer Actions - Packed first with side=BOTTOM to ensure it stays pinned
+        self.footer = ttk.Frame(self, padding=(15, 0, 15, 12))
+        self.footer.pack(fill=tk.X, side=tk.BOTTOM)
+        ttk.Button(self.footer, text="Export CSV", style='Primary.TButton', command=lambda: self._export_data('csv')).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.footer, text="Export Excel", style='Primary.TButton', command=lambda: self._export_data('excel')).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.footer, text="Copy Consensus", command=self._copy_table).pack(side=tk.RIGHT)
+
         # Header with Title
         self.header = ttk.Frame(self, padding=(12, 8, 12, 4))
         self.header.pack(fill=tk.X)
@@ -740,6 +789,37 @@ class ValidationTab(ttk.Frame):
 
     def clear(self):
         self.tree.delete(*self.tree.get_children())
+
+    def _export_data(self, fmt):
+        items = self.tree.get_children()
+        if not items: return
+        headers = ["ALGORITHM", "COHORT RATE", "AVG RISK", "BATCH F1", "BATCH ACC", "EXPERT F1", "EXPERT AUC", "STATUS"]
+        rows = [self.tree.item(i)['values'] for i in items]
+        df = pd.DataFrame(rows, columns=headers)
+        self._run_export_dialog(df, fmt, "Consensus_Audit")
+
+    def _copy_table(self):
+        items = self.tree.get_children()
+        if not items: return
+        headers = ["ALGORITHM", "COHORT RATE", "AVG RISK", "BATCH F1", "BATCH ACC", "EXPERT F1", "EXPERT AUC", "STATUS"]
+        rows = [self.tree.item(i)['values'] for i in items]
+        df = pd.DataFrame(rows, columns=headers)
+        self.clipboard_clear()
+        self.clipboard_append(df.to_csv(sep='\t', index=False))
+        from tkinter import messagebox
+        messagebox.showinfo("Copied", "Consensus table copied to clipboard.")
+
+    def _run_export_dialog(self, df, fmt, name):
+        from tkinter import filedialog, messagebox
+        ext = ".csv" if fmt == 'csv' else ".xlsx"
+        path = filedialog.asksaveasfilename(defaultextension=ext, initialfile=f"{name}{ext}")
+        if not path: return
+        try:
+            if fmt == 'csv': df.to_csv(path, index=False)
+            else: df.to_excel(path, index=False)
+            messagebox.showinfo("Success", f"Data exported: {path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Export failed: {e}")
 
     def update_comparison(self, data):
         """Individual Patient View: Highlight Positive detection in Red."""
@@ -832,6 +912,13 @@ class LeaderboardTab(ttk.Frame):
         outer = ttk.Frame(self)
         outer.pack(fill=tk.BOTH, expand=True)
 
+        # Footer Actions - Packed first with side=BOTTOM to ensure it stays pinned
+        self.footer = ttk.Frame(outer, padding=(15, 0, 15, 12))
+        self.footer.pack(fill=tk.X, side=tk.BOTTOM)
+        ttk.Button(self.footer, text="Export CSV", style='Primary.TButton', command=lambda: self._export_data('csv')).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.footer, text="Export Excel", style='Primary.TButton', command=lambda: self._export_data('excel')).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.footer, text="Copy Rankings", command=self._copy_table).pack(side=tk.RIGHT)
+
         # ── Leaderboard Section ────────────────────────────────────────
         self.header = ttk.Frame(outer, padding=(12, 8, 12, 4))
         self.header.pack(fill=tk.X)
@@ -874,6 +961,37 @@ class LeaderboardTab(ttk.Frame):
     def clear(self):
         if self.lb_tree:   
             self.lb_tree.delete(*self.lb_tree.get_children())
+
+    def _export_data(self, fmt):
+        items = self.lb_tree.get_children()
+        if not items: return
+        headers = ["RANK", "ALGORITHM", "ACCURACY", "F1 SCORE", "ROC-AUC", "PRECISION", "RECALL", "SPECIFICITY", "CV STABILITY", "BADGE"]
+        rows = [self.lb_tree.item(i)['values'] for i in items]
+        df = pd.DataFrame(rows, columns=headers)
+        self._run_export_dialog(df, fmt, "Algorithm_Leaderboard")
+
+    def _copy_table(self):
+        items = self.lb_tree.get_children()
+        if not items: return
+        headers = ["RANK", "ALGORITHM", "ACCURACY", "F1 SCORE", "ROC-AUC", "PRECISION", "RECALL", "SPECIFICITY", "CV STABILITY", "BADGE"]
+        rows = [self.lb_tree.item(i)['values'] for i in items]
+        df = pd.DataFrame(rows, columns=headers)
+        self.clipboard_clear()
+        self.clipboard_append(df.to_csv(sep='\t', index=False))
+        from tkinter import messagebox
+        messagebox.showinfo("Copied", "Leaderboard table copied to clipboard.")
+
+    def _run_export_dialog(self, df, fmt, name):
+        from tkinter import filedialog, messagebox
+        ext = ".csv" if fmt == 'csv' else ".xlsx"
+        path = filedialog.asksaveasfilename(defaultextension=ext, initialfile=f"{name}{ext}")
+        if not path: return
+        try:
+            if fmt == 'csv': df.to_csv(path, index=False)
+            else: df.to_excel(path, index=False)
+            messagebox.showinfo("Success", f"Data exported: {path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Export failed: {e}")
 
     # ── CLINICAL LEADERBOARD INSIGHTS (hardcoded from real data analysis) ──────
     _INSIGHTS = {
