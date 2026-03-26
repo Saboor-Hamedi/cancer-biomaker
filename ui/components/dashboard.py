@@ -55,8 +55,8 @@ class Dashboard(ttk.Frame):
         # Left side: Message Status
         status_inner = ttk.Frame(self.status_frame, style='Card.TFrame')
         status_inner.grid(row=0, column=0, sticky='w')
-        ttk.Label(status_inner, text="System Status:", font=("Inter", 9, "bold"), style='Card.TLabel').pack(side=tk.LEFT, padx=5)
-        self.status_label = ttk.Label(status_inner, text="System Ready", font=("Inter", 9, "bold"), style='Card.TLabel')
+        ttk.Label(status_inner, text="System Status:", font=("Inter", 9, "bold"), style='Status.TLabel').pack(side=tk.LEFT, padx=5)
+        self.status_label = ttk.Label(status_inner, text="System Ready", font=("Inter", 9, "bold"), style='Status.TLabel')
         self.status_label.pack(side=tk.LEFT)
 
         # Right side: Data Stats labels
@@ -180,7 +180,7 @@ class Dashboard(ttk.Frame):
         self.configure(style='TFrame')
         self.notebook.configure(style='TNotebook')
         self.status_frame.configure(style='Card.TFrame')
-        self.status_label.config(style='Card.TLabel')
+        self.status_label.config(style='Status.TLabel')
         self.metrics_frame.configure(style='TFrame')
         
         if self.narrative_text:

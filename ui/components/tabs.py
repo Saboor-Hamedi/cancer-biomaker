@@ -21,6 +21,13 @@ class InputTab(ttk.Frame):
         ('_na',         'nA'),
     ]
 
+    # ── Clinical Reference Thresholds (Standard Oncology ranges) ──────────────
+    _THRESHOLDS = {
+        'psa':   4.0,  # ng/mL (Prostate Specific Antigen)
+        'afp':   20.0, # ng/mL (Alpha-fetoprotein)
+        'ca125': 35.0, # U/mL (Cancer Antigen 125)
+    }
+
     @classmethod
     def _humanize(cls, raw: str):
         """Return (display_name, unit) from a raw column name."""
@@ -92,6 +99,7 @@ class InputTab(ttk.Frame):
         self.tree.tag_configure('afp')
         self.tree.tag_configure('ca')
         self.tree.tag_configure('other')
+        self.tree.tag_configure('abnormal', foreground="#EF4444", font=('Inter', 11, 'bold')) # Clinical Red Highlight
 
         vsb = ttk.Scrollbar(container, orient=tk.VERTICAL,   command=self.tree.yview)
         hsb = ttk.Scrollbar(container, orient=tk.HORIZONTAL, command=self.tree.xview)
@@ -144,14 +152,23 @@ class InputTab(ttk.Frame):
                 val_str = "—"
 
             fl = raw_f.lower()
-            tag = ('psa' if 'psa' in fl else
+            base_tag = ('psa' if 'psa' in fl else
                    'afp' if 'afp' in fl else
                    'ca' if 'ca125' in fl or 'ca_125' in fl else
                    'other')
+            
+            # Clinical Highlight Logic
+            tag_list = [base_tag]
+            try:
+                numeric_val = float(val_raw) if val_raw is not None else 0.0
+                thresh_key = 'psa' if 'psa' in fl else 'afp' if 'afp' in fl else 'ca125' if ('ca125' in fl or 'ca_125' in fl) else None
+                if thresh_key and numeric_val > self._THRESHOLDS[thresh_key]:
+                    tag_list.append('abnormal')
+            except: pass
 
             self.tree.insert("", tk.END,
                              values=(display_name, unit, val_str),
-                             tags=(tag,))
+                             tags=tuple(tag_list))
 
     def refresh_display(self):
         if self.features and not self.tree.get_children():
@@ -217,7 +234,19 @@ class InputTab(ttk.Frame):
             raw = self._display_to_raw.get(display, display)
             if raw == name or display == name:
                 try:
-                    vals[2] = f"{float(value):.4f}"
+                    num_val = float(value)
+                    vals[2] = f"{num_val:.4f}"
+                    
+                    # Update tags for clinical anomalies
+                    tags = list(self.tree.item(item, 'tags'))
+                    fl = name.lower()
+                    thresh_key = 'psa' if 'psa' in fl else 'afp' if 'afp' in fl else 'ca125' if ('ca125' in fl or 'ca_125' in fl) else None
+                    
+                    if thresh_key and num_val > self._THRESHOLDS[thresh_key]:
+                        if 'abnormal' not in tags: tags.append('abnormal')
+                    else:
+                        if 'abnormal' in tags: tags.remove('abnormal')
+                    self.tree.item(item, tags=tuple(tags))
                 except (ValueError, TypeError):
                     vals[2] = str(value)
                 self.tree.item(item, values=vals)
@@ -248,6 +277,7 @@ class InputTab(ttk.Frame):
         self.tree.tag_configure('afp', background=row_bg, foreground=palette['text_main'])
         self.tree.tag_configure('ca', background=row_bg, foreground=palette['text_main'])
         self.tree.tag_configure('other', background=row_bg, foreground=palette['text_main'])
+        self.tree.tag_configure('abnormal', foreground="#EF4444", font=('Inter', 11, 'bold')) # Override with high-vis red
 
 class DataTab(ttk.Frame):
     def __init__(self, parent, on_select_callback=None, on_row_select_callback=None):
@@ -397,6 +427,10 @@ class AnalysisTab(ttk.Frame):
         self.title_label = ttk.Label(self.header, text="DIAGNOSTIC PERFORMANCE — Forensic Audit & AI Reasoning",
                                      font=('Inter', 11, 'bold'))
         self.title_label.pack(side=tk.LEFT)
+        
+        # [RESTORE] Forensic Actions (Clear/Copy)
+        ttk.Button(self.header, text="Clear Analysis", command=self.clear, style='TButton').pack(side=tk.RIGHT, padx=5)
+        ttk.Button(self.header, text="Copy Report", command=self.copy_all, style='TButton').pack(side=tk.RIGHT, padx=5)
 
         container = ttk.Frame(self, padding=(15, 0, 15, 10)) # Standardized Padding
         container.pack(fill=tk.BOTH, expand=True)
@@ -431,6 +465,11 @@ class AnalysisTab(ttk.Frame):
         self.text.config(state=tk.NORMAL)
         self.text.delete("1.0", tk.END)
         self.text.config(state=tk.DISABLED)
+
+    def copy_all(self):
+        """Copies the entire diagnostic report text to the clipboard."""
+        self.clipboard_clear()
+        self.clipboard_append(self.text.get("1.0", tk.END))
 
     def display_batch_report(self, df, metadata=None):
         """Generates a high-fidelity forensic clinical audit report with deep explanations."""

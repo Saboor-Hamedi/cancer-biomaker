@@ -26,6 +26,7 @@ from logic.data_manager import DataManager
 from logic.model_manager import ModelManager
 from logic.velocity_manager import VelocityManager
 from logic.settings_manager import SettingsManager
+from logic.db_manager import DBManager # New modular import for SQLite persistence
 from ui.display_formatter import DisplayFormatter
 from ui.layout_manager import LayoutManager
 from ui.styles import StyleManager
@@ -40,6 +41,15 @@ warnings.filterwarnings('ignore', message='.*use_label_encoder.*')
 warnings.filterwarnings('ignore', category=UserWarning, module='joblib')
 warnings.filterwarnings('ignore', message='.*X has feature names, but SVC was fitted without feature names.*')
 logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
+
+# Professional Engineering: Enable High-DPI Awareness (4K Support)
+try:
+    if os.name == 'nt':
+        # Higher-level awareness for binary consistency/crispness
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    # Fallback for older Windows environments or missing DLLs
+    pass
 
 VERSION = "1.0.2"
 
@@ -94,9 +104,13 @@ class CancerDetectionApp:
         self.settings_manager = SettingsManager(user_data_path=USER_DATA_HOME)
         StyleManager.apply_styles(self.root, self.settings_manager.settings)
 
-        self.data_manager = DataManager(user_data_path=USER_DATA_HOME)
+        # 1. Initialize the Clinical Vault (SQLite DB)
+        self.db_manager = DBManager(USER_DATA_HOME)
+
+        # 2. Inject DB Persistence into logic managers
+        self.data_manager = DataManager(user_data_path=USER_DATA_HOME, db_manager=self.db_manager)
         self.model_manager = ModelManager(USER_DATA_HOME)
-        self.velocity_manager = VelocityManager()
+        self.velocity_manager = VelocityManager(db_manager=self.db_manager)
         self.async_runner = AsyncRunner(self.root)
         self.error_handler = ErrorHandler(self.root)
         
@@ -109,7 +123,7 @@ class CancerDetectionApp:
         self.error_handler.narrative_callback = lambda t, l="INFO": self.layout_manager.dashboard.update_narrative(t, l)
 
         self.data_controller = DataController(self.data_manager, self.layout_manager, self.error_handler, model_manager=self.model_manager, velocity_manager=self.velocity_manager, version=self.version, async_runner=self.async_runner)
-        self.model_controller = ModelController(self.model_manager, self.data_manager, self.layout_manager, self.error_handler, velocity_manager=self.velocity_manager, async_runner=self.async_runner)
+        self.model_controller = ModelController(self.model_manager, self.data_manager, self.layout_manager, self.error_handler, velocity_manager=self.velocity_manager, async_runner=self.async_runner, db_manager=self.db_manager)
         self.visualization_controller = VisualizationController(self.model_manager, self.data_manager, self.layout_manager, self.error_handler, model_controller=self.model_controller, async_runner=self.async_runner)
         self.display_formatter = DisplayFormatter(self.layout_manager)
 

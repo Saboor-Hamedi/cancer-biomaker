@@ -2,7 +2,7 @@
 ; This script packages the PyInstaller output folder into a true "Next > Next" Windows installer.
 
 #define MyAppName "Cancer Detection Dashboard"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "Clinical AI"
 #define MyAppExeName "CancerDetectionDashboard.exe"
 

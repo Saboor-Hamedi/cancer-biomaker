@@ -1,12 +1,14 @@
 import numpy as np
 import pandas as pd
+from datetime import datetime
 
 class VelocityManager:
     """Handles longitudinal patient data and biomarker trajectory calculations."""
     
-    def __init__(self):
-        # We will hold simulated historical data in-memory or load from a db
-        self.patient_histories = {}
+    def __init__(self, db_manager=None):
+        # Professional Persistence: DB stores history across app sessions
+        self.db_manager = db_manager
+        self.patient_histories = {} # Local cache for performance
 
     def load_historical_data(self, df):
         """Mock method to generate synthetic historical context from a single snapshot."""
@@ -15,9 +17,16 @@ class VelocityManager:
         # In a real deployed environment, this would pull from EHR/EMR Autobridge
         for idx in df.index:
             row = df.loc[idx]
-            patient_id = row.get('sample_id', f"PAT-{idx}")
+            patient_id = str(row.get('sample_id', f"PAT-{idx}"))
             
-            # Robust extraction: find columns that look like PSA, AFP, CA125
+            # 1. CHECK PERSISTENT DATABASE FIRST
+            if self.db_manager:
+                db_history = self.db_manager.get_patient_history(patient_id)
+                if db_history and len(db_history) >= 2:
+                    self.patient_histories[patient_id] = db_history
+                    continue
+
+            # 2. GENERATE AND PERSIST SIMULATED HISTORY IF NONE EXISTS
             def find_val(row, terms):
                 for col in row.index:
                     if any(t.lower() in str(col).lower() for t in terms):
@@ -43,19 +52,44 @@ class VelocityManager:
                 {"month": 0, "psa": psa, "afp": afp, "ca125": ca125, "risk": risk}
             ]
             
+            # Persist to database for forensic durability
+            if self.db_manager:
+                for snapshot in history:
+                    self.db_manager.save_patient_snapshot(patient_id, snapshot, is_simulated=1)
+            
             self.patient_histories[patient_id] = history
 
     def get_patient_velocity(self, patient_id, current_metrics=None):
         """Returns the time-series trajectory and calculated velocity for a patient."""
+        # 1. Fetch from Cache
         history = self.patient_histories.get(patient_id)
         
-        # If not pre-loaded but we have current metrics (e.g., from a live single prediction)
+        # 2. Fetch from DB if cache miss
+        if not history and self.db_manager:
+            history = self.db_manager.get_patient_history(patient_id)
+            if history: self.patient_histories[patient_id] = history
+        
+        # 3. Handle live single predictions (Sync to DB)
         if not history and current_metrics:
-            # Normalize keys to match what load_historical_data expects if needed
             df_mock = pd.DataFrame([current_metrics])
             df_mock['sample_id'] = patient_id
             self.load_historical_data(df_mock)
             history = self.patient_histories.get(patient_id)
+        elif history and current_metrics:
+            # Update history with NEW measurement if it's recent
+            # This turns the "simulated" history into a "real" longitudinal record
+            last_in_db = str(history[-1]['month'])
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Only record if it's a new day/session (basic deduplication)
+            if last_in_db[:10] != now[:10]:
+                if self.db_manager:
+                    self.db_manager.save_patient_snapshot(patient_id, current_metrics, is_simulated=0)
+                history.append({
+                    "month": now, "psa": current_metrics.get('psa', 0), 
+                    "afp": current_metrics.get('afp', 0), "ca125": current_metrics.get('ca125', 0), 
+                    "risk": current_metrics.get('risk', 0)
+                })
 
         if not history or len(history) < 2:
             return None

@@ -15,6 +15,7 @@ class VelocityTab(ttk.Frame):
         self.velocity_data = None
         self.fig = None
         self.canvas = None
+        self.patient_id_label = None # [NEW] Track which ID is in focus
         
         self._create_widgets()
 
@@ -24,18 +25,27 @@ class VelocityTab(ttk.Frame):
         self.title_label = ttk.Label(self.header, text="LONGITUDINAL BIOMARKER VELOCITY TRACKING — Predictive Patient Trajectory",
                                      font=('Inter', 11, 'bold'))
         self.title_label.pack(side=tk.LEFT)
+        
+        # [NEW] Patient Context Label
+        self.patient_id_label = ttk.Label(self.header, text="No Patient Selected", font=('Inter', 10), style='SubHeader.TLabel')
+        self.patient_id_label.pack(side=tk.RIGHT, padx=10)
 
         # Content split
         self.content_frame = ttk.Frame(self, padding=(15, 0, 15, 10)) # Standardized Padding
         self.content_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Plot frame
+        # Plot frame - HIGHER WEIGHT
         self.plot_frame = ttk.Frame(self.content_frame)
-        self.plot_frame.pack(fill=tk.BOTH, expand=True, side=tk.TOP)
+        self.plot_frame.grid(row=0, column=0, sticky='nsew')
         
-        # Metrics frame
+        # Metrics frame - FIXED WEIGHT
         self.metrics_container = ttk.Frame(self.content_frame, padding=(0, 20, 0, 0))
-        self.metrics_container.pack(fill=tk.X, side=tk.BOTTOM)
+        self.metrics_container.grid(row=1, column=0, sticky='ew')
+        
+        # Ensure graph expands while metrics stay at bottom - ADDING MINSIZE to prevent collapse
+        self.content_frame.rowconfigure(0, weight=1, minsize=200)
+        self.content_frame.rowconfigure(1, weight=0)
+        self.content_frame.columnconfigure(0, weight=1)
         
         self.metrics_title = ttk.Label(self.metrics_container, text="TRAJECTORY ANALYSIS", 
                                        font=('Inter', 10, 'bold'))
@@ -44,8 +54,8 @@ class VelocityTab(ttk.Frame):
         self.metrics_grid = ttk.Frame(self.metrics_container)
         self.metrics_grid.pack(fill=tk.X)
         
-        # Initialize persistent plotting structures
-        self.fig, self.ax = plt.subplots(figsize=(10, 4), dpi=100)
+        # Initialize persistent plotting structures - REMOVING strict constrained_layout to prevent collapse warnings
+        self.fig, self.ax = plt.subplots(figsize=(8, 3.5), dpi=110)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
@@ -108,10 +118,16 @@ class VelocityTab(ttk.Frame):
             if other_ax != self.ax:
                 other_ax.remove()
                 
-        self.canvas.draw()
+        if self.plot_frame.winfo_width() > 10: # Only draw if UI is visible
+             self.fig.tight_layout()
+             self.canvas.draw()
 
     def update_velocity_data(self, patient_id, velocity_data):
         self.current_patient_id = patient_id
+        if self.patient_id_label:
+            cleaned_id = str(patient_id)[:15] if patient_id else "Selected Patient"
+            self.patient_id_label.config(text=f"REGISTRY: {cleaned_id}")
+            
         self.velocity_data = velocity_data
         
         if not velocity_data:
@@ -125,11 +141,36 @@ class VelocityTab(ttk.Frame):
         history = self.velocity_data['history']
         forecast = self.velocity_data.get('forecast')
         
-        months = [h['month'] for h in history]
-        psa = [h['psa'] for h in history]
-        afp = [h['afp'] for h in history]
-        ca125 = [h['ca125'] for h in history]
-        risk = [h['risk'] for h in history]
+        # --- ROBUST CLINICAL TIMELINE ENGINE ---
+        # Anchor everything relative to the MOST RECENT record (to prevent off-screen shifting)
+        def parse_to_days(m):
+            if isinstance(m, (int, float)): return m * 30.41 # Convert months to days
+            try: return pd.to_datetime(m).timestamp() / (24*3600)
+            except: return 0.0
+
+        # Sort input history temporally first
+        history_sorted = sorted(history, key=lambda x: parse_to_days(x['month']))
+        anchor_days = parse_to_days(history_sorted[-1]['month'])
+        
+        normalized_data = []
+        for h in history_sorted:
+            h_days = parse_to_days(h['month'])
+            # Offset in months relative to LATEST record
+            m_offset = round((h_days - anchor_days) / 30.41, 1)
+            
+            normalized_data.append({
+                'month': m_offset,
+                'psa': h['psa'],
+                'afp': h['afp'],
+                'ca125': h['ca125'],
+                'risk': h['risk']
+            })
+        
+        months = [h['month'] for h in normalized_data]
+        psa = [h['psa'] for h in normalized_data]
+        afp = [h['afp'] for h in normalized_data]
+        ca125 = [h['ca125'] for h in normalized_data]
+        risk = [h['risk'] for h in normalized_data]
         
         self.ax.clear()
         self.ax.axis('on')
@@ -147,10 +188,22 @@ class VelocityTab(ttk.Frame):
         ax2.axhspan(0.7, 1.0, color='#EF4444', alpha=0.04, label='Critical Zone')
 
         # ── 2. HISTORICAL DATA ──
-        line1, = self.ax.plot(months, psa, marker='o', color='#3B82F6', label='PSA (Historical)', linewidth=2)
-        line2, = self.ax.plot(months, afp, marker='s', color='#10B981', label='AFP (Historical)', linewidth=2)
-        line3, = self.ax.plot(months, ca125, marker='^', color='#F59E0B', label='CA125 (Historical)', linewidth=2)
-        line4, = ax2.plot(months, risk, marker='D', color='#EF4444', label='AI Risk (Historical)', linewidth=2.5)
+        # Optimized for Clinical Impact: Vibrant lines + connected points
+        line_params = {'linewidth': 2.5, 'markersize': 8}
+        line1, = self.ax.plot(months, psa, marker='o', color='#3B82F6', label='PSA', **line_params)
+        line2, = self.ax.plot(months, afp, marker='s', color='#10B981', label='AFP', **line_params)
+        line3, = self.ax.plot(months, ca125, marker='^', color='#F59E0B', label='CA125', **line_params)
+        line4, = ax2.plot(months, risk, marker='D', color='#EF4444', label='AI Risk', linewidth=3, markersize=10)
+
+        # ── 2.5 DATA POINT ANNOTATIONS (Restored Professional Labels) ──
+        is_dark = sum(self.fig.patch.get_facecolor()[:3]) < 1.0 
+        label_color = "#F8FAFC" if is_dark else "#1E293B"
+        
+        for i, m_x in enumerate(months):
+            # Biomarker values (Primary Axis)
+            self.ax.text(m_x, psa[i] * 1.02, f"{psa[i]:.0f}", color='#60A5FA', fontsize=7, ha='center', va='bottom', fontweight='bold')
+            # Risk value (Secondary Axis)
+            ax2.text(m_x, risk[i] + 0.03, f"{risk[i]:.1%}", color='#F87171', fontsize=8, ha='center', va='bottom', fontweight='bold')
 
         # ── 3. PREDICTIVE FORECASTING ──
         if forecast:
@@ -211,10 +264,15 @@ class VelocityTab(ttk.Frame):
         self.ax.legend(lines, labels, loc='upper left', frameon=True, fontsize=9,
                        facecolor=self.fig.patch.get_facecolor(), 
                        edgecolor="#334155" if is_dark else "#E2E8F0",
-                       labelcolor=label_color)
+                        labelcolor=label_color)
         
-        self.fig.tight_layout()
-        self.canvas.draw()
+        # Robust Forensic Rendering: Only draw if the window has a valid size
+        if self.plot_frame.winfo_width() > 10:
+            try:
+                self.fig.tight_layout()
+            except:
+                self.fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.15)
+            self.canvas.draw()
 
     def _render_metrics(self):
         # Clear existing

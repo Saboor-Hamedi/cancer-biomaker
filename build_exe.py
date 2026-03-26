@@ -2,6 +2,7 @@ import PyInstaller.__main__
 import os
 import sys
 import shutil
+import zipfile
 import warnings
 # Suppress Pydantic experimental warnings and other library clutter
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -22,6 +23,7 @@ def get_version():
     return "1.0.0"
 
 def build():
+    import zipfile
     version = get_version()
     print(f"--- Starting Production Build for Cancer Detection Dashboard v{version} ---")
     

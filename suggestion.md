@@ -43,6 +43,16 @@ This document tracks the incremental improvements to the Clinical AI Assistant f
 - [x] **Predictive Trajectories**: Estimate "Time-to-Threshold" based on biomarker velocity.
 - [x] **Reasoning Injection**: Generate "Forensic Tags" for atypical presentations (e.g., "High Risk / Low PSA").
 
+## Phase 6: Professional Engineering & Clinical Scalability (New Strategies)
+
+**Objective**: Elevating the infrastructure from a research suite to a production-grade clinical tool.
+
+- [x] **High-DPI Awareness (4K Support)**: Add `ctypes.windll.shcore.SetProcessDpiAwareness(1)` at startup to ensure the UI and Matplotlib charts appear crisp on modern high-resolution Windows displays.
+- [ ] **Longitudinal Database Integration (SQLite)**: Transition the `VelocityManager` and `ProspectiveAuditLog` from file-based CSVs/memory to a structured SQLite database to ensure data integrity and sub-second retrieval for large patient cohorts.
+- [ ] **Automated Clinical Reference Ranges**: Pre-highlight abnormal biomarker values (e.g., PSA > 4.0, AFP > 20) in the `Input Features` tab before the AI even runs, helping doctors spot anomalies at the Point-of-Care.
+- [ ] **Developer Experience (DevEx) & CI/CD**: Implement automated unit tests for core `logic/` mathematical engines (Diagnostic, Model, Velocity) and move the environment to a locked dependency system (like `Poetry` or `pip-tools`) for reproducible builds.
+- [ ] **Standardized Async Messaging**: Unify all background tasks across `AIChatModal`, `ModelController`, and `DataController` into the `AsyncRunner` framework for consistent error handling and state management.
+
 ---
 
-_Roadmap updated by Antigravity AI — March 2026_
+_Roadmap updated by Antigravity — March 2026_

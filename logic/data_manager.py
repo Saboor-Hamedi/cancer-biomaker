@@ -4,16 +4,17 @@ import pandas as pd
 import numpy as np
 
 class DataManager:
-    def __init__(self, data_path=None, user_data_path=None):
+    def __init__(self, data_path=None, user_data_path=None, db_manager=None):
         self.data_path = data_path
         self.uploaded_df = None
         self.raw_subset = None # Stores the raw data BEFORE preprocessing for non-destructive toggling
         self.prediction_results = None
         self.mean_values = None
         self.selected_indices = set()
+        self.db_manager = db_manager
         
         # Use provided user_data_path or fallback to script location
-        self.user_data_dir = user_data_path or os.path.join(os.path.dirname(__file__), '..')
+        self.user_data_dir = user_data_path or os.path.dirname(os.path.abspath(__file__))
         self._config_path = os.path.join(self.user_data_dir, 'session_config.json')
 
     def save_session(self):
@@ -62,9 +63,14 @@ class DataManager:
         return False
 
     def save_prospective_audit(self, prediction_data):
-        """Save a newly run live prediction to the real-world prospective audit log."""
+        """Save a newly run live prediction to the real-world prospective audit log (DB + CSV fallback)."""
+        # 1. PERSIST TO SQLITE (Primary Vault)
+        if self.db_manager:
+            self.db_manager.log_prediction(prediction_data)
+            
+        # 2. LEGACY CSV FALLBACK (For manual researcher review)
         try:
-            audit_path = os.path.join(os.path.dirname(self._config_path), 'prospective_audit_log.csv')
+            audit_path = os.path.join(self.user_data_dir, 'prospective_audit_log.csv')
             
             record = {
                 'timestamp': pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -75,7 +81,6 @@ class DataManager:
                 'consensus': str(prediction_data.get('consensus', 'N/A'))
             }
             
-            # Incorporate biomarker inputs into the log trace
             inputs = prediction_data.get('inputs', {})
             for k, v in inputs.items():
                 record[f"feature_{k}"] = v
@@ -86,12 +91,27 @@ class DataManager:
             else:
                 df.to_csv(audit_path, mode='w', header=True, index=False)
         except Exception as e:
-            print(f"Failed to write prospective audit: {e}")
+            print(f"Failed to write prospective CSV audit: {e}")
 
     def save_prospective_audit_batch(self, df, model_name):
-        """Save batch evaluation to prospective audit log."""
+        """Save batch evaluation to prospective audit log (DB + CSV fallback)."""
+        # 1. PERSIST TO SQLITE
+        if self.db_manager:
+            for idx in df.index:
+                row = df.loc[idx]
+                row_data = {
+                    'model': model_name,
+                    'prediction': 1 if str(row.get('Prediction')).upper() == 'POSITIVE' else 0,
+                    'risk': float(row.get('Risk_Score', 0)),
+                    'confidence': float(row.get('Confidence', 0)),
+                    'consensus': str(row.get('Consensus_Count', 'N/A')),
+                    'inputs': row.to_dict()
+                }
+                self.db_manager.log_prediction(row_data)
+
+        # 2. LEGACY CSV
         try:
-            audit_path = os.path.join(os.path.dirname(self._config_path), 'prospective_audit_log.csv')
+            audit_path = os.path.join(self.user_data_dir, 'prospective_audit_log.csv')
             log_df = df.copy()
             log_df['timestamp'] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
             log_df['model_run'] = model_name
@@ -101,7 +121,7 @@ class DataManager:
             else:
                 log_df.to_csv(audit_path, mode='w', header=True, index=False)
         except Exception as e:
-            print(f"Failed to save prospective batch audit: {e}")
+            print(f"Failed to save prospective batch CSV audit: {e}")
 
     def load_data(self, file_path, sheet_name=None):
         """Unified data loader for Excel and CSV."""

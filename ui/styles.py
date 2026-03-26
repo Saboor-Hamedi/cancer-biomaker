@@ -83,6 +83,9 @@ class StyleManager:
         style.configure('Card.TFrame', background=palette['card_bg'], relief='flat', borderwidth=0)
         style.configure('Card.TLabel', background=palette['card_bg'], foreground=palette['text_main'], font=f_normal)
         
+        # Status Bar Logic: Disable wrapping for system messages to prevent UI flicker
+        style.configure('Status.TLabel', background=palette['card_bg'], foreground=palette['text_main'], font=f_normal, wraplength=0)
+        
         # Fix Sidebar Visibility in Light Mode
         style.configure('Sidebar.TFrame', background=palette['accent_dark'], relief='flat', borderwidth=0)
         style.configure('Sidebar.TLabel', background=palette['accent_dark'], foreground=palette['text_main'], font=f_large)

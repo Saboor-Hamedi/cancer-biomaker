@@ -19,13 +19,14 @@ from logic.diagnostic_engine import DiagnosticEngine
 class ModelController:
     """Controller for model training, predictions, and analytics operations."""
 
-    def __init__(self, model_manager, data_manager, layout_manager, error_handler=None, velocity_manager=None, async_runner=None):
+    def __init__(self, model_manager, data_manager, layout_manager, error_handler=None, velocity_manager=None, async_runner=None, db_manager=None):
         self.model_manager = model_manager
         self.data_manager = data_manager
         self.layout_manager = layout_manager
         self.error_handler = error_handler or ErrorHandler()
         self.velocity_manager = velocity_manager
         self.async_runner = async_runner
+        self.db_manager = db_manager
         self.current_prediction_data = None
         self.diagnostic_engine = DiagnosticEngine()
         self.CORE_MODELS = ["Random Forest", "Logistic Regression", "SVM", "XGBoost"]
@@ -492,6 +493,19 @@ class ModelController:
             for array_idx in target_audit_indices:
                 array_idx_int = int(array_idx)
                 df_idx = df.index[array_idx_int]
+                
+                # FEATURE: Extraction of original Clinical Sample ID
+                sample_id = "N/A"
+                for col in df.columns:
+                    c_low = str(col).lower()
+                    if 'sample' in c_low or 'id' in c_low or 'patient' in c_low:
+                        sample_id = str(df.loc[df_idx, col])
+                        break
+                if sample_id == "N/A": 
+                    sample_id = f"ID-{df_idx}"
+                else:
+                    sample_id = sample_id[:8] if len(sample_id) > 10 else sample_id
+
                 flagging_models = []
                 max_r = -1.0
                 lead_m = "N/A"
@@ -521,7 +535,7 @@ class ModelController:
                     action = "ROUTINE CLINICAL OBSERVATION"
 
                 detailed_audit_data.append({
-                    'id': df_idx, 'lead_model': lead_m, 'detectors': ", ".join(flagging_models),
+                    'id': sample_id, 'lead_model': lead_m, 'detectors': ", ".join(flagging_models),
                     'risk': r_val, 'consensus': f"{int(agreement_counts[array_idx_int])}/{total_models}",
                     'psa': get_m_val('PSA'), 'afp': get_m_val('AFP'), 'ca125': get_m_val('CA125'),
                     'action': action
@@ -640,8 +654,12 @@ class ModelController:
             self.data_manager.uploaded_df = None
             self.data_manager.data_path = None
             self.data_manager.prediction_results = None
+
+            # 3. Purge Clinical Vault (SQLite)
+            if self.db_manager:
+                self.db_manager.clear_vault()
             
-            # 3. Wipe UI Components
+            # 4. Wipe UI Components
             return "SUCCESS"
 
         def _on_finish(res):
