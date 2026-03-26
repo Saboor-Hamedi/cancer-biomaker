@@ -2,7 +2,13 @@ import PyInstaller.__main__
 import os
 import sys
 import shutil
-import zipfile
+import warnings
+# Suppress Pydantic experimental warnings and other library clutter
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", message=".*PydanticExperimentalWarning.*")
+os.environ["PYDEVD_DISABLE_FILE_VALIDATION"] = "1"
+os.environ["PYTHONWARNINGS"] = "ignore"
+
 
 def get_version():
     """Extract version from main.py to keep in sync."""
@@ -19,6 +25,20 @@ def build():
     version = get_version()
     print(f"--- Starting Production Build for Cancer Detection Dashboard v{version} ---")
     
+    # DEEP CLEAN: Handle Windows PermissionErrors by attempting to clear previous artifacts first
+    # This prevents the "Access is denied" error during the PyInstaller build phase
+    for folder in ['dist', 'build']:
+        if os.path.exists(folder):
+            try:
+                print(f"🧹 Clearing previous {folder} registry...")
+                shutil.rmtree(folder)
+            except PermissionError:
+                print(f"❌ ERROR: Could not clear '{folder}' directory. It is likely being used by another process.")
+                print(f"💡 FIX: Please close any open instances of the Dashboard or your file explorer, then try again.")
+                return
+            except Exception as e:
+                print(f"⚠️ Warning during cleanup of {folder}: {e}")
+
     # Define the entry point
     entry_point = "main.py"
     
@@ -47,7 +67,6 @@ def build():
     added_data = [
         f"background.png{sep}.",
         f"logo.png{sep}.",
-        f"styles.py{sep}.",
         f"controllers{sep}controllers",
         f"handlers{sep}handlers",
         f"logic{sep}logic",
@@ -67,6 +86,7 @@ def build():
         '--clean',
         '--noconfirm',
         '--noupx',
+        '--log-level=WARN', # REDUCE CLUTTER: Only show critical build warnings
     ]
 
     # Add all data folders
