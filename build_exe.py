@@ -145,12 +145,14 @@ def build():
     # These often trigger ModuleNotFound errors during the build analysis because they are optional deps.
     # Aggressive collection of optional submodules by the torch/geometric libraries can cause issues.
     excludes = [
-        'django', 'IPython', 'notebook', 'jedi', 'sphinx', 'pytest', 
-        'PySide6', 'PyQt5', 'PyQt6', 'nbformat', 'nbconvert',
-        'tensorboard', 'torch.distributed', 'torch.nn.modules.export', 'torch.testing',
-        'matplotlib.tests', 'numpy.tests', 'expecttest', 'hypothesis',
-        'onnxscript', 'onnx', 'opt_einsum', 'triton', 'IPython.kernel','cupy'
+    'django', 'IPython', 'notebook', 'jedi', 'sphinx', 'pytest', 
+    'PySide6', 'PyQt5', 'PyQt6', 'nbformat', 'nbconvert',
+    'tensorboard', 'torch.distributed', 'torch.nn.modules.export', 'torch.testing',
+    'matplotlib.tests', 'numpy.tests', 'expecttest', 'hypothesis',
+    'onnxscript', 'onnx', 'opt_einsum', 'triton', 'IPython.kernel', 'cupy',
+    'numba.np.ufunc.tbbpool'  # <--- ADD THIS to fix the tbb12.dll error
     ]
+
     for exc in excludes:
         args.extend(['--exclude-module', exc])
 
