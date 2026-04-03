@@ -425,6 +425,22 @@ class DataController:
 
         if found_count > 0:
             self.layout_manager.update_status(f"Synced {found_count} features from patient record", "#10B981")
+            
+            # AUTOMATIC FORENSIC SYNC: Trigger prediction for the selected row instantly
+            # This ensures the AI Consensus tab updates when the user clicks a row.
+            try:
+                # Find the relevant ModelController via main app or layout properties
+                mc = getattr(self, 'model_controller', None)
+                if mc:
+                    # Capture current inputs from the refreshed input table
+                    current_inputs = self.layout_manager.tab_input.get_values()
+                    # Inject ID if missing
+                    id_col = next((c for c in row_data.index if any(p in str(c).lower() for p in ['sample_id', 'patient_id', 'id'])), None)
+                    if id_col: current_inputs['sample_id'] = str(row_data[id_col])
+                    
+                    mc.predict_single(current_inputs, silent=True)
+            except Exception as e:
+                print(f"DEBUG: Silent Prediction Sync Failed: {e}")
         
         # [VELOCITY SYNC]: Update longitudinal trajectory for the selected patient
         if self.velocity_manager and getattr(self.layout_manager, 'tab_velocity', None):
