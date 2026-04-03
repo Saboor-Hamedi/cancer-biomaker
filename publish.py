@@ -126,8 +126,17 @@ def publish():
     print("="*60)
 
 if __name__ == "__main__":
-    # Ensure gh is authenticated
+    # Resilience: If GH_TOKEN is set but invalid, it blocks the working keyring login.
+    # We check if it's broken, and if so, we clear it for this session to let 'gh' fall back to keyring.
     auth_check = run_cmd("gh auth status")
+    
+    if not auth_check or "Logged in to github.com" not in auth_check:
+        if 'GH_TOKEN' in os.environ:
+            print("⚠️ Notice: Invalid GH_TOKEN detected in environment. Bypassing to use keyring...")
+            os.environ.pop('GH_TOKEN', None)
+            # Re-check status now that token is cleared
+            auth_check = run_cmd("gh auth status")
+
     if not auth_check or "Logged in to github.com" not in auth_check:
         print("❌ Error: GitHub CLI (gh) is not authenticated.")
         print("💡 Run 'gh auth login' first.")
