@@ -383,10 +383,10 @@ class ModelManager:
 
     # ── Training ───────────────────────────────────────────────────────────────
 
-    def check_and_train_models(self, data_path, status_callback=None, force=False):
+    def check_and_train_models(self, data_path, status_callback=None, force=False, validation_split=0.2, outlier_removal=True, scaling_enabled=True):
         """Check if models exist. Trains ONLY if missing and data is available."""
         if not data_path:
-            # If not forcing, we just check if models exist
+            # ... (rest of guards) ...
             required_models = ['random_forest_model.pkl', 'logistic_regression_model.pkl', 'svm_model.pkl']
             if HAS_XGB:
                 required_models.append('xgboost_model.pkl')
@@ -396,25 +396,28 @@ class ModelManager:
                 return True, "Models present"
             return False, "Dataset path is empty. Please upload a dataset to train models."
 
+        # ... (rest of guards) ...
+
         if not os.path.exists(data_path) and not force:
             return False, "Dataset file not found. Please upload a dataset to train models."
 
         models_data = [
-            ('random_forest_model.pkl',  'Random Forest',       RandomForestClassifier(n_estimators=100, random_state=42)),
-            ('logistic_regression_model.pkl',  'Logistic Regression',  LogisticRegression(random_state=42, max_iter=1000)),
-            ('svm_model.pkl', 'SVM',                  SVC(probability=True, random_state=42)),
+            ('random_forest_model.pkl',  'Random Forest',       RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')),
+            ('logistic_regression_model.pkl',  'Logistic Regression',  LogisticRegression(random_state=42, max_iter=1000, class_weight='balanced')),
+            ('svm_model.pkl', 'SVM',                  SVC(probability=True, random_state=42, class_weight='balanced')),
         ]
         if HAS_XGB:
             from xgboost import XGBClassifier
+            # XGBoost handles imbalance via scale_pos_weight (Ratio of negative to positive)
             models_data.append(('xgboost_model.pkl', 'XGBoost',
-                                 XGBClassifier(eval_metric='logloss', random_state=42)))
+                                 XGBClassifier(eval_metric='logloss', random_state=42, scale_pos_weight=10)))
         if HAS_TORCH:
             models_data.append(('gnn_model.pkl', 'Graph Neural Network', GNNClassifier()))
         
         # Add MLP (Neural Network) to the suite
         from sklearn.neural_network import MLPClassifier
         models_data.append(('mlp_model.pkl', 'MLP', MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=1000, random_state=42)))
-
+ 
         missing = [m for m in models_data
                    if not os.path.exists(os.path.join(self.script_dir, m[0]))]
         if not missing and not force and os.path.exists(os.path.join(self.script_dir, 'feature_names.pkl')):
@@ -427,7 +430,12 @@ class ModelManager:
             status_callback("Training models… This might take a moment.", "orange")
 
         try:
-            X_train, X_test, y_train, y_test, features = self._load_training_data(data_path)
+            X_train, X_test, y_train, y_test, features = self._load_training_data(
+                data_path, 
+                validation_split=validation_split,
+                outlier_removal=outlier_removal,
+                scaling_enabled=scaling_enabled
+            )
             self.feature_names = features
             self._feature_hash = self._hash_features(features)
             joblib.dump(features, os.path.join(self.script_dir, 'feature_names.pkl'))
@@ -449,12 +457,11 @@ class ModelManager:
             log.error("Training failed: %s", e)
             return False, f"Training failed: {str(e)}"
 
-    # ── Data Loading ───────────────────────────────────────────────────────────
-
+    # ── Data Preparation ────────────────────────────────────────────────────────
     def _read_excel_safe(self, data_path):
         """
         Smart read from Excel: try 'Training_Data' first, fallback to the first
-        available sheet (Item #6 improvement).
+        available sheet.
         """
         try:
             # Attempt 1: Look for clinical standard sheet name
@@ -472,51 +479,145 @@ class ModelManager:
             
         return df
 
-    def _prepare_df(self, df):
-        """Auto-label, split X/y, and restrict to the 3 Diagnostic Peaks (Item #11)."""
-        if "cancer_risk_class" not in df.columns:
+    def _prepare_df(self, df, outlier_removal=True, scaling_enabled=True):
+        """Auto-label and prepare feature vector based on UI settings."""
+        df = df.copy()
+        
+        # CLINICAL LABEL SYNC: Search for existing ground truth (e.g. Target, Class, cancer_risk_class)
+        label_target = None
+        for col in df.columns:
+            c_low = str(col).lower().replace("_", "").replace(" ", "")
+            if c_low in ["cancerriskclass", "target", "diagnosis", "class", "result", "outcome"]:
+                label_target = col
+                break
+        
+        if label_target:
+            # Normalize the label column name for the rest of the pipeline
+            y_raw = df[label_target]
+            
+            # CLINICAL TARGET ENCODER: Ensure POSITIVE/MALIGNANT explicitly maps to 1
+            if y_raw.dtype == object or y_raw.dtype == str:
+                log.info("Clinical Context: Encoding categorical labels for training...")
+                y_mapped = []
+                for val in y_raw:
+                    v_low = str(val).lower().strip()
+                    # Fuzzy match for Positive/Cancer indicators
+                    if any(term in v_low for term in ['pos', 'malig', 'canc', 'sick', 'true', '1']):
+                        y_mapped.append(1)
+                    else:
+                        y_mapped.append(0)
+                df["cancer_risk_class"] = y_mapped
+            else:
+                df["cancer_risk_class"] = y_raw.fillna(0).astype(int)
+                
+            log.info("Clinical Sync: Using biologically-mapped labels from '%s'", label_target)
+        else:
             # We must use numeric columns for K-Means to find the biology
             numeric_data = df.select_dtypes(include=[np.number])
+            
+            # Clinical Auto-Heal: Always fill NaNs for clustering to prevent crash
+            if numeric_data.isnull().any().any():
+                numeric_data = numeric_data.fillna(numeric_data.mean())
+                
             kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
-            df = df.copy()
-            df["cancer_risk_class"] = kmeans.fit_predict(numeric_data)
+            clusters = kmeans.fit_predict(numeric_data)
+            
+            # BIOLOGICAL ALIGNMENT: Ensure '1' is the 'High Biomarker/High Risk' group.
+            # We look for 'PSA', 'AFP', or any clinical column to decide center mass.
+            ref_col = None
+            for c in numeric_data.columns:
+                if any(p in str(c).lower() for p in ['psa', 'afp', 'concentration', 'peak']):
+                    ref_col = c
+                    break
+            
+            if ref_col is not None:
+                # Calculate mean concentration per cluster
+                c0_mean = numeric_data.loc[clusters == 0, ref_col].mean()
+                c1_mean = numeric_data.loc[clusters == 1, ref_col].mean()
+                
+                if c0_mean > c1_mean:
+                    # Flip: Map 0->1 and 1->0 so higher clinical marker = Class 1
+                    log.info("Clinical Alignment: Flipped clusters to ensure 1=Malignant (High Signal).")
+                    clusters = 1 - clusters
+            
+            df["cancer_risk_class"] = clusters
+            log.info("Clinical Context: Generating biologically-aligned clusters (K-Means).")
 
-        # Attempt to find standard biomarkers (concentrations or peaks)
+        # ── Step 2: Feature Selection & De-Spooking ──
+        # (Standard biomarker discovery remains unchanged) ...
         standard_patterns = ['concentration', 'peak', 'psa', 'afp', 'ca125']
         selected_cols = []
         for pat in standard_patterns:
             matches = [c for c in df.columns if pat.lower() in str(c).lower()]
             selected_cols.extend(matches)
         
-        # Deduplicate and Clean (Exclude ID/Target)
-        forbidden = ["sample_id", "cancer_risk_class", "prediction", "risk"]
-        X_cols = sorted(list(set([c for c in selected_cols if str(c).lower() not in forbidden])))
+        # Deduplicate and Clean (Exclude ID/Target/Metadata Leakage)
+        forbidden = [
+            "sample_id", "patient_id", "cancer_risk_class", "prediction", "risk", 
+            "is_simulated", "timestamp", "date", "id", "unnamed", "target"
+        ]
+        
+        # Professional Filter: Ensure features are strictly clinical
+        X_cols = []
+        for c in selected_cols:
+            c_low = str(c).lower()
+            if not any(f in c_low for f in forbidden):
+                X_cols.append(c)
+        X_cols = sorted(list(set(X_cols)))
 
-        # Dynamic Fallback: If no standard peaks detected, use ALL numeric columns minus metadata
+        # Dynamic Fallback
         if not X_cols:
             all_num = df.select_dtypes(include=[np.number]).columns.tolist()
-            X_cols = [c for c in all_num if str(c).lower() not in forbidden]
+            X_cols = [c for c in all_num if not any(f in str(c).lower() for f in forbidden)]
 
         X = df[X_cols]
         y = df["cancer_risk_class"]
+        
+        # ── Step 3: APPLY MODAL-BASED PROCESSING ─────────────
+        X = X.copy()
+        
+        # A. Outlier Clipping (Only if enabled in Modal)
+        if outlier_removal:
+            for col in X.columns:
+                if X[col].dtype in [np.float64, np.float32, np.int64]:
+                    Q1, Q3 = X[col].quantile(0.25), X[col].quantile(0.75)
+                    IQR = Q3 - Q1
+                    if IQR > 0:
+                        lower, upper = Q1 - 3.0 * IQR, Q3 + 3.0 * IQR
+                        X[col] = X[col].clip(lower=lower, upper=upper)
+            log.info("Clinical Context: Outlier removal applied via UI choice.")
+        else:
+            log.info("Clinical Context: Training on RAW dataset (Outlier removal skipped).")
+
+        # B. Clinical Scaling (Only if enabled in Modal)
+        if scaling_enabled:
+            for col in X.columns:
+                mean, std = X[col].mean(), X[col].std()
+                if std != 0:
+                    X[col] = (X[col] - mean) / std
+            log.info("Clinical Context: Z-Score scaling applied via UI choice.")
+            
+        # Final Safeguard: Auto-impute remaining NaNs
+        X = X.fillna(X.mean())
+
         return X, y
 
-    def _load_training_data(self, data_path):
+    def _load_training_data(self, data_path, validation_split=0.2, outlier_removal=True, scaling_enabled=True):
         """Standardized data loader — utilizes memory cache to avoid expensive Excel I/O."""
         if not data_path or not os.path.exists(data_path):
             raise FileNotFoundError(f"Dataset not found at:\n{data_path}\nPlease upload data first.")
             
-        # [SMART CACHE]: Only read from disk if the path changed or no data is in RAM
         ap = os.path.abspath(data_path)
         if self.cached_train_df is None or self._cached_data_path != ap:
-            log.info("Clinical Cache Miss: Reading fresh data from %s", ap)
             self.cached_train_df = self._read_excel_safe(data_path)
             self._cached_data_path = ap
-        else:
-            log.info("Clinical Cache Hit: Using in-memory dataset.")
 
-        X, y = self._prepare_df(self.cached_train_df)
-        return (*train_test_split(X, y, test_size=0.2, random_state=42), X.columns.tolist())
+        X, y = self._prepare_df(
+            self.cached_train_df, 
+            outlier_removal=outlier_removal, 
+            scaling_enabled=scaling_enabled
+        )
+        return (*train_test_split(X, y, test_size=validation_split, random_state=42, stratify=y), X.columns.tolist())
 
     def get_raw_training_set(self, data_path):
         """Returns full (X, y) without train/test split (utilizes memory cache)."""

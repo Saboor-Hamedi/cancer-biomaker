@@ -131,16 +131,15 @@ class SettingsDialog:
             rb.pack(anchor=tk.W, pady=3)
 
         # Separator
-        tk.Frame(container, height=1, bg=palette['border_light']).pack(fill=tk.X, pady=20)
+        tk.Frame(container, height=1, bg=palette['border_light']).pack(fill=tk.X, pady=15)
 
-        # Scaling Dropdown (Replacing Slider)
-        tk.Label(container, text="FONT SIZE (BASE)", font=("Inter", 9, "bold"), 
+        # ── Visual Parameters (Font Scaling) ──
+        tk.Label(container, text="VISUAL PERFORMANCE", font=("Inter", 9, "bold"), 
                  bg=palette['bg_main'], fg=palette['text_muted']).pack(anchor=tk.W, pady=(0, 5))
         
-        # Calculate current approx px from current scale
         approx_px_current = int(self.settings_manager.font_scale * 12)
         if approx_px_current not in [12, 14, 16, 18, 20]:
-            approx_px_current = 14 # Default fallback
+            approx_px_current = 14
             
         self.px_var = tk.StringVar(value=f"{approx_px_current}px")
         
@@ -153,16 +152,29 @@ class SettingsDialog:
             container, values=["12px", "14px", "16px", "18px", "20px"],
             textvariable=self.px_var, state="readonly"
         )
-        self.combo_px.pack(fill=tk.X, pady=10)
+        self.combo_px.pack(fill=tk.X, pady=(5, 10))
         self.combo_px.bind("<<ComboboxSelected>>", lambda e: self._update_settings())
-        
-        self.scale_label = tk.Label(container, text="Select base font size for best clinical legibility.", 
-                                    bg=palette['bg_main'], fg=palette['medic_brand'], font=("Inter", 9))
-        self.scale_label.pack(anchor=tk.W)
 
-        # Tips
-        tk.Label(container, text="Use scaling to improve legibility in complex clinical views.", 
-                 bg=palette['bg_main'], fg=palette['text_muted'], font=("Inter", 8), wraplength=380, justify=tk.LEFT).pack(pady=20)
+        # ── Clinical Parameters (Split Entry) ──
+        tk.Label(container, text="CLINICAL PARAMETERS", font=("Inter", 9, "bold"), 
+                 bg=palette['bg_main'], fg=palette['medic_brand']).pack(anchor=tk.W, pady=(10, 5))
+
+        self.split_var = tk.StringVar(value=str(int(self.settings_manager.get('validation_split', 0.2) * 100)))
+        
+        split_frame = tk.Frame(container, bg=palette['bg_main'])
+        split_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(split_frame, text="Validation Set Ratio (%)", font=("Inter", 10),
+                 bg=palette['bg_main'], fg=palette['text_main']).pack(side=tk.LEFT)
+        
+        self.split_entry = tk.Entry(split_frame, textvariable=self.split_var, width=8,
+                                   bg=palette['card_bg'], fg=palette['text_main'], relief='flat',
+                                   insertbackground=palette['text_main'], font=("Inter", 10, "bold"), justify='center')
+        self.split_entry.pack(side=tk.RIGHT)
+        self.split_entry.bind("<KeyRelease>", lambda e: self._update_settings())
+
+        tk.Label(container, text="Percentage of dataset held back for forensic verification.", 
+                 bg=palette['bg_main'], fg=palette['text_muted'], font=("Inter", 8)).pack(anchor=tk.W, pady=(0, 10))
 
         # Close Button
         tk.Button(container, text="Save & Done", command=self.modal.destroy, 
@@ -172,9 +184,21 @@ class SettingsDialog:
     def _update_settings(self):
         self.settings_manager.set('theme', self.theme_var.get())
         
-        # Map px back to scale factor (Base 12px = 1.0)
-        px_val = int(self.px_var.get().replace("px", ""))
-        new_scale = px_val / 12.0
-        
-        self.settings_manager.set('font_scale', round(new_scale, 2))
+        # 1. Update Font Scaling
+        try:
+            px_val = int(self.px_var.get().replace("px", ""))
+            new_scale = px_val / 12.0
+            self.settings_manager.set('font_scale', round(new_scale, 2))
+        except (ValueError, AttributeError):
+            pass
+
+        # 2. Update Validation Split (Percent to Ratio)
+        try:
+            split_pct = float(self.split_var.get().replace("%", ""))
+            # Constraint: 5% to 50%
+            if 5 <= split_pct <= 50:
+                self.settings_manager.set('validation_split', split_pct / 100.0)
+        except (ValueError, AttributeError):
+            pass
+            
         self.on_change()

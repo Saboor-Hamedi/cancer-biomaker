@@ -12,6 +12,7 @@ class SettingsManager:
         'animations_enabled': True,
         'outlier_removal': True,
         'scaling_enabled': True,
+        'validation_split': 0.2,
         'last_ai_provider': 'ChatGPT',
         'ai_keys': {
             'ChatGPT': '',

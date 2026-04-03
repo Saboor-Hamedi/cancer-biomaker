@@ -19,7 +19,7 @@ from logic.diagnostic_engine import DiagnosticEngine
 class ModelController:
     """Controller for model training, predictions, and analytics operations."""
 
-    def __init__(self, model_manager, data_manager, layout_manager, error_handler=None, velocity_manager=None, async_runner=None, db_manager=None):
+    def __init__(self, model_manager, data_manager, layout_manager, error_handler=None, velocity_manager=None, async_runner=None, db_manager=None, settings_manager=None):
         self.model_manager = model_manager
         self.data_manager = data_manager
         self.layout_manager = layout_manager
@@ -27,6 +27,7 @@ class ModelController:
         self.velocity_manager = velocity_manager
         self.async_runner = async_runner
         self.db_manager = db_manager
+        self.settings_manager = settings_manager # Added to handle dynamic parameters
         self.current_prediction_data = None
         self.diagnostic_engine = DiagnosticEngine()
         self.CORE_MODELS = ["Random Forest", "Logistic Regression", "SVM", "XGBoost"]
@@ -41,13 +42,31 @@ class ModelController:
             messagebox.showwarning("Data Required", "Please upload a dataset first to train your models.")
             return
 
-        self.layout_manager.update_status("Initiating clinical model training...", "orange")
+        # ── Step 1: Recalculate Clinical Baselines for Forensic Accuracy ──
+        if self.data_manager.uploaded_df is not None:
+             self.diagnostic_engine.recalculate_baselines(self.data_manager.uploaded_df)
+             log.info("Recalculated clinical baselines from current population dataset.")
+
+        # ── Step 2: Fetch Dynamic Parameters from Settings ──
+        v_split = 0.2
+        outlier_on = True
+        scale_on = True
+        
+        if self.settings_manager:
+             v_split = self.settings_manager.get('validation_split', 0.2)
+             outlier_on = self.settings_manager.get('outlier_removal', True)
+             scale_on = self.settings_manager.get('scaling_enabled', True)
+
+        self.layout_manager.update_status(f"Initiating training (Split: {v_split:.0%}, Cleaning: {outlier_on})...", "orange")
 
         def _train_task():
             success, msg = self.model_manager.check_and_train_models(
                 self.data_manager.data_path if hasattr(self.data_manager, 'data_path') else None,
                 self.layout_manager.update_status,
-                force=True
+                force=True,
+                validation_split=v_split,
+                outlier_removal=outlier_on,
+                scaling_enabled=scale_on
             )
             if not success:
                 return False, msg

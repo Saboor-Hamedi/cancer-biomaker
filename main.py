@@ -123,7 +123,7 @@ class CancerDetectionApp:
         self.error_handler.narrative_callback = lambda t, l="INFO": self.layout_manager.dashboard.update_narrative(t, l)
 
         self.data_controller = DataController(self.data_manager, self.layout_manager, self.error_handler, model_manager=self.model_manager, velocity_manager=self.velocity_manager, version=self.version, async_runner=self.async_runner)
-        self.model_controller = ModelController(self.model_manager, self.data_manager, self.layout_manager, self.error_handler, velocity_manager=self.velocity_manager, async_runner=self.async_runner, db_manager=self.db_manager)
+        self.model_controller = ModelController(self.model_manager, self.data_manager, self.layout_manager, self.error_handler, velocity_manager=self.velocity_manager, async_runner=self.async_runner, db_manager=self.db_manager, settings_manager=self.settings_manager)
         self.visualization_controller = VisualizationController(self.model_manager, self.data_manager, self.layout_manager, self.error_handler, model_controller=self.model_controller, async_runner=self.async_runner)
         self.display_formatter = DisplayFormatter(self.layout_manager)
 

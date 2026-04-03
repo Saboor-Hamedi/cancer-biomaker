@@ -52,15 +52,19 @@ class DataController:
                     full_count = len(df)
                     full_df = df.copy()
                     
-                    # Apply 20-sample default as per professor's requirement
+                    # Apply 0-sample default (0 means Load FULL Dataset)
                     try:
                         qty = self.layout_manager.sidebar.sample_qty.get()
                     except:
-                        qty = 20
+                        qty = 0
                     
-                    if full_count > qty:
+                    if qty > 0 and full_count > qty:
                         # CLINICAL AUDIT SYNC: Preserve original IDs throughout the pipeline
-                        sampled_df = df.sample(n=qty).sort_index()
+                        # We extract only from the "Training Population" (ratio defined in settings)
+                        v_split = self.layout_manager.settings_manager.get('validation_split', 0.2)
+                        train_limit = int(full_count * (1.0 - v_split))
+                        pool = df.iloc[:train_limit] if train_limit > qty else df
+                        sampled_df = pool.sample(n=qty).sort_index()
                         self.data_manager.uploaded_df = sampled_df
                     else:
                         self.data_manager.uploaded_df = df
@@ -104,15 +108,18 @@ class DataController:
         full_row_count = len(df)
         full_df = df.copy() # Store full context for audit
 
-        # Apply default sample size from sidebar if available
+        # Apply default sample size (0 = FULL DATASET)
         try:
             qty = self.layout_manager.sidebar.sample_qty.get()
         except:
-            qty = 20
+            qty = 0
             
-        if full_row_count > qty:
-            # CLINICAL AUDIT SYNC: Preserve original indices for forensic tracking
-            df = df.sample(n=qty).sort_index()
+        if qty > 0 and full_row_count > qty:
+            # CLINICAL AUDIT SYNC: Extract only from the Training Pool
+            v_split = self.layout_manager.settings_manager.get('validation_split', 0.2)
+            train_limit = int(full_row_count * (1.0 - v_split))
+            pool = df.iloc[:train_limit] if train_limit > qty else df
+            df = pool.sample(n=qty).sort_index()
 
         self.data_manager.uploaded_df = df
         
@@ -158,9 +165,23 @@ class DataController:
             if full_df is not None:
                 master_count = len(full_df)
                 df = full_df
-                if len(df) > sample_size:
-                    # CLINICAL AUDIT SYNC: Preserve original indices for forensic tracking
-                    df = df.sample(n=sample_size).sort_index()
+                
+                if sample_size > 0 and master_count > sample_size:
+                    # CLINICAL AUDIT SYNC: Extract ONLY from the Training Sub-population
+                    # We ensure the 30% (or whatever ratio) validation set remains "pure" and untouched.
+                    v_split = self.layout_manager.settings_manager.get('validation_split', 0.2)
+                    train_limit = int(master_count * (1.0 - v_split))
+                    
+                    # Safety check: if they want too many, cap at the training limit
+                    target_qty = min(sample_size, train_limit)
+                    if target_qty < 1: target_qty = 1 # Minimum 1 clinical sample
+                    
+                    pool = full_df.iloc[:train_limit]
+                    df = pool.sample(n=target_qty).sort_index()
+                elif sample_size == 0:
+                    # Logic 0: Load the full 100% dataset (System Default)
+                    df = full_df
+                    
                 # Return data for main-thread UI updates
                 return (df, full_df, master_count)
             return None

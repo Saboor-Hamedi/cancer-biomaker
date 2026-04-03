@@ -12,7 +12,7 @@ class Sidebar(ttk.Frame):
         
         # State variables
         self.model_var = tk.StringVar(value="Random Forest")
-        self.sample_qty = tk.IntVar(value=20)
+        self.sample_qty = tk.IntVar(value=0)
         
         # ── Responsive Scrollable Container ──────────────────────
         self.canvas = tk.Canvas(self, bg="#000000", highlightthickness=0, borderwidth=0)
@@ -77,20 +77,20 @@ class Sidebar(ttk.Frame):
         ttk.Button(action_frame, text="🤖 AI Research Assistant", 
                    command=self.callbacks.get('show_ai_chat')).pack(fill=tk.X, padx=10, pady=(0, 12))
 
-        # ── Data Gen ──
-        batch_frame = ttk.LabelFrame(self.scroll_content, text="DATA GEN", style='Sidebar.TLabelframe')
+        # ── Cohort Extraction ──
+        batch_frame = ttk.LabelFrame(self.scroll_content, text="COHORT EXTRACTION", style='Sidebar.TLabelframe')
         batch_frame.pack(fill=tk.X, padx=15, pady=10)
         
         ctrl_frame = ttk.Frame(batch_frame, style='Sidebar.TFrame')
         ctrl_frame.pack(fill=tk.X, padx=10, pady=(10, 15))
         
         self.spin = tk.Spinbox(
-            ctrl_frame, from_=1, to=1000, textvariable=self.sample_qty, 
+            ctrl_frame, from_=0, to=10000, textvariable=self.sample_qty, 
             width=12, relief='flat', font=("Inter", 11, "bold"), justify='center'
         )
         self.spin.pack(side=tk.LEFT, padx=(0, 5), fill=tk.Y)
         
-        ttk.Button(ctrl_frame, text="Gen Data", command=self.callbacks.get('sample')).pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        ttk.Button(ctrl_frame, text="Extract Cohort", command=self.callbacks.get('sample')).pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
         # ── Specific Patient Search ──
         search_frame = ttk.Frame(batch_frame, style='Sidebar.TFrame')

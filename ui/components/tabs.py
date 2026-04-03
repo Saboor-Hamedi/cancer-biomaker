@@ -284,7 +284,7 @@ class DataTab(ttk.Frame):
         super().__init__(parent)
         self.tree: ttk.Treeview = None # type: ignore
         self.on_select_callback = on_select_callback
-        self.on_row_select_callback = on_row_select_callback # New for direct row sync
+        self.on_row_select_callback = on_row_select_callback
         self.selection_indices = set()
         self._create_widgets()
 
@@ -296,18 +296,27 @@ class DataTab(ttk.Frame):
                                      font=('Inter', 11, 'bold'))
         self.title_label.pack(side=tk.LEFT)
 
-        # Vertical Container for Tree + Horizontal Scrollbar
-        main_container = ttk.Frame(self, padding=(15, 0, 15, 10)) # Standardized Padding
+        # Footer Actions - Metadata & Forensic Export (Pinned first with side=BOTTOM)
+        self.footer = ttk.Frame(self, padding=(15, 0, 15, 12))
+        self.footer.pack(fill=tk.X, side=tk.BOTTOM)
+        
+        # Primary medical buttons (Export)
+        ttk.Button(self.footer, text="Export CSV", style='Primary.TButton', command=lambda: self._export_data('csv')).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.footer, text="Export Excel", style='Primary.TButton', command=lambda: self._export_data('excel')).pack(side=tk.LEFT, padx=2)
+        
+        # Standard clinical button (Copy)
+        ttk.Button(self.footer, text="Copy Dataset", command=self._copy_table, style='TButton').pack(side=tk.RIGHT, padx=5)
+
+        # Main Data Container - Fills the central space
+        main_container = ttk.Frame(self, padding=(15, 0, 15, 10))
         main_container.pack(fill=tk.BOTH, expand=True)
         
-        # Top part: Tree + Vertical Scrollbar
+        # Tree + Vertical Scrollbar
         top_container = ttk.Frame(main_container)
         top_container.pack(fill=tk.BOTH, expand=True)
         
         self.tree = ttk.Treeview(top_container, show="headings", height=22)
-        # 1. Register click for checkboxes [✓]
         self.tree.bind("<Button-1>", self._on_tree_click)
-        # 2. Register selection for row-level details (Trajectory/XAI Sync)
         self.tree.bind("<<TreeviewSelect>>", self._on_selection_change)
         
         vsb = ttk.Scrollbar(top_container, orient=tk.VERTICAL, command=self.tree.yview)
@@ -402,11 +411,68 @@ class DataTab(ttk.Frame):
         self.tree.delete(*self.tree.get_children())
         self.tree["columns"] = []
 
+    def _export_data(self, fmt):
+        """Export visible clinical cohort to external file."""
+        from tkinter import messagebox
+        items = self.tree.get_children()
+        if not items: 
+            messagebox.showwarning("Empty", "No data to export. Please load a dataset first.")
+            return
+            
+        columns = self.tree["columns"]
+        # Skip the [✓] column for the actual data export
+        data_cols = [c for c in columns if c != '[✓]']
+        
+        rows = []
+        for i in items:
+            vals = list(self.tree.item(i)['values'])
+            # Remove the [✓] indicator value
+            if columns and columns[0] == '[✓]':
+                vals = vals[1:]
+            rows.append(vals)
+            
+        df = pd.DataFrame(rows, columns=data_cols)
+        self._run_export_dialog(df, fmt, "Clinical_Cohort_Export")
+
+    def _copy_table(self):
+        """Standard forensic copy to clipboard."""
+        from tkinter import messagebox
+        items = self.tree.get_children()
+        if not items: return
+        
+        columns = self.tree["columns"]
+        data_cols = [c for c in columns if c != '[✓]']
+        
+        rows = []
+        for i in items:
+            vals = list(self.tree.item(i)['values'])
+            if columns and columns[0] == '[✓]':
+                vals = vals[1:]
+            rows.append(vals)
+            
+        df = pd.DataFrame(rows, columns=data_cols)
+        self.clipboard_clear()
+        self.clipboard_append(df.to_csv(sep='\t', index=False))
+        messagebox.showinfo("Copied", "Clinical cohort data copied to clipboard (Tab-Separated).")
+
+    def _run_export_dialog(self, df, fmt, name):
+        from tkinter import filedialog, messagebox
+        ext = ".csv" if fmt == 'csv' else ".xlsx"
+        path = filedialog.asksaveasfilename(defaultextension=ext, initialfile=f"{name}{ext}")
+        if not path: return
+        try:
+            if fmt == 'csv': df.to_csv(path, index=False)
+            else: df.to_excel(path, index=False)
+            messagebox.showinfo("Success", f"Data exported: {path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Export failed: {e}")
+
     def refresh_theme(self, theme_name):
         from ui.styles import StyleManager
         palette = StyleManager.get_palette(theme_name)
         self.configure(style='TFrame')
         if hasattr(self, 'header'): self.header.configure(style='TFrame')
+        if hasattr(self, 'footer'): self.footer.configure(style='TFrame')
         if hasattr(self, 'title_label'): self.title_label.config(foreground=palette['medic_brand'])
 
 class AnalysisTab(ttk.Frame):

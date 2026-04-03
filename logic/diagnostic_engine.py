@@ -7,12 +7,31 @@ class DiagnosticEngine:
     
     def __init__(self, data_manager=None):
         self.data_manager = data_manager
-        # Clinical Baselines from the "Gold Standard" training set (500 patients)
+        # Initial Clinical Baselines (Will be updated dynamically upon data upload/training)
         self.baseline_stats = {
-            'PSA': {'mean': 18000.0, 'std': 15000.0}, # Estimated from clinical notes
+            'PSA': {'mean': 18000.0, 'std': 15000.0},
             'AFP': {'mean': 45.0, 'std': 25.0},
             'CA125': {'mean': 35.0, 'std': 15.0}
         }
+
+    def recalculate_baselines(self, df):
+        """Update clinical baselines based on the current population dataset statistics."""
+        if df is None or df.empty:
+            return
+            
+        for marker in self.baseline_stats.keys():
+            # Find matching column (PSA, AFP, CA125)
+            match = [c for c in df.columns if marker.lower() in str(c).lower()]
+            if match:
+                col = match[0]
+                # Extract numeric values, ignoring errors and NaN
+                values = pd.to_numeric(df[col], errors='coerce').dropna()
+                if not values.empty:
+                    self.baseline_stats[marker]['mean'] = float(values.mean())
+                    self.baseline_stats[marker]['std'] = float(values.std())
+                    # ROBUSTNESS: Ensure standard deviation is never zero to prevent infinity in Z-score calculation
+                    if self.baseline_stats[marker]['std'] == 0:
+                        self.baseline_stats[marker]['std'] = 1.0
 
     def analyze_batch(self, df):
         """Perform comprehensive batch analysis."""
