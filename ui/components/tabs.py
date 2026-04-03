@@ -193,7 +193,7 @@ class AnalysisTab(QWidget):
         layout.addWidget(header)
         self.report_view = QTextEdit()
         self.report_view.setReadOnly(True)
-        self.report_view.setStyleSheet("font-family: 'Inter', 'Segoe UI'; font-size: 14px; line-height: 1.6; border: none; padding: 20px;")
+        self.report_view.setStyleSheet("background-color: #09090B; border: none; padding: 10px; color: #E4E4E7; font-family: 'Inter', 'Segoe UI'; font-size: 14px; line-height: 1.6;")
         layout.addWidget(self.report_view)
 
     def display_report(self, html_content):

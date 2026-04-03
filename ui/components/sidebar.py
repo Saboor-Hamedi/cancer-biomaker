@@ -1,7 +1,8 @@
 from PySide6.QtWidgets import (QFrame, QVBoxLayout, QPushButton, QLabel, 
                              QSpacerItem, QSizePolicy, QHBoxLayout)
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QFont, QIcon, QPixmap
+import os
 
 class Sidebar(QFrame):
     """Modern Industrial Mission Sidebar (Left Column)."""
@@ -12,8 +13,9 @@ class Sidebar(QFrame):
     chat_requested = Signal()
     cohort_requested = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, user_data_path=""):
         super().__init__(parent)
+        self.user_data_path = user_data_path
         self.setObjectName("Sidebar")
         self.setFixedWidth(240)
         self.mission_btns = []
@@ -25,6 +27,13 @@ class Sidebar(QFrame):
         self._layout.setSpacing(10)
 
         # ── Clinical Brand ──
+        self.logo_path = os.path.join(self.user_data_path, "logo.png")
+        if os.path.exists(self.logo_path):
+            logo_img = QLabel()
+            logo_img.setPixmap(QIcon(self.logo_path).pixmap(48, 48))
+            logo_img.setAlignment(Qt.AlignCenter)
+            self._layout.addWidget(logo_img)
+
         logo = QLabel("AI CLINICAL")
         logo.setStyleSheet("color: #71717A; font-weight: bold; font-size: 11px; letter-spacing: 1.5px;")
         self._layout.addWidget(logo)

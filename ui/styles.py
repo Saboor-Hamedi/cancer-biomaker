@@ -113,12 +113,18 @@ class Styles:
 
         /* ── Tabs (Notebook) ── */
         QTabWidget::pane {{
-            border: none;
-            background: {p['bg_main']};
+            border: 1px solid {p['border']};
+            top: -1px;
+            background-color: {p['bg_main']};
+            border-radius: 12px;
+        }}
+        
+        QWidget#MainTabs > QWidget {{
+            background-color: {p['bg_main']};
         }}
 
         QTabBar::tab {{
-            background: transparent;
+            background: {p['card_bg']};
             padding: 10px 20px;
             color: {p['text_dim']};
             border-bottom: 2px solid transparent;
