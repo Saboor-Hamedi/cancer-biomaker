@@ -1,144 +1,205 @@
-from tkinter import ttk
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPalette
 
-class StyleManager:
-    """Manages global application styling, including themes and font scaling."""
+class Styles:
+    """Professional Clinical Style System for PySide6 (Qt6)."""
     
-    # Global Pure Themes
-    THEMES = {
+    PALETTES = {
         'pure_dark': {
-            'bg_main': '#000000',      # Absolute Black
-            'accent_dark': '#000000',   # No layering separation
-            'medic_brand': '#3B82F6',   # Subtle blue for active states
-            'text_main': '#FFFFFF',     # Absolute White
-            'text_muted': '#A1A1AA',    # Zinc-400
-            'card_bg': '#000000',
-            'border_light': '#27272A'    # Zinc-800 for borders
+            'bg_main': "#09090B",       # Zinc-950
+            'bg_sidebar': "#111114",
+            'accent': "#3B82F6",        # Blue-500
+            'accent_glow': "rgba(59, 130, 246, 0.15)",
+            'text_main': "#FAFAFA",
+            'text_dim': "#A1A1AA",
+            'card_bg': "#18181B",       # Zinc-900
+            'border': "#27272A",
+            'success': "#10B981",
+            'danger': "#EF4444",
+            'warning': "#F59E0B"
         },
         'pure_light': {
-            'bg_main': '#FFFFFF',      # Absolute White
-            'accent_dark': '#FFFFFF',   # No layering separation
-            'medic_brand': '#2563EB',   # Blue-600
-            'text_main': '#000000',     # Absolute Black
-            'text_muted': '#52525B',    # Zinc-600
-            'card_bg': '#FFFFFF',
-            'border_light': '#E4E4E7'    # Zinc-200
+            'bg_main': "#F8FAFC",
+            'bg_sidebar': "#FFFFFF",
+            'accent': "#2563EB",
+            'accent_glow': "rgba(37, 99, 235, 0.1)",
+            'text_main': "#0F172A",
+            'text_dim': "#64748B",
+            'card_bg': "#FFFFFF",
+            'border': "#E2E8F0",
+            'success': "#059669",
+            'danger': "#DC2626",
+            'warning': "#D97706"
         }
     }
 
-    @classmethod
-    def apply_styles(cls, root, settings=None):
-        """Apply global CSS-like styles to the application."""
-        style = ttk.Style(root)
+    @staticmethod
+    def get_qss(theme='pure_dark'):
+        p = Styles.PALETTES.get(theme, Styles.PALETTES['pure_dark'])
         
-        # Use a cross-platform theme as base to ensure colors work on Windows
-        if 'clam' in style.theme_names():
-            style.theme_use('clam')
-            
-        # Determine settings
-        theme_name = settings.get('theme', 'pure_dark') if settings else 'pure_dark'
-        scale = settings.get('font_scale', 1.0) if settings else 1.0
-        family = settings.get('font_family', 'Inter') if settings else 'Inter'
-        is_dark = theme_name == 'pure_dark'
+        return f"""
+        /* ── Global Clinical Theme: {theme} ── */
         
-        palette = cls.THEMES.get(theme_name, cls.THEMES['pure_dark'])
-        
-        # Font definitions with SCALING LIMITS (as per user request: max 18px)
-        # We cap the scaled size to ensure labels don't overflow containers
-        f_small = (family, min(int(8 * scale), 14))
-        f_normal = (family, min(int(9 * scale), 16))
-        f_medium = (family, min(int(10 * scale), 17), 'bold')
-        f_large = (family, min(int(12 * scale), 18), 'bold')
-        f_header = (family, min(int(18 * scale), 20), 'bold')
-        
-        # Base widget configurations - Focus elimination
-        # Pure Resilience: Set fixed wraplength to ensure text wraps BEFORE hitting container edges
-        wrap_l = 220 
-        style.configure('.', font=f_normal, background=palette['bg_main'], foreground=palette['text_main'], 
-                        borderwidth=0, relief='flat', focuscolor='', highlightthickness=0)
-        
-        style.configure('TFrame', background=palette['bg_main'])
-        style.configure('TLabel', font=f_normal, background=palette['bg_main'], foreground=palette['text_main'], 
-                        wraplength=wrap_l)
-        
-        # Button Styles - Fixed mapping for hover
-        style.configure('TButton', font=f_medium, padding=6, background=palette['border_light'], 
-                        foreground=palette['text_main'], borderwidth=0, wraplength=wrap_l)
-        style.map('TButton', 
-                  background=[('pressed', palette['medic_brand']), ('active', palette['medic_brand']), ('!disabled', palette['border_light'])],
-                  foreground=[('active', 'white')])
+        QMainWindow, QWidget {{
+            background-color: {p['bg_main']};
+            color: {p['text_main']};
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+            font-size: 13px;
+        }}
 
-        # Primary Button mapping fix
-        style.configure('Primary.TButton', background=palette['medic_brand'], foreground='white', font=f_medium, borderwidth=0)
-        style.map('Primary.TButton', 
-                  background=[('pressed', '#1D4ED8'), ('active', '#1E40AF'), ('!disabled', palette['medic_brand'])],
-                  foreground=[('active', 'white')])
+        /* ── Sidebar & Navigation ── */
+        QFrame#Sidebar {{
+            background-color: {p['bg_sidebar']};
+            border-right: 1px solid {p['border']};
+        }}
 
-        # Danger Button mapping fix
-        style.configure('Danger.TButton', background='#EF4444', foreground='white', font=f_medium, borderwidth=0)
-        style.map('Danger.TButton', 
-                  background=[('pressed', '#991B1B'), ('active', '#B91C1C'), ('!disabled', '#EF4444')],
-                  foreground=[('active', 'white')])
-        
-        # Card & Sidebar styles
-        style.configure('Card.TFrame', background=palette['card_bg'], relief='flat', borderwidth=0)
-        style.configure('Card.TLabel', background=palette['card_bg'], foreground=palette['text_main'], font=f_normal)
-        
-        # Status Bar Logic: Disable wrapping for system messages to prevent UI flicker
-        style.configure('Status.TLabel', background=palette['card_bg'], foreground=palette['text_main'], font=f_normal, wraplength=0)
-        
-        # Fix Sidebar Visibility in Light Mode
-        style.configure('Sidebar.TFrame', background=palette['accent_dark'], relief='flat', borderwidth=0)
-        style.configure('Sidebar.TLabel', background=palette['accent_dark'], foreground=palette['text_main'], font=f_large)
-        style.configure('SidebarCaption.TLabel', background=palette['accent_dark'], foreground=palette['text_muted'], font=f_small)
-        
-        # Labelframe styling 
-        style.configure('Sidebar.TLabelframe', background=palette['accent_dark'], foreground=palette['text_muted'], bordercolor=palette['border_light'], borderwidth=0)
-        style.configure('Sidebar.TLabelframe.Label', background=palette['accent_dark'], foreground=palette['text_muted'], font=f_small)
-        
-        # Notebook (Tabs) customization - Premium padding for height
-        style.configure("TNotebook", background=palette['bg_main'], borderwidth=0, tabmargins=[0, 0, 0, 0], highlightthickness=0)
-        style.configure("TNotebook.Tab", padding=[25, 12], font=f_medium, background=palette['border_light'], borderwidth=0, focuscolor='')
-        
-        # Tab Mapping - Fixed background/foreground persistence
-        # Active tab must show medic_brand text in light mode for clarity
-        sel_bg = palette['card_bg']
-        sel_fg = palette['medic_brand'] if not is_dark else 'white'
-        
-        style.map("TNotebook.Tab", 
-                  background=[("selected", sel_bg), ("active", palette['border_light']), ("!selected", palette['border_light'])], 
-                  foreground=[("selected", sel_fg), ("active", palette['text_main']), ("!selected", palette['text_muted'])])
-        
-        # Treeview customization - Minimal layering
-        style.configure("Treeview", 
-                        font=f_normal, 
-                        rowheight=int(34 * (1.0 + (scale-1.0)*0.4)),
-                        background=palette['card_bg'],
-                        fieldbackground=palette['card_bg'],
-                        foreground=palette['text_main'],
-                        borderwidth=0,
-                        highlightthickness=0)
-        
-        # Ensure headings and selected rows are high-contrast
-        style.configure("Treeview.Heading", font=f_medium, background=palette['border_light'], foreground=palette['text_main'], relief='flat', borderwidth=0)
-        style.map("Treeview", 
-                  background=[('selected', palette['medic_brand']), ('!disabled', palette['card_bg'])], 
-                  foreground=[('selected', 'white'), ('!disabled', palette['text_main'])])
+        QLabel#SidebarTitle {{
+            color: {p['accent']};
+            font-size: 16px;
+            font-weight: bold;
+            padding: 10px;
+        }}
 
-        # Custom Header Style
-        style.configure('Header.TLabel', font=f_header, background=palette['card_bg'], foreground=palette['text_main'])
-        style.configure('SubHeader.TLabel', font=f_normal, background=palette['card_bg'], foreground=palette['text_muted'])
+        /* ── Cards & Containers ── */
+        QFrame#Card {{
+            background-color: {p['card_bg']};
+            border: 1px solid {p['border']};
+            border-radius: 12px;
+        }}
+        
+        QFrame#RiskCard_DANGER {{
+            background-color: {p['card_bg']};
+            border: 1px solid {p['danger']};
+            border-radius: 12px;
+        }}
 
-        # Root background
-        root.configure(bg=palette['bg_main'])
+        /* ── Buttons (Premium Aesthetic) ── */
+        QPushButton {{
+            background-color: {p['card_bg']};
+            border: 1px solid {p['border']};
+            border-radius: 6px;
+            padding: 8px 16px;
+            color: {p['text_main']};
+            font-weight: 500;
+        }}
 
-        # Global Menu Styling - Standardize to 12px for both Menu bar and dropdown Cascades
-        root.option_add('*Menu.font', (family, 12))
-        root.option_add('*Menubutton.font', (family, 12))
+        QPushButton:hover {{
+            background-color: {p['border']};
+            border-color: {p['text_dim']};
+        }}
 
-        # Ensure Combobox dropdown list matches the 12px requirement
-        root.option_add('*TCombobox*Listbox.font', (family, 12))
-        style.configure('TCombobox', font=(family, 12))
+        QPushButton#PrimaryBtn {{
+            background-color: {p['accent']};
+            color: white;
+            border: none;
+        }}
 
-    @classmethod
-    def get_palette(cls, theme_name='pure_dark'):
-        return cls.THEMES.get(theme_name, cls.THEMES['pure_dark'])
+        QPushButton#PrimaryBtn:hover {{
+            background-color: #2563EB;
+        }}
+
+        /* ── Inputs ── */
+        QLineEdit, QSpinBox, QComboBox {{
+            background-color: {p['bg_main']};
+            border: 1px solid {p['border']};
+            border-radius: 6px;
+            padding: 6px;
+            color: {p['text_main']};
+        }}
+
+        QLineEdit:focus {{
+            border: 1px solid {p['accent']};
+        }}
+
+        /* ── Tabs (Notebook) ── */
+        QTabWidget::pane {{
+            border: none;
+            background: {p['bg_main']};
+        }}
+
+        QTabBar::tab {{
+            background: transparent;
+            padding: 10px 20px;
+            color: {p['text_dim']};
+            border-bottom: 2px solid transparent;
+        }}
+
+        QTabBar::tab:selected {{
+            color: {p['accent']};
+            border-bottom: 2px solid {p['accent']};
+            font-weight: bold;
+        }}
+
+        /* ── Tables (Treeview Upgrade) ── */
+        QTableWidget, QTreeView {{
+            background-color: {p['card_bg']};
+            border: 1px solid {p['border']};
+            border-radius: 8px;
+            gridline-color: {p['border']};
+            outline: none;
+        }}
+
+        QHeaderView::section {{
+            background-color: {p['bg_sidebar']};
+            color: {p['text_dim']};
+            padding: 8px;
+            border: none;
+            border-bottom: 1px solid {p['border']};
+            font-weight: bold;
+            text-transform: uppercase;
+        }}
+
+        QTableWidget::item:selected {{
+            background-color: {p['accent_glow']};
+            color: {p['accent']};
+        }}
+        
+        /* ── Industrial Menus ── */
+        QMenuBar {{
+            background-color: {p['bg_sidebar']};
+            color: {p['text_dim']};
+            border-bottom: 1px solid {p['border']};
+            padding: 2px 10px;
+        }}
+        QMenuBar::item {{
+            background: transparent;
+            padding: 8px 12px;
+            border-radius: 4px;
+        }}
+        QMenuBar::item:selected {{
+            background-color: {p['bg_main']};
+            color: {p['accent']};
+        }}
+        QMenu {{
+            background-color: {p['bg_sidebar']};
+            color: {p['text_main']};
+            border: 1px solid {p['border']};
+            border-radius: 8px;
+            padding: 5px 0;
+        }}
+        QMenu::item {{
+            padding: 8px 25px 8px 35px;
+        }}
+        QMenu::item:selected {{
+            background-color: {p['accent']};
+            color: white;
+        }}
+        QMenu::separator {{
+            height: 1px;
+            background: {p['border']};
+            margin: 5px 15px;
+        }}
+        
+        /* ── Progress & Status ── */
+        QProgressBar {{
+            background-color: {p['card_bg']};
+            border: 1px solid {p['border']};
+            border-radius: 4px;
+            text-align: center;
+        }}
+
+        QProgressBar::chunk {{
+            background-color: {p['accent']};
+            border-radius: 3px;
+        }}
+        """

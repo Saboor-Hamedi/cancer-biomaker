@@ -1,173 +1,119 @@
-import tkinter as tk
-from tkinter import ttk
+from PySide6.QtWidgets import (QFrame, QVBoxLayout, QPushButton, QLabel, 
+                             QSpacerItem, QSizePolicy, QHBoxLayout)
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QFont
 
-class Sidebar(ttk.Frame):
-    """
-    Enhanced Sidebar with Scrollable Container for better responsiveness.
-    """
-    def __init__(self, parent, callbacks):
-        super().__init__(parent, style='Sidebar.TFrame', width=280)
-        self.callbacks = callbacks
-        self.pack_propagate(False)
+class Sidebar(QFrame):
+    """Modern Industrial Mission Sidebar (Left Column)."""
+    
+    # Tactical Signals
+    tab_changed = Signal(int)
+    settings_requested = Signal()
+    chat_requested = Signal()
+    cohort_requested = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("Sidebar")
+        self.setFixedWidth(240)
+        self.mission_btns = []
+        self._setup_ui()
+
+    def _setup_ui(self):
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(20, 25, 20, 25)
+        self._layout.setSpacing(10)
+
+        # ── Clinical Brand ──
+        logo = QLabel("AI CLINICAL")
+        logo.setStyleSheet("color: #71717A; font-weight: bold; font-size: 11px; letter-spacing: 1.5px;")
+        self._layout.addWidget(logo)
+
+        brand = QLabel("COMMITTEE")
+        brand.setStyleSheet("font-size: 22px; font-weight: 800; color: #3B82F6;")
+        self._layout.addWidget(brand)
+
+        # Divider
+        line = QFrame()
+        line.setFixedHeight(1)
+        line.setStyleSheet("background-color: #27272A;")
+        self._layout.addWidget(line)
+        self._layout.addSpacing(20)
+
+        # ── Tactical Missions ──
+        # 🎯 Mission 1: Individual Diagnose (Input Tab)
+        self.btn_diag = self._create_mission_btn(" INDIVIDUAL DIAGNOSE", "🎯", "#3B82F6")
+        self.btn_diag.clicked.connect(lambda: self.tab_changed.emit(4))
         
-        # State variables
-        self.model_var = tk.StringVar(value="Random Forest")
-        self.sample_qty = tk.IntVar(value=0)
+        # 📊 Mission 2: Cohort Forensics (Performance Report)
+        self.btn_cohort = self._create_mission_btn(" COHORT FORENSICS", "📊", "#8B5CF6")
+        self.btn_cohort.clicked.connect(self.cohort_requested.emit)
         
-        # ── Responsive Scrollable Container ──────────────────────
-        self.canvas = tk.Canvas(self, bg="#000000", highlightthickness=0, borderwidth=0)
-        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.scroll_content = ttk.Frame(self.canvas, style='Sidebar.TFrame', borderwidth=0)
+        # 🤖 Mission 3: AI Research Chat (Consultation)
+        self.btn_chat = self._create_mission_btn(" AI RESEARCH CHAT", "🤖", "#10B981")
+        self.btn_chat.clicked.connect(self.chat_requested.emit)
         
-        self.canvas_window = self.canvas.create_window((0, 0), window=self.scroll_content, anchor="nw", width=280)
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self._layout.addSpacing(30)
         
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        # ── Secondary Actions ──
+        # ⚙️ Mission: System Settings
+        self.btn_settings = QPushButton(" ⚙️  SYSTEM SETTINGS")
+        self.btn_settings.setFixedHeight(45)
+        self.btn_settings.setStyleSheet("""
+            QPushButton { background-color: transparent; color: #A1A1AA; border: none; border-radius: 8px; font-weight: bold; font-size: 11px; text-align: left; padding-left: 15px; }
+            QPushButton:hover { background-color: rgba(255, 255, 255, 0.05); color: #FFFFFF; }
+        """)
+        self.btn_settings.clicked.connect(self.settings_requested.emit)
+        self._layout.addWidget(self.btn_settings)
         
-        # Initialize
-        self._create_widgets()
-        self.refresh_theme(callbacks.get('theme', 'sleek_dark'))
+        self._layout.addStretch()
+
+        # ── Dashboard Visibility HUD (Bottom) ──
+        self.lbl_ver = QLabel("VERSION 1.1.0 (QT6)")
+        self.lbl_ver.setStyleSheet("color: #3F3F46; font-size: 10px; font-weight: bold; text-align: center;")
+        self.lbl_ver.setAlignment(Qt.AlignCenter)
+        self._layout.addWidget(self.lbl_ver)
+
+    def _create_mission_btn(self, text, icon, color):
+        """Creates a high-fidelity clinical mission gateway."""
+        btn = QPushButton(f" {icon}  {text}")
+        btn.setFixedHeight(52)
+        # Professional Industrial Base Style
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #18181B;
+                color: {color};
+                border: 1px solid #27272A;
+                border-radius: 8px;
+                font-weight: 800;
+                font-size: 11px;
+                text-align: left;
+                padding-left: 15px;
+            }}
+            QPushButton:hover {{
+                background-color: #27272A;
+                border-color: {color};
+            }}
+        """)
+        self._layout.addWidget(btn)
+        self.mission_btns.append({'btn': btn, 'color': color})
+        return btn
+
+    def apply_theme(self, p):
+        """Dynamic thematic skinning for high-contrast visibility."""
+        txt = p['text_main']
+        acc = p['accent']
+        dim = p['text_dim']
+        border = p['border']
+        self.setStyleSheet(f"QFrame#Sidebar {{ background-color: {p['bg_sidebar']}; border-right: 1px solid {border}; }}")
         
-        # Update scroll region
-        self.scroll_content.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-
-    def _create_widgets(self):
-        # Header
-        header_frame = ttk.Frame(self.scroll_content, style='Sidebar.TFrame')
-        header_frame.pack(fill=tk.X, pady=(10, 5), padx=20)
-
-        # ── Active Committee ──
-        model_frame = ttk.LabelFrame(self.scroll_content, text="ACTIVE COMMITTEE", style='Sidebar.TLabelframe')
-        model_frame.pack(fill=tk.X, padx=15, pady=10)
-
-        list_container = ttk.Frame(model_frame, style='Sidebar.TFrame')
-        list_container.pack(fill=tk.X, padx=8, pady=8)
-
-        # Initialize listbox with theme-aware background
-        from ui.styles import StyleManager
-        initial_theme = self.callbacks.get('theme', 'sleek_dark')
-        initial_palette = StyleManager.get_palette(initial_theme)
-        sidebar_bg_color = initial_palette['accent_dark']
-        text_fg_color = initial_palette['text_main']
-
-        self.model_listbox = tk.Listbox(
-            list_container, selectmode=tk.SINGLE, font=("Inter", 10, "bold"),
-            borderwidth=0, highlightthickness=0, activestyle='none', relief='flat', height=6,
-            bg=sidebar_bg_color, fg=text_fg_color, selectbackground=initial_palette['medic_brand'], selectforeground="white"
-        )
-        self.model_listbox.pack(fill=tk.X, expand=True)
-
-        for m in self.callbacks.get('models', []):
-            self.model_listbox.insert(tk.END, f" {m}")
-
-        if self.model_listbox.size() > 0:
-            self.model_listbox.selection_set(0)
-        self.model_listbox.bind("<<ListboxSelect>>", self._on_model_select)
-
-        # ── Intelligence ──
-        action_frame = ttk.LabelFrame(self.scroll_content, text="INTELLIGENCE", style='Sidebar.TLabelframe')
-        action_frame.pack(fill=tk.X, padx=15, pady=10)
-
-        ttk.Button(action_frame, text="Individual Diagnosis", style='Primary.TButton', 
-                   command=self.callbacks.get('predict_single')).pack(fill=tk.X, padx=10, pady=(12, 6))
-        ttk.Button(action_frame, text="Cohort Forensic Audit", 
-                   command=self.callbacks.get('predict_file')).pack(fill=tk.X, padx=10, pady=(0, 6))
+        # Skin Mission Hub
+        for entry in self.mission_btns:
+            btn = entry['btn']
+            clr = entry['color']
+            btn.setStyleSheet(f"QPushButton {{ background-color: {p['card_bg']}; color: {clr}; border: 1px solid {border}; border-radius: 8px; font-weight: 800; font-size: 11px; text-align: left; padding-left: 15px; }} "
+                             f"QPushButton:hover {{ background-color: {p['bg_main']}; border-color: {clr}; }}")
         
-        ttk.Button(action_frame, text="🤖 AI Research Assistant", 
-                   command=self.callbacks.get('show_ai_chat')).pack(fill=tk.X, padx=10, pady=(0, 12))
-
-        # ── Cohort Extraction ──
-        batch_frame = ttk.LabelFrame(self.scroll_content, text="COHORT EXTRACTION", style='Sidebar.TLabelframe')
-        batch_frame.pack(fill=tk.X, padx=15, pady=10)
-        
-        ctrl_frame = ttk.Frame(batch_frame, style='Sidebar.TFrame')
-        ctrl_frame.pack(fill=tk.X, padx=10, pady=(10, 15))
-        
-        self.spin = tk.Spinbox(
-            ctrl_frame, from_=0, to=10000, textvariable=self.sample_qty, 
-            width=12, relief='flat', font=("Inter", 11, "bold"), justify='center'
-        )
-        self.spin.pack(side=tk.LEFT, padx=(0, 5), fill=tk.Y)
-        
-        ttk.Button(ctrl_frame, text="Extract Cohort", command=self.callbacks.get('sample')).pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-
-        # ── Specific Patient Search ──
-        search_frame = ttk.Frame(batch_frame, style='Sidebar.TFrame')
-        search_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
-        
-        self.search_var = tk.StringVar()
-        self.search_entry = tk.Entry(
-            search_frame, textvariable=self.search_var, font=("Inter", 10),
-            relief='flat', borderwidth=0, width=15
-        )
-        self.search_entry.pack(side=tk.LEFT, padx=(0, 5), fill=tk.Y)
-        self.search_entry.insert(0, "Search ID (e.g. PAT-01)")
-        self.search_entry.bind("<FocusIn>", lambda e: self.search_entry.delete(0, tk.END) if self.search_var.get() == "Search ID (e.g. PAT-01)" else None)
-        
-        ttk.Button(search_frame, text="🔍", width=3,
-                   command=lambda: self.callbacks.get('search')(self.search_var.get())).pack(side=tk.RIGHT)
-
-        # ── Clinical XAI ──
-        analytics_frame = ttk.LabelFrame(self.scroll_content, text="CLINICAL XAI", style='Sidebar.TLabelframe')
-        analytics_frame.pack(fill=tk.X, padx=15, pady=10)
-
-        self.btn_whatif = tk.Button(analytics_frame, text="🔍 What-If Analysis", relief="flat", borderwidth=0, pady=6,
-                                    command=lambda: self.callbacks.get('show_counterfactual', lambda: None)())
-        self.btn_whatif.pack(fill=tk.X, pady=2, padx=10)
-
-        self.btn_biomarker = tk.Button(analytics_frame, text="🕸️ Biomarker Network", relief="flat", borderwidth=0, pady=6,
-                                       command=lambda: self.callbacks.get('show_biomarker_network', lambda: None)())
-        self.btn_biomarker.pack(fill=tk.X, pady=2, padx=10)
-
-        # ── Maintenance ──
-        reset_frame = ttk.Frame(self.scroll_content, style='Sidebar.TFrame')
-        reset_frame.pack(fill=tk.X, padx=15, pady=(20, 10))
-
-        ttk.Button(reset_frame, text="⚙️ SETTINGS", command=self.callbacks.get('show_settings')).pack(fill=tk.X, padx=10, pady=(0, 10))
-        ttk.Button(reset_frame, text="SYSTEM RESET", style='Danger.TButton', command=self.callbacks.get('system_reset')).pack(fill=tk.X, padx=10)
-
-    def update_sample_qty(self, count):
-        """Update the spinbox value programmatically."""
-        self.sample_qty.set(count)
-
-    def refresh_theme(self, theme_name):
-        """Update static internal widgets to match theme."""
-        from ui.styles import StyleManager
-        palette = StyleManager.get_palette(theme_name)
-        
-        sidebar_bg = palette['accent_dark']
-        self.configure(style='Sidebar.TFrame')
-        self.canvas.config(bg=sidebar_bg)
-        self.scroll_content.configure(style='Sidebar.TFrame')
-        
-        # Colors for listbox and spinbox - Visibility fix for Light Mode
-        is_dark = theme_name == 'pure_dark'
-        text_fg = palette['text_main']
-        entry_bg = palette['bg_main']
-        caret_color = palette['text_main']
-        
-        self.model_listbox.config(bg=sidebar_bg, fg=text_fg, selectbackground=palette['medic_brand'], selectforeground="white")
-        self.spin.config(bg=entry_bg, fg=text_fg, buttonbackground=sidebar_bg, insertbackground=caret_color)
-        self.search_entry.config(bg=entry_bg, fg=text_fg, insertbackground=caret_color)
-        
-        # Colors for XAI buttons
-        for btn in [self.btn_whatif, self.btn_biomarker]:
-            btn.config(bg=entry_bg, fg=text_fg, activebackground=palette['medic_brand'], activeforeground="white")
-
-    def _on_model_select(self, event):
-        selection = self.model_listbox.curselection()
-        if selection:
-            full_text = self.model_listbox.get(selection[0])
-            self.model_var.set(full_text.strip())
-            self.callbacks.get('predict_silent', lambda: None)()
-
-    @property
-    def current_model(self):
-        return self.model_var.get()
-
-    def update_model_info(self, model_name):
-        pass
-
-    def clear_input_fields(self):
-        self.sample_qty.set(20)
+        # Skin Secondary Actions
+        self.btn_settings.setStyleSheet(f"QPushButton {{ background-color: transparent; color: {dim}; border: none; border-radius: 8px; font-weight: bold; font-size: 11px; text-align: left; padding-left: 15px; }} "
+                                       f"QPushButton:hover {{ background-color: {p['bg_main']}; color: {txt}; }}")

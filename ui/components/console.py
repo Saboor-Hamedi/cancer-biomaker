@@ -1,90 +1,64 @@
-import tkinter as tk
-from tkinter import ttk
-from datetime import datetime
+from PySide6.QtWidgets import (QFrame, QVBoxLayout, QHBoxLayout, QLabel, 
+                             QPushButton, QTextEdit)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont
 
-class ConsoleTab(ttk.Frame):
-    """A persistent logging console for errors and system notifications."""
-    
-    def __init__(self, parent):
+class LogConsole(QFrame):
+    """Modern Diagnostic Output Console for clinical telemetry."""
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.text: tk.Text = None # type: ignore
-        self._create_widgets()
-        
-    def _create_widgets(self):
-        # Toolbar for console actions
-        self.toolbar_frame = ttk.Frame(self, style='Card.TFrame', padding=5)
-        self.toolbar_frame.pack(fill=tk.X)
-        
-        self.title_label = ttk.Label(self.toolbar_frame, text="SYSTEM DIAGNOSTICS LOGS", 
-                                     font=("Inter", 9, "bold"), style='Card.TLabel')
-        self.title_label.pack(side=tk.LEFT, padx=10)
-        
-        ttk.Button(self.toolbar_frame, text="Clear Logs", command=self.clear, style='TButton').pack(side=tk.RIGHT, padx=5)
-        ttk.Button(self.toolbar_frame, text="Copy All", command=self.copy_all, style='TButton').pack(side=tk.RIGHT, padx=5)
+        self.setObjectName("LogConsole")
+        self.setFixedHeight(180)
+        self._setup_ui()
 
-        # Text area with scrollbar
-        self.content_container = ttk.Frame(self)
-        self.content_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        self.text = tk.Text(self.content_container, font=("Consolas", 12), wrap=tk.WORD, 
-                            state=tk.DISABLED, undo=True, borderwidth=0, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self.content_container, orient=tk.VERTICAL, command=self.text.yview)
-        self.text.configure(yscrollcommand=scrollbar.set)
-        
-        self.text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # Standard tags (will be updated in refresh_theme)
-        self.text.tag_configure("INFO", font=("Consolas", 12, "bold"))
-        self.text.tag_configure("SUCCESS", font=("Consolas", 12, "bold"))
-        self.text.tag_configure("WARNING", font=("Consolas", 12, "bold"))
-        self.text.tag_configure("ERROR", font=("Consolas", 12, "bold"))
-        self.text.tag_configure("TIMESTAMP", font=("Consolas", 12))
+        # ── Industrial Header ──
+        self.header_frame = QFrame()
+        self.header_frame.setFixedHeight(35)
+        # Border-bottom will be set in apply_theme
+        h_layout = QHBoxLayout(self.header_frame)
+        h_layout.setContentsMargins(15, 0, 15, 0)
+        
+        title = QLabel("DIAGNOSTIC OUTPUT — REAL-TIME CLINICAL TELEMETRY")
+        title.setStyleSheet("font-weight: 800; font-size: 10px; color: #71717A; letter-spacing: 0.5px;")
+        h_layout.addWidget(title)
+        
+        h_layout.addStretch()
+        
+        btn_clear = QPushButton("CLEAR LOG")
+        btn_clear.setFixedWidth(90)
+        btn_clear.setFlat(True)
+        btn_clear.setStyleSheet("font-weight: bold; font-size: 10px; color: #3B82F6;")
+        btn_clear.clicked.connect(self.clear_logs)
+        h_layout.addWidget(btn_clear)
+        
+        layout.addWidget(self.header_frame)
 
-    def refresh_theme(self, theme_name):
-        from ui.styles import StyleManager
-        palette = StyleManager.get_palette(theme_name)
-        
-        self.configure(style='TFrame')
-        self.toolbar_frame.configure(style='Card.TFrame')
-        self.content_container.configure(style='TFrame')
-        self.title_label.config(style='Card.TLabel')
-        
-        # Text sync
-        self.text.config(
-            background=palette['bg_main'], 
-            foreground=palette['text_main'],
-            selectbackground=palette['medic_brand'],
-            selectforeground="white"
-        )
-        
-        # Tags sync
-        self.text.tag_configure("INFO",      foreground=palette['medic_brand'])
-        self.text.tag_configure("SUCCESS",   foreground="#10B981")
-        self.text.tag_configure("WARNING",   foreground="#F59E0B")
-        self.text.tag_configure("ERROR",     foreground="#EF4444")
-        self.text.tag_configure("TIMESTAMP", foreground=palette['text_muted'])
+        # ── Output View ──
+        self.log_view = QTextEdit()
+        self.log_view.setReadOnly(True)
+        self.log_view.setStyleSheet("background: transparent; border: none; font-family: 'Consolas', monospace; font-size: 12px; padding: 10px;")
+        layout.addWidget(self.log_view)
 
-    def log(self, message, level="INFO"):
-        """Add a log entry to the console."""
+    def log(self, message, color="gray"):
+        from datetime import datetime
         timestamp = datetime.now().strftime("[%H:%M:%S]")
-        
-        self.text.config(state=tk.NORMAL)
-        self.text.insert(tk.END, f"{timestamp} ", "TIMESTAMP")
-        self.text.insert(tk.END, f"[{level.upper()}] ", level.upper())
-        self.text.insert(tk.END, f"{message}\n")
-        
+        self.log_view.append(f"<span style='color: #52525B;'>{timestamp}</span> <span style='color: {color};'>{message}</span>")
         # Auto-scroll
-        self.text.see(tk.END)
-        self.text.config(state=tk.DISABLED)
+        self.log_view.verticalScrollBar().setValue(self.log_view.verticalScrollBar().maximum())
 
-    def clear(self):
-        """Clear all logs."""
-        self.text.config(state=tk.NORMAL)
-        self.text.delete("1.0", tk.END)
-        self.text.config(state=tk.DISABLED)
+    def clear_logs(self):
+        self.log_view.clear()
+        self.log("Console cleared — awaiting telemetry...", "gray")
 
-    def copy_all(self):
-        """Copy all text to clipboard."""
-        self.clipboard_clear()
-        self.clipboard_append(self.text.get("1.0", tk.END))
+    def apply_theme(self, p):
+        """Invoke theme synchronization for the console."""
+        theme_bg = p['card_bg']
+        theme_border = p['border']
+        self.setStyleSheet(f"QFrame#LogConsole {{ background-color: {theme_bg}; border-top: 2px solid {theme_border}; }}")
+        self.header_frame.setStyleSheet(f"background-color: rgba(0,0,0,0.05); border-bottom: 1px solid {theme_border};")
+        self.log_view.setStyleSheet(f"background: transparent; border: none; color: {p['text_main']}; font-family: 'Consolas', monospace; font-size: 12px; padding: 10px;")
