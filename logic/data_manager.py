@@ -8,6 +8,7 @@ class DataManager:
         self.data_path = data_path
         self.uploaded_df = None
         self.raw_subset = None # Stores the raw data BEFORE preprocessing for non-destructive toggling
+        self.master_df = None # Persistent in-memory cache for fast forensic searching
         self.prediction_results = None
         self.mean_values = None
         self.selected_indices = set()
@@ -38,6 +39,7 @@ class DataManager:
                     df, _ = self.load_data(path)
                     if df is not None:
                         self.uploaded_df = df
+                        self.master_df = df.copy() # Cache master data
                         return True
         except Exception:
             pass
@@ -142,6 +144,7 @@ class DataManager:
             df.dropna(how='all', inplace=True)
             df.dropna(axis=1, how='all', inplace=True)
             self.uploaded_df = df
+            self.master_df = df.copy() # Cache master
             return df, None
         except Exception as e:
             return None, str(e)
@@ -173,8 +176,9 @@ class DataManager:
                 # Fuzzy check to avoid duplicates if columns exist with slightly different names
                 if not any(str(p).lower() in str(c).lower() for c in df.columns):
                     df[p] = "" 
-
+            
             self.uploaded_df = df
+            self.master_df = df.copy() # Cache master
             return df, None
         except Exception as e:
             return None, str(e)

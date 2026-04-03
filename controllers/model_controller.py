@@ -489,22 +489,25 @@ class ModelController:
             if len(pos_indices) == 0: pos_indices = np.where(risks > 0.5)[0]
             target_audit_indices = pos_indices # Removed [:10] limit to show all dynamic cases
             detailed_audit_data = []
-            
             for array_idx in target_audit_indices:
                 array_idx_int = int(array_idx)
-                df_idx = df.index[array_idx_int]
-                
-                # FEATURE: Extraction of original Clinical Sample ID
+                # 4.9 FEATURE: High-Fidelity Extraction of original Clinical Sample ID
                 sample_id = "N/A"
-                for col in df.columns:
-                    c_low = str(col).lower()
-                    if 'sample' in c_low or 'id' in c_low or 'patient' in c_low:
-                        sample_id = str(df.loc[df_idx, col])
+                row_raw = df.iloc[array_idx_int]
+                
+                # Priority 1: Exact Clinical Identifiers
+                priority_cols = [c for c in df.columns if str(c).lower() in ['sample_id', 'sampleid', 'id', 'patient_id', 'patientid']]
+                # Priority 2: Broad Forensic Keywords (excluding markers)
+                other_cols = [c for c in df.columns if any(k in str(c).lower() for k in ['sample', 'id', 'patient']) and c not in priority_cols]
+                
+                for col in (priority_cols + other_cols):
+                    val = row_raw[col]
+                    if pd.notna(val) and str(val).strip() != "":
+                        sample_id = str(val)
                         break
+                
                 if sample_id == "N/A": 
-                    sample_id = f"ID-{df_idx}"
-                else:
-                    sample_id = sample_id[:8] if len(sample_id) > 10 else sample_id
+                    sample_id = f"ID-{df.index[array_idx_int]}"
 
                 flagging_models = []
                 max_r = -1.0
@@ -521,7 +524,9 @@ class ModelController:
                 
                 def get_m_val(keyword):
                     match = [c for c in df.columns if keyword.lower() in str(c).lower()]
-                    if match: return float(df.loc[df_idx, match[0]]) if pd.notna(df.loc[df_idx, match[0]]) else 0.0
+                    if match: 
+                        val = row_raw[match[0]]
+                        return float(val) if pd.notna(val) else 0.0
                     return 0.0
 
                 r_val = float(risks[array_idx_int])

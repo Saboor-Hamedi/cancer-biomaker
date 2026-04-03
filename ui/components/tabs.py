@@ -502,15 +502,15 @@ class AnalysisTab(ttk.Frame):
             self.text.insert(tk.END, "2. HIGH-RISK CLINICAL REGISTRY (FLAGGED PATIENT PROFILES)\n", "sub")
             
             # Professional Table Header (Expanded for AI Recommendations)
-            h_line = f"  {'ID':<5} │ {'RISK':^8} │ {'COMMITTEE DETECTION':<20} │ {'PSA':>10} │ {'AFP':>10} │ {'CA125':>10} │ {'AI CLINICAL RECOMMENDATION':<32}\n"
-            divider = "  " + "—" * 81 + "\n"
+            h_line = f"  {'ID':<12} │ {'RISK':^8} │ {'COMMITTEE DETECTION':<20} │ {'PSA':>10} │ {'AFP':>10} │ {'CA125':>10} │ {'AI CLINICAL RECOMMENDATION':<32}\n"
+            divider = "  " + "—" * 115 + "\n"
             
             self.text.insert(tk.END, h_line, "table_head")
             self.text.insert(tk.END, divider, "dim")
             
             registry = metadata['audit_registry']
             for patient in registry:
-                p_id = str(patient.get('id', 'N/A'))[:5]
+                p_id = str(patient.get('id', 'N/A'))[:12]
                 risk_val = patient.get('risk', 0)
                 risk_str = f"{risk_val * 100:.1f}%"
                 detectors = str(patient.get('detectors', 'Ensemble'))[:19]
@@ -520,7 +520,7 @@ class AnalysisTab(ttk.Frame):
                 ca = f"{patient.get('ca125', 0):.2f}"
                 action = patient.get('action', 'N/A')
                 
-                row_line = f"  {p_id:<5} │ {risk_str:>8} │ {detectors:<20} │ {psa:>10} │ {afp:>10} │ {ca:>10} │ {action:<32}\n"
+                row_line = f"  {p_id:<12} │ {risk_str:>8} │ {detectors:<20} │ {psa:>10} │ {afp:>10} │ {ca:>10} │ {action:<32}\n"
                 
                 # Highlight logic: Use 'table_row_crit' for very high risk (>90%)
                 tag = "table_row_crit" if risk_val > 0.9 else "table_row"

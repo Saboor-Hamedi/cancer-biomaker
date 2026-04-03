@@ -194,7 +194,7 @@ class DataController:
         self.update_ui_after_load(refresh_tree=False)
 
     def handle_search(self, query):
-        """Search and select specific patients by ID (supports comma-separated)."""
+        """Dynamic multi-column search for patients by ID (supports comma-separated queries)."""
         if not self.data_path and self.data_manager.data_path:
             self.data_path = self.data_manager.data_path
             
@@ -207,44 +207,68 @@ class DataController:
 
         def _search_task():
             try:
-                full_df, _ = self.data_manager.load_data(self.data_path)
-                if full_df is None: return None, "Failed to load master dataset."
+                # 1. Use cached master data (FAST) or load once if not cached
+                full_df = self.data_manager.master_df if hasattr(self.data_manager, 'master_df') else None
+                if full_df is None:
+                    full_df, _ = self.data_manager.load_data(self.data_path)
+                    if full_df is None: return None, "Failed to load master dataset."
+                    self.data_manager.master_df = full_df.copy() # Cache it now
                 
-                id_col = next((c for c in full_df.columns if any(p in str(c).lower() for p in ['sample_id', 'patient_id', 'id'])), None)
-                if not id_col:
-                    return None, "No Patient ID column found in dataset."
+                df = full_df.copy() # Use a local copy for the search operation
+                
+                # 2. DYNAMIC FIELD DISCOVERY: Find all columns that appear to be identifiers
+                id_keywords = ['sample', 'id', 'patient', 'record', 'ref', 'subject']
+                id_cols = [c for c in df.columns if any(k in str(c).lower() for k in id_keywords)]
+                
+                if not id_cols:
+                    return None, "No identifier columns (ID/Sample/Patient) detected in dataset."
                 
                 target_ids = [s.strip().lower() for s in query.split(',')]
                 
-                # Case insensitive exact matching
-                matches = full_df[full_df[id_col].astype(str).str.lower().isin(target_ids)]
+                # 3. MULTI-COLUMM SEARCH: Match across any identified column
+                mask = pd.Series(False, index=df.index)
+                for col in id_cols:
+                    # Try exact matches first
+                    col_raw = df[col].astype(str)
+                    col_str = col_raw.str.lower().str.strip()
+                    mask |= col_str.isin(target_ids)
+                    
+                    # If no exact match for this column, try partial matching
+                    if not mask.any() or len(query) > 3:
+                        for tid in target_ids:
+                            mask |= col_str.str.contains(tid, na=False, regex=False)
+                
+                matches = df[mask]
                 
                 if matches.empty:
-                    # Partial matching if no exact
-                    matches = full_df[full_df[id_col].astype(str).str.lower().str.contains('|'.join(target_ids))]
+                    return None, f"No clinical profiles found matching: {query}"
                 
-                if matches.empty:
-                    return None, f"No matches for: {query}"
-                
-                # Get the absolute indices from the master DF
-                indices = matches.index.tolist()
-                return (indices, full_df), None
+                # Return absolute indices, full context for audit, and the specific matches for UI speed
+                return (matches.index.tolist(), df, matches), None
             except Exception as e:
-                return None, str(e)
+                return None, f"Search system error: {str(e)}"
 
         def _on_finish(result):
             res, error = result
             if error:
                 self.layout_manager.update_status(f"Search: {error}", "red")
             elif res:
-                indices, full_df = res
-                # Add found indices to the registry
+                indices, full_df, matches_df = res
+                
+                # A. PERSIST: Add found patients to the clinical cohort
                 self.data_manager.selected_indices.update(indices)
-                # Keep full DF as context if search was triggered from master
-                self.data_manager.uploaded_df = full_df 
+                
+                # B. PERFORMANCE: Only show the MATCHES in the tree to prevent UI freeze
+                self.data_manager.uploaded_df = matches_df
+                
+                # C. SYNC: Update UI with focused view
                 self.update_ui_after_load(total_count=len(full_df), full_context_df=full_df)
-                self.layout_manager.update_status(f"Identified {len(indices)} profiles for cohort selection", "#10B981")
+                
+                msg = f"Search success: {len(indices)} profiles isolated and added to cohort."
+                self.layout_manager.update_status(msg, "#10B981")
+                self.error_handler.notify(msg, type='info')
 
+        self.layout_manager.update_status(f"Searching for identifying markers: {query}...", "orange")
         if self.async_runner:
             self.async_runner.run_async("Searching Patients", _search_task, on_finish=_on_finish)
         else:
