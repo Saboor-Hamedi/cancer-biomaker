@@ -35,8 +35,15 @@ class AIChatModal(QDialog):
         self.clinical_context = clinical_context or {}
         
         self.setWindowTitle("AI CLINICAL RESEARCH ASSISTANT (QC-VERIFIED)")
-        self.setMinimumSize(850, 950)
+        self.resize(1050, 850)
+        self.setMinimumSize(850, 650)
         self.setObjectName("AIChatModal")
+        
+        # ── Step 0: Windowing Architecture ──
+        self.setWindowFlags(self.windowFlags() | 
+                            Qt.WindowMinimizeButtonHint | 
+                            Qt.WindowMaximizeButtonHint | 
+                            Qt.WindowCloseButtonHint)
         
         # AI Orchestration State
         self.ai_clients = {}

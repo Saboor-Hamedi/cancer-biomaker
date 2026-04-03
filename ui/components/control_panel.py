@@ -1,6 +1,6 @@
 import os
 from PySide6.QtWidgets import (QFrame, QVBoxLayout, QPushButton, QLabel, 
-                             QSpacerItem, QSizePolicy, QHBoxLayout)
+                             QSpacerItem, QSizePolicy, QHBoxLayout, QListWidget, QListWidgetItem)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
 
@@ -30,16 +30,24 @@ class ControlPanel(QFrame):
         sh_layout = QVBoxLayout(self.status_hud)
         sh_layout.setContentsMargins(15, 15, 15, 15)
         
-        sh_title = QLabel("AI COMMITTEE STATUS")
-        sh_title.setStyleSheet("font-weight: 800; font-size: 10px; color: #3B82F6; border: none; letter-spacing: 0.5px;")
+        sh_title = QLabel("📡 AI EXPERT COMMITTEE")
+        sh_title.setStyleSheet("font-weight: 800; font-size: 10px; color: #10B981; border: none; letter-spacing: 1px; padding-bottom: 5px;")
         sh_layout.addWidget(sh_title)
         
-        # This will be populated with model.pkl names
-        self.models_list = QLabel("No Experts Detected")
-        self.models_list.setWordWrap(True)
-        self.models_list.setStyleSheet("font-size: 11px; color: #A1A1AA; border: none; line-height: 1.4;")
+        # High-Fidelity Interactive Model Registry
+        self.models_list = QListWidget()
+        self.models_list.setStyleSheet("""
+            QListWidget { 
+                background-color: transparent; 
+                border: none; 
+                color: #A1A1AA; 
+                font-size: 11px; 
+                outline: none;
+            }
+            QListWidget::item { padding: 4px; border-radius: 4px; }
+            QListWidget::item:selected { background-color: rgba(59, 130, 246, 0.2); color: #FFFFFF; }
+        """)
         sh_layout.addWidget(self.models_list)
-        sh_layout.addStretch()
         
         layout.addWidget(self.status_hud)
         layout.addSpacing(10)
@@ -85,19 +93,27 @@ class ControlPanel(QFrame):
         return btn
 
     def refresh_models(self, models_dir):
-        """Scan clinical environment for trained Experts."""
+        """High-Fidelity Neural Ingestion of Trained Experts."""
+        self.models_list.clear()
+        
         if not os.path.exists(models_dir):
-            self.models_list.setText("No Trained Models Found")
+            item = QListWidgetItem("Awaiting Ingestion...")
+            item.setForeground(QColor("#71717A"))
+            self.models_list.addItem(item)
             return
         
         models = [f for f in os.listdir(models_dir) if f.endswith(".pkl")]
         if not models:
-            self.models_list.setText("Awaiting Calibration...")
+            item = QListWidgetItem("Calibration Required")
+            item.setForeground(QColor("#71717A"))
+            self.models_list.addItem(item)
         else:
-            txt = "\n".join([f"✓ {m.replace('.pkl','').upper()}" for m in models[:5]])
-            if len(models) > 5: txt += f"\n+ {len(models)-5} more expert(s)"
-            self.models_list.setText(txt)
-            self.models_list.setStyleSheet("font-size: 11px; color: #10B981; border: none; font-weight: bold;")
+            for m in models:
+                name = m.replace(".pkl", "").upper()
+                item = QListWidgetItem(f" 🗸  {name}")
+                item.setForeground(QColor("#10B981"))
+                item.setFont(QFont("Segoe UI", 10, QFont.Bold))
+                self.models_list.addItem(item)
 
     def apply_theme(self, p):
         txt = p['text_main']

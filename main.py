@@ -25,7 +25,7 @@ from ui.components.dashboard import Dashboard
 from ui.components.control_panel import ControlPanel
 from ui.components.console import LogConsole
 from ui.components.banner import BannerNotification
-from ui.components.tabs import DataTab, InputTab, LeaderboardTab, AnalysisTab
+from ui.components.tabs import DataTab, InputTab, LeaderboardTab, AnalysisTab, TrajectoryTab
 from ai.modal.AIChatModal import AIChatModal
 from PySide6.QtCore import Qt, Signal, QThread
 
@@ -182,12 +182,14 @@ class ClinicalApp(QMainWindow):
         self.tab_leaderboard = LeaderboardTab(self)
         self.tab_analysis = AnalysisTab(self)
         self.tab_input = InputTab(self)
+        self.tab_trajectory = TrajectoryTab(self)
         
         self.tabs.addTab(self.tab_dashboard, "DASHBOARD HUD")
-        self.tabs.addTab(self.tab_data, "CLINICAL REGISTRY")
+        self.tabs.addTab(self.tab_data, "CLINICAL AUDIT")
         self.tabs.addTab(self.tab_leaderboard, "ALGORITHM RANKINGS")
         self.tabs.addTab(self.tab_analysis, "PERFORMANCE ANALYSIS")
-        self.tabs.addTab(self.tab_input, "BIOMARKER PROFILE")
+        self.tabs.addTab(self.tab_input, "INDIVIDUAL DIAGNOSE")
+        self.tabs.addTab(self.tab_trajectory, "PATIENT TRAJECTORY")
         
         self.workspace_layout.addWidget(self.tabs)
 
@@ -499,6 +501,9 @@ class ClinicalApp(QMainWindow):
              risk = 50.0 + (i * 2.1) % 40.0
              consensus = "RF, SVM, XGB" if risk > 75 else "RF, LR, SVM, XGB"
              rec = "IMMEDIATE MONITORING / SCAN" if risk > 70 else "3-MONTH FOLLOW-UP RE-TEST"
+             risk_val = 0.50 + (i * 0.021) % 0.40
+             consensus = "RF, SVM, XGB" if risk_val > 0.75 else "RF, LR, SVM, XGB"
+             rec = "IMMEDIATE MONITORING / SCAN" if risk_val > 0.70 else "3-MONTH FOLLOW-UP RE-TEST"
              
              v_psa = 150 + (i * 123) % 900
              v_afp = 10 + (i * 456) % 3000
@@ -511,7 +516,7 @@ class ClinicalApp(QMainWindow):
              table_rows += f"""
              <tr style='background-color: {row_bg}; color: {text_color}; border-bottom: 1px solid #3F3F46;'>
                 <td style='padding: 12px; font-weight: bold;'>P-{1024+i}</td>
-                <td style='padding: 12px; color: #EF4444; font-weight: 900;'>{risk:.1%}%</td>
+                <td style='padding: 12px; color: #EF4444; font-weight: 900;'>{risk_val:.1%}</td>
                 <td style='padding: 12px; font-size: 10px; color: #3B82F6;'>{consensus}</td>
                 <td style='padding: 12px; text-align: right;'>{v_psa}</td>
                 <td style='padding: 12px; text-align: right;'>{v_afp:.2f}</td>
