@@ -8,6 +8,11 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QIcon, QPixmap
 
+# ─────────────────────────────────────────────────────────────────────────
+# GLOBAL PLATFORM VERSION
+# ─────────────────────────────────────────────────────────────────────────
+APP_VERSION = "1.0.4"
+
 # ── Step 1: Industrial Analytical Architecture ──
 from logic.mission_controller import MissionController
 
@@ -55,7 +60,7 @@ class ClinicalApp(QMainWindow):
         self.ai_modal = None 
         
         # Initial status
-        self.update_status("Clinical Environment Calibrated (v1.2.0)")
+        self.update_status(f"Clinical Environment Calibrated (v{APP_VERSION})")
 
     def _setup_ui(self):
         # Master Widget
@@ -302,13 +307,39 @@ class ClinicalApp(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction("Exit", self.close)
 
-        analysis_menu = menubar.addMenu("&Forensics")
-        analysis_menu.addAction("Sync AI Committee", self._handle_train, "Ctrl+T")
-        analysis_menu.addAction("Audit Reports", self._trigger_forensic_audit, "Ctrl+R")
+        analysis_menu = menubar.addMenu("&Performance Graphs")
+        analysis_menu.addAction("KDE Biomarker Distribution", lambda: self._handle_viz("KDE Distribution"))
+        analysis_menu.addAction("Biomarker Correlation Heatmap", lambda: self._handle_viz("Heatmap"))
+        analysis_menu.addAction("Electrochemical Biosensor Wave", lambda: self._handle_viz("Electrochemical Wave"))
+        analysis_menu.addAction("t-SNE Patient Dimensionality Reduction", lambda: self._handle_viz("t-SNE"))
+        analysis_menu.addSeparator()
+        analysis_menu.addAction("Committee ROC-AUC Curves", lambda: self._handle_viz("ROC"))
+        analysis_menu.addAction("AI Committee Comparison (Bars)", lambda: self._handle_viz("Bars"))
+        analysis_menu.addAction("AI Metrics Spider (Radar)", lambda: self._handle_viz("Radar"))
+        analysis_menu.addAction("Precision-Recall Analysis", lambda: self._handle_viz("PR Curve"))
+        analysis_menu.addAction("AI Confusion Matrix", lambda: self._handle_viz("Confusion Matrix"))
+        analysis_menu.addAction("Ensemble Reliability Calibration", lambda: self._handle_viz("Reliability"))
         
         theme_menu = menubar.addMenu("&Theme")
         theme_menu.addAction("Pure Dark (MissionControl)", lambda: self._handle_theme_change("pure_dark"))
         theme_menu.addAction("Pure Light (Laboratory)", lambda: self._handle_theme_change("pure_light"))
+        
+        help_menu = menubar.addMenu("&Help")
+        help_menu.addAction("Check for Updates", self._check_for_updates)
+        help_menu.addAction("Documentation", self._show_documentation)
+
+    def _check_for_updates(self):
+        from utils.update_manager import UpdateManager
+        # Pass status_callback to sync with dashboard alerts
+        updater = getattr(self, '_updater', None)
+        if not updater:
+            self._updater = UpdateManager(parent=self, status_callback=self.update_status, current_version=APP_VERSION)
+        self._updater.check_for_updates(silent=False)
+
+    def _show_documentation(self):
+        from ui.modals.ClinicalDocumentationModal import ClinicalDocumentationModal
+        doc_modal = ClinicalDocumentationModal(parent=self, settings_manager=self.mc.settings_manager, version=APP_VERSION)
+        doc_modal.exec()
 
     def _handle_theme_change(self, theme):
         self.mc.settings_manager.set('theme', theme)
@@ -325,7 +356,32 @@ class ClinicalApp(QMainWindow):
         self.console.log(msg, color)
 
 if __name__ == "__main__":
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    
+    import ctypes
+    from PySide6.QtGui import QIcon
+    import os
+
+    # Force Windows to use our custom Icon on the Taskbar instead of the default Python logo
+    if sys.platform == "win32":
+        try:
+            myappid = 'biorecon.clinical.dashboard.v1'
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        except Exception:
+            pass
+
     app = QApplication(sys.argv)
+    
+    # Apply Global Window & Taskbar Icon
+    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.ico")
+    fallback_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png")
+    
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
+    elif os.path.exists(fallback_path):
+        app.setWindowIcon(QIcon(fallback_path))
+
     window = ClinicalApp()
     window.show()
     sys.exit(app.exec())

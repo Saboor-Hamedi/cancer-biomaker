@@ -45,27 +45,27 @@ The application follows a professional **Six-Hub Mission Controller** architectu
 ## 4. Clinical Workflow Guide
 
 ### Phase 1: Data Integration
-1.  **Upload Dataset**: Use the **Right Control Panel** → `📁 IMPORT CLINICAL DATA`.
+1.  **Upload Dataset**: Use the **Right Control Panel** → `[IMPORT CLINICAL COHORT]`.
 2.  **Audit Verification**: Check the **CLINICAL AUDIT** tab to ensure all biomarker records are ingested correctly.
 3.  **Exploration**: Use the **Dashboard HUD** to see a high-level triage of the current cohort.
 
 ### Phase 2: AI Committee Training
-1.  **Re-Train Models**: Use `🧠 RE-TRAIN COMMITTEE` in the control panel.
-2.  **Stat Audit**: Verify the **ALGORITHM RANKINGS**. Look for high F1-Scores and medal badges (🥇 CHAMPION).
+1.  **Re-Train Models**: Use `[Train AI Model]` in the control panel.
+2.  **Stat Audit**: Verify the **ALGORITHM RANKINGS**. Look for high F1-Scores and stability thresholds.
 3.  **Refreshing**: The system automatically refreshes the **AI Expert Committee** list in the right sidebar.
 
 ### Phase 3: Diagnostic Forensic
 1.  **Individual Diagnosis**: Select a patient in the **Clinical Audit** hub or enter values in **Individual Diagnose**.
 2.  **Consensus Check**: View the updated **Metric Cards** in the Dashboard.
-3.  **Audit Generation**: Click `COHORT FORENSIC` in the left sidebar to launch the background audit mission.
+3.  **Audit Generation**: Click `COHORT FORENSICS` in the left sidebar to launch the background audit mission.
 
 ---
 
 ## 5. Security & Privacy
 *   **Local Inference**: No patient biomarker data ever leaves the local workstation. 
-*   **Secure Reset**: `🧼 SECURE CLINICAL WIPE` allows for immediate purging of all models and session data.
+*   **Secure Reset**: `[Delete AI Model]` allows for immediate purging of all models and session data.
 *   **Audit Trail**: Every deliberation is captured in the **Performance Analysis** hub with ISO-compliant timestamps.
 
 ---
 
-*CONFIDENTIAL CLINICAL DOCUMENTATION v1.1.0 (PySide6 Edition) | BIO-RECON ANALYTICS*
+*CONFIDENTIAL CLINICAL DOCUMENTATION v1.0.4 (PySide6 Edition) | BIO-RECON ANALYTICS*

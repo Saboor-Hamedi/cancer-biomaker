@@ -9,12 +9,13 @@ class ClinicalDocumentationModal(QDialog):
     Renders DOCUMENTATION.md with high-fidelity markdown support.
     """
     
-    def __init__(self, parent=None, settings_manager=None):
+    def __init__(self, parent=None, settings_manager=None, version="1.0.4"):
         super().__init__(parent)
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
         self.settings_manager = settings_manager
+        self.version = version
         
-        self.setWindowTitle("CLINICAL SYSTEM DOCUMENTATION (v1.1.0)")
+        self.setWindowTitle(f"CLINICAL SYSTEM DOCUMENTATION (v{self.version})")
         self.resize(1000, 800)
         
         self._setup_ui()
@@ -38,7 +39,7 @@ class ClinicalDocumentationModal(QDialog):
         h_layout.setContentsMargins(30, 0, 30, 0)
 
         title_v = QVBoxLayout()
-        self.title_lbl = QLabel("📖 CLINICAL DOCUMENTATION")
+        self.title_lbl = QLabel("CLINICAL DOCUMENTATION")
         self.title_lbl.setStyleSheet("font-weight: 900; font-size: 15px; letter-spacing: 1.5px;")
         title_v.addWidget(self.title_lbl)
         
@@ -69,7 +70,7 @@ class ClinicalDocumentationModal(QDialog):
         f_layout = QHBoxLayout(self.footer)
         f_layout.setContentsMargins(30, 0, 30, 0)
         
-        self.status_lbl = QLabel("BIO-RECON ANALYTICS — SECURE CLINICAL WORKSPACE v1.1.0")
+        self.status_lbl = QLabel(f"BIO-RECON ANALYTICS — SECURE CLINICAL WORKSPACE v{self.version}")
         self.status_lbl.setStyleSheet("font-size: 9px; font-weight: 800; color: #52525B;")
         f_layout.addWidget(self.status_lbl)
         

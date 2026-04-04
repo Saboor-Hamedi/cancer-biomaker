@@ -77,12 +77,6 @@ class Sidebar(QFrame):
         
         self._layout.addStretch()
 
-        # ── Dashboard Visibility HUD (Bottom) ──
-        self.lbl_ver = QLabel("VERSION 1.1.0 (QT6)")
-        self.lbl_ver.setStyleSheet("color: #3F3F46; font-size: 10px; font-weight: bold; text-align: center;")
-        self.lbl_ver.setAlignment(Qt.AlignCenter)
-        self._layout.addWidget(self.lbl_ver)
-
     def _create_mission_btn(self, text, icon, color):
         """Creates a high-fidelity clinical mission gateway."""
         btn = QPushButton(f" {icon}  {text}")

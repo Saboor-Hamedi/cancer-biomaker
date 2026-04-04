@@ -54,12 +54,6 @@ class ControlPanel(QFrame):
         
         layout.addStretch()
 
-        # ── Dashboard Visibility HUD (Bottom) ──
-        self.lbl_ver = QLabel("VERSION 1.1.0 (QT6)")
-        self.lbl_ver.setStyleSheet("color: #3F3F46; font-size: 10px; font-weight: bold; text-align: center;")
-        self.lbl_ver.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.lbl_ver)
-
     def _create_action_btn(self, text, icon, signal):
         btn = QPushButton(f" {icon}  {text}")
         btn.setFixedHeight(45)
