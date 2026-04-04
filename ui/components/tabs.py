@@ -8,6 +8,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 import numpy as np
+from ui.styles import Styles
 import re
 
 class MissionHeader(QFrame):
@@ -561,6 +562,9 @@ class AnalysisTab(QWidget):
 
 class InputTab(QWidget):
     """Strategic Diagnosis Consoles."""
+    predict_requested = Signal(dict)
+    reset_requested = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
@@ -621,15 +625,31 @@ class InputTab(QWidget):
         footer.setContentsMargins(15, 20, 15, 20)
         self.btn_clear = QPushButton(" RESET VALUES")
         self.btn_clear.setFixedWidth(140)
+        self.btn_clear.clicked.connect(self.reset_requested.emit)
         footer.addWidget(self.btn_clear)
         footer.addStretch()
+        
         self.btn_predict = QPushButton("RUN AI PREDICTION ENGINE")
         self.btn_predict.setObjectName("PrimaryBtn")
         self.btn_predict.setFixedWidth(240)
+        self.btn_predict.clicked.connect(self._on_predict_clicked)
         footer.addWidget(self.btn_predict)
         content_layout.addLayout(footer)
         
         layout.addWidget(content)
+
+    def _on_predict_clicked(self):
+        """Strategic Data Harvest from the Clinical Entry Console."""
+        data = {}
+        for r in range(self.table.rowCount()):
+            key_item = self.table.item(r, 0)
+            val_item = self.table.item(r, 2)
+            if key_item and val_item:
+                # Key cleaning to match model feature expectation
+                key = key_item.text().upper().replace(" ", "_").replace("__", "_")
+                try: data[key] = float(val_item.text())
+                except: data[key] = val_item.text()
+        self.predict_requested.emit(data)
 
     def apply_theme(self, p):
         if hasattr(self, 'header'): self.header.apply_theme(p)
@@ -668,20 +688,41 @@ class InputTab(QWidget):
             self.table.setItem(i, 2, item)
 
     def set_patient_data(self, data):
-        """Strategic Data Handoff from Clinical Registry."""
-        # Map table data to input fields
+        """Strategic Data Handoff from Clinical Registry — Fuzzy Ingestion Engine."""
+        if not data or not isinstance(data, dict): return
+        
+        # 1. Standardize Laboratory Data (Clean Keys)
+        norm_data = {str(k).upper().replace("_", "").replace(" ", ""): v for k, v in data.items()}
+        
+        # 2. Map Mission Registry to Table
         for i in range(self.table.rowCount()):
-            feature_name = self.table.item(i, 0).text()
-            # Try to find match in the incoming data
-            for key, val in data.items():
-                if str(key).upper().replace("_", " ") in feature_name or feature_name in str(key).upper().replace("_", " "):
-                    # Extract numeric value
-                    match = re.search(r"[-+]?\d*\.\d+|\d+", str(val))
-                    if match:
-                        self.table.item(i, 2).setText(match.group())
-                    else:
-                        self.table.item(i, 2).setText(str(val))
-                    break
+            feature_name = self.table.item(i, 0).text().upper().replace("_", "").replace(" ", "")
+            
+            # Robust Multi-Stage Matching
+            matched_val = None
+            
+            # Match A: Exact Alpha-Numeric Collision
+            if feature_name in norm_data:
+                matched_val = norm_data[feature_name]
+            else:
+                # Match B: Fuzzy Substring Identification (Biomarker Anchors)
+                for k_clean, v in norm_data.items():
+                    if k_clean in feature_name or feature_name in k_clean:
+                        matched_val = v
+                        break
+            
+            if matched_val is not None:
+                # High-Fidelity Extraction (Numeric Only)
+                try:
+                    s_val = str(matched_val)
+                    match = re.search(r"[-+]?\d*\.\d+|\d+", s_val)
+                    clean_val = match.group() if match else s_val
+                    self.table.item(i, 2).setText(clean_val)
+                    
+                    # Highlight synchronized fields for clinical confidence
+                    self.table.item(i, 2).setBackground(QColor("#10B981" if b"dark" not in Styles.PALETTES.get(self.parent().settings_manager.get('theme', 'pure_dark'), b"").lower() else "#064E3B").lighter(150))
+                except:
+                    self.table.item(i, 2).setText(str(matched_val))
 
 class RawDataTab(QWidget):
     """Untransformed Patient Laboratory Database."""
@@ -744,14 +785,50 @@ class RawDataTab(QWidget):
         layout.addWidget(footer)
 
     def update_data(self, df: pd.DataFrame):
+        """High-Fidelity Clinical Filtering: Isolate Primary Biomarkers & Patient Metadata."""
         self.table.setRowCount(0)
-        self.table.setColumnCount(len(df.columns))
-        self.table.setHorizontalHeaderLabels(df.columns)
-        self.table.setRowCount(len(df))
-        for r, (_, row) in enumerate(df.iterrows()):
-            for c, val in enumerate(row):
-                self.table.setItem(r, c, QTableWidgetItem(str(val)))
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        if df.empty: return
+        
+        # 1. Strategic Column Curation: Strict Biomarker Isolation
+        # We focus exclusively on ID and calculated concentrations, explicitly dropping raw electrochemical properties
+        target_cols = []
+        
+        for col in df.columns:
+            c = str(col).upper()
+            
+            # 1a. Patient Metadata
+            if c in ["ID", "SAMPLE ID", "PATIENT ID"]:
+                target_cols.append(col)
+            # 1b. Clinical Concentrations (Ignore Peaks and Ratios)
+            elif any(mk in c for mk in ["PSA", "AFP", "CA125"]):
+                if "PEAK" not in c and "RATIO" not in c:
+                    target_cols.append(col)
+                elif "CONCENTRATION" in c and col not in target_cols:
+                    target_cols.append(col)
+        
+        # Fallback: If no primary signals detected, show first 4 features
+        if not target_cols:
+            target_cols = list(df.columns[:min(4, len(df.columns))])
+            
+        filtered_df = df[target_cols]
+        
+        self.table.setRowCount(0)
+        self.table.setColumnCount(len(filtered_df.columns))
+        self.table.setHorizontalHeaderLabels([str(c).upper().replace("_", " ") for c in filtered_df.columns])
+        
+        for i, row in filtered_df.iterrows():
+            self.table.insertRow(self.table.rowCount())
+            for j, val in enumerate(row):
+                item = QTableWidgetItem(str(val))
+                item.setTextAlignment(Qt.AlignCenter)
+                # Tactical Styling
+                if "RISK" in str(filtered_df.columns[j]).upper():
+                    try: 
+                        v = float(val)
+                        item.setForeground(QColor("#EF4444" if v > 0.5 else "#10B981"))
+                    except: pass
+                self.table.setItem(self.table.rowCount()-1, j, item)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
     def _copy_to_clipboard(self):
         from PySide6.QtGui import QGuiApplication

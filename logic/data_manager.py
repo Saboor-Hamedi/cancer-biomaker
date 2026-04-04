@@ -139,10 +139,14 @@ class DataManager:
         """Load and wash CSV dataset."""
         try:
             df = pd.read_csv(file_path)
-            # Wash columns
+            # Wash and Clean Data Ingress
             df.columns = [str(c).strip() for c in df.columns]
             df.dropna(how='all', inplace=True)
-            df.dropna(axis=1, how='all', inplace=True)
+            
+            # Apply clinical cleaning to all cells
+            for col in df.columns:
+                df[col] = df[col].apply(self.clean_clinical_units)
+            
             self.uploaded_df = df
             self.master_df = df.copy() # Cache master
             return df, None
@@ -167,10 +171,14 @@ class DataManager:
             # 1. Clean Column Names (Strip whitespace)
             df.columns = [str(c).strip() for c in df.columns]
 
-            # 2. Drop completely empty rows (Stop dropping empty cols so placeholders remain)
-            df.dropna(how='all', inplace=True)
+            # 2. Strategic Unit Ingestion (Cell Cleaning)
+            for col in df.columns:
+                df[col] = df[col].apply(self.clean_clinical_units)
 
-            # 3. Clinical Placeholder Injection (Ensure results columns always exist)
+            # 3. Drop completely empty rows
+            df.dropna(how='all', inplace=True)
+            
+            # 4. Clinical Placeholder Injection (Ensure results columns always exist)
             placeholders = ['Prediction', 'Risk_Score', 'Cancer Risk Class']
             for p in placeholders:
                 # Fuzzy check to avoid duplicates if columns exist with slightly different names
@@ -182,6 +190,77 @@ class DataManager:
             return df, None
         except Exception as e:
             return None, str(e)
+
+    def clean_clinical_units(self, val):
+        """High-Fidelity Numeric Extraction: Strip clinical units (pg/ml, U/ml, etc.)"""
+        try:
+            s_val = str(val).strip()
+            # Extract first numeric group (handles "2.5 pg/ml", ">10.0", etc.)
+            match = re.search(r"[-+]?\d*\.\d+|\d+", s_val)
+            if match:
+                return float(match.group())
+            return val
+        except:
+            return val
+
+    def check_physiological_bounds(self, df):
+        """Clinical Range Verification: Flag impossible laboratory results."""
+        violations = []
+        if df is None or df.empty: return violations
+        
+        bounds = {
+            'PSA': (0, 5000),    # pg/ml (Normal is highly variable, but negative is impossible)
+            'AFP': (0, 10000),   # ng/ml
+            'CA125': (0, 5000),  # U/ml
+            'AGE': (0, 125)      # Years
+        }
+
+        for col in df.columns:
+            col_upper = str(col).upper()
+            for key, (vmin, vmax) in bounds.items():
+                if key in col_upper:
+                    series = pd.to_numeric(df[col], errors='coerce')
+                    out_of_bounds = series[(series < vmin) | (series > vmax)].count()
+                    if out_of_bounds > 0:
+                        violations.append(f"Biomarker '{col}': {out_of_bounds} records outside physiological bounds ({vmin}-{vmax}).")
+                    break
+        return violations
+
+    def pre_flight_report(self, df):
+        """Generate a High-Fidelity Data Integrity Report before AI deliberation."""
+        report = {
+            'status': 'PASSED',
+            'severity': 'INFO',
+            'issues': [],
+            'stats': {'rows': len(df) if df is not None else 0, 'cols': len(df.columns) if df is not None else 0}
+        }
+        
+        if df is None or df.empty:
+            return {'status': 'FAILED', 'severity': 'CRITICAL', 'issues': ['No clinical data detected in mission workspace.']}
+
+        # 1. Column Health
+        nan_cols = df.columns[df.isnull().any()].tolist()
+        if nan_cols:
+            report['issues'].append(f"INCOMPLETE DATA: {len(nan_cols)} biomarkers contain missing values.")
+            report['severity'] = 'WARNING'
+            
+        # 2. Physiological Validation
+        bounds_violations = self.check_physiological_bounds(df)
+        if bounds_violations:
+            report['issues'].extend(bounds_violations)
+            report['severity'] = 'WARNING'
+            
+        # 3. Structural Sufficiency
+        if len(df) < 10:
+            report['issues'].append("INSUFFICIENT COHORT: Dataset too small for statistically significant consensus.")
+            report['severity'] = 'WARNING'
+            
+        if report['severity'] == 'CRITICAL':
+            report['status'] = 'FAILED'
+        elif report['severity'] == 'WARNING':
+            report['status'] = 'CAUTION'
+            
+        return report
 
     def validate_data(self, df):
         """Standard validation check."""

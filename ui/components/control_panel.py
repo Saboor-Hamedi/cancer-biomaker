@@ -10,7 +10,8 @@ class ControlPanel(QFrame):
     # Action Signals
     upload_requested = Signal()
     train_requested = Signal()
-    reset_requested = Signal()
+    audit_requested = Signal()
+    purge_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -47,9 +48,9 @@ class ControlPanel(QFrame):
         sec_actions.setStyleSheet("color: #52525B; font-weight: bold; font-size: 10px; letter-spacing: 0.5px;")
         layout.addWidget(sec_actions)
 
-        self.btn_upload = self._create_action_btn(" IMPORT CLINICAL DATA", "📁", self.upload_requested)
-        self.btn_train = self._create_action_btn(" RE-TRAIN COMMITTEE", "🧠", self.train_requested)
-        self.btn_reset = self._create_action_btn(" SECURE CLINICAL WIPE", "🧼", self.reset_requested)
+        self.btn_upload = self._create_action_btn(" IMPORT CLINICAL COHORT", "📁", self.upload_requested)
+        self.btn_train = self._create_action_btn(" Train AI Model", "🧠", self.train_requested)
+        self.btn_purge = self._create_action_btn(" Delete AI Model", "🧼", self.purge_requested)
         
         layout.addStretch()
 
@@ -114,6 +115,6 @@ class ControlPanel(QFrame):
         self.status_hud.setStyleSheet("")
         
         # Dynamic Action Buttons
-        for btn in [self.btn_upload, self.btn_train, self.btn_reset]:
+        for btn in [self.btn_upload, self.btn_train, self.btn_purge]:
             btn.setStyleSheet(f"QPushButton {{ background-color: {p['card_bg']}; color: {txt}; border: 1px solid {p['border']}; border-radius: 8px; font-weight: bold; font-size: 11px; text-align: left; padding-left: 15px; }} "
                              f"QPushButton:hover {{ background-color: {p['border']}; color: {p['accent']}; }}")

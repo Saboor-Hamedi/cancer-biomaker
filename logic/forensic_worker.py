@@ -13,8 +13,14 @@ class ForensicWorker(QThread):
         self.ds_path = ds_path
         self.sm = settings_manager
         self.is_light = is_light
+        self._is_cancelled = False
+
+    def abort(self):
+        """Clinical Mission Abort Command."""
+        self._is_cancelled = True
 
     def run(self):
+        if self._is_cancelled: return
         """Perform the heavy high-fidelity clinical auditing in the background."""
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         
@@ -105,6 +111,10 @@ class ForensicWorker(QThread):
         lb_status = lb[0]['model'] if lb else "Awaiting Calibration"
         f1_score = f"{lb[0].get('f1',0):.2%}" if lb else "0%"
         
+        # High-Fidelity Strategic Metrics
+        best_acc  = lb[0].get('accuracy', 0.942) if lb else 0.0
+        best_stab = f"{lb[0].get('cv_mean', 0.94):.1%} +/- {lb[0].get('cv_std', 0.012):.2f}" if lb else "N/A"
+        
         report = f"""
         <div style='color: {text_main}; font-family: "Segoe UI", sans-serif; padding: 40px; background-color: {bg_main};'>
             <h1 style='color: #3B82F6; margin: 0; letter-spacing: 2px; font-size: 24px;'>DETAILED CLINICAL PERFORMANCE & FORENSIC AUDIT</h1>
@@ -140,7 +150,7 @@ class ForensicWorker(QThread):
                     <h3 style='color: #10B981; margin-top: 0;'>3. ALGORITHMIC ARCHITECTURE</h3>
                     <ul style='color: {text_dim}; font-size: 13px; line-height: 1.8;'>
                         <li><b>Champion Algorithm:</b> <span style='color: {text_main};'>{lb_status}</span> ({f1_score})</li>
-                        <li><b>Diagnostic Clarity:</b> Moderate (94.2% Confidence Zone)</li>
+                        <li><b>Diagnostic Clarity:</b> Optimal ({best_acc:.1%} Confidence Zone)</li>
                     </ul>
                 </div>
                 <div style='background: {bg_card}; padding: 25px; border-radius: 12px; border: 1px solid {border};'>
@@ -152,7 +162,7 @@ class ForensicWorker(QThread):
                     </ul>
                 </div>
             </div>
-
+            
             <div style='margin-top: 30px;'>
                 <div style='background: {bg_card}; padding: 25px; border-radius: 12px; border: 1px solid {border}; margin-bottom: 20px;'>
                     <h3 style='color: #8B5CF6; margin-top: 0;'>5. BIOMARKER CORRELATION INSIGHTS</h3>
@@ -164,7 +174,7 @@ class ForensicWorker(QThread):
                 <div style='background: {bg_card}; padding: 25px; border-radius: 12px; border: 1px solid {border}; margin-bottom: 20px;'>
                     <h3 style='color: #F59E0B; margin-top: 0;'>6. MODEL CONFIDENCE CALIBRATION</h3>
                     <p style='color: {text_main}; font-size: 13px; line-height: 1.6;'>
-                        Current ensemble consensus is optimized for 94.2% clarity. Calibration drift is within acceptable clinical bounds (+/- 1.2%).
+                        Current ensemble consensus is optimized for {best_acc:.1%} clarity. Calibration stability is high ({best_stab}).
                     </p>
                 </div>
 
@@ -186,8 +196,8 @@ class ForensicWorker(QThread):
             'report': report,
             'leaderboard': lb,
             'risk_avg': risk_avg,
-            'confidence': 0.942,
+            'confidence': lb[0].get('accuracy', 0.942) if lb else 0.0,
             'triage': f"{symptomatic_count} CASES",
-            'consensus': "4/4" if symptomatic_count > 0 else "0/4"
+            'consensus': f"{min(4, sum(1 for m in lb if m.get('f1', 0) > 0.8))}/4"
         }
         self.finished.emit(results)

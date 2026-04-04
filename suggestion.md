@@ -1,30 +1,41 @@
-# Clinical XAI Dashboard — Strategic Suggestions v1.1.0
-*Laboratory Analysis & Future Forensic Deliberations — PySide6 Edition*
+# CLINICAL FORENSIC DASHBOARD: STRATEGIC HARDENING PLAN (V1.2.0)
+
+This document outlines the high-fidelity roadmap for transforming the current AI Clinical XAI dashboard into an industrial-grade, research-ready software artifact.
 
 ---
 
-## 1. Professional Laboratory Evolution (Immediate)
-We have successfully finalized the **PySide6 (Qt6)** migration, establishing a high-performance, non-blocking architecture. To further harden this laboratory, I recommend:
+## 1. 🏗️ ARCHITECTURAL DECOUPLING: THE "MISSION CONTROLLER" [COMPLETE ✅]
+**CURRENT STATE:** Refactored — UI and Logic are now fully decoupled.
+**IMPLEMENTED:** 
+- `MissionController.py` serves as the analytical nerve center.
+- `main.py` is a clean UI shell communicating via Signals.
 
-*   **Real-Time SHAP Streaming**: Integrate the **Feature Importance** plot directly into the **Individual Diagnose** tab. This provides the researcher with instant "Reasoning" behind every manual prediction.
-*   **Clinical Data Persistent Hub**: Implement a small **SQLite** or **DuckDB** backend in `DBManager` to store historical cohort audits. This enables **Long-Term Performance Auditing** across different research months.
-*   **CSV/Excel Export Automation**: Automatically generate an **Audit Report (PDF)** every time a cohort forensic mission is completed, saving it to a `/reports` directory.
+## 2. 🛡️ DATA INTEGRITY: "BIOMARKER PRE-FLIGHT VALIDATION" [COMPLETE ✅]
+**CURRENT STATE:** Implemented — Ingress data is now robustly sanitized.
+**IMPLEMENTED:** 
+- `pre_flight_report` checks physiological bounds (PSA, AFP, CA125).
+- Auto-cleaning of clinical units (e.g., stripping "pg/ml") from cells.
+
+## 3. 🧵 THREAD RESILIENCE: "SAFE MISSION CANCELLATION" [COMPLETE ✅]
+**CURRENT STATE:** Implemented — Background deliberations are now fully managed.
+**IMPLEMENTED:** 
+- `TaskRegistry` in `MissionController` tracks all active AI missions.
+- `abort()` signals added to `ModelWorker` and `ForensicWorker` for safe termination.
+- Global `cancel_all_missions()` integrated with "Secure Wipe."
+
+## 4. 🔬 SCIENTIFIC STANDARDIZATION (PEP 484 & XAI DOCS) [COMPLETE ✅]
+**CURRENT STATE:** Standardized — Logic is now research-ready.
+**IMPLEMENTED:** 
+- Strict PEP 484 Type Hinting in `MissionController`.
+- NumPy-style docstrings for all diagnostic and training methods.
+- High-fidelity parameter definitions for clinical transparency.
+
+## 5. 🔍 FORENSIC TRANSPARENCY: "IMPACT LOGGING" [COMPLETE ✅]
+**CURRENT STATE:** Implemented — Audit trail is now active.
+**IMPLEMENTED:** 
+- Introduced a **Biomarker Audit Trail** in the individual diagnosis tab.
+- Log exact contributions of the 3 primary biomarkers (PSA, AFP, CA125) for every prediction in a secure text file.
+- **Benefit:** Provides a "Black Box" recorder for clinical accountability.
 
 ---
-
-## 2. Long-Term Forensic Research
-For future thesis-level delibrations, consider:
-
-*   **Multivariate Biomarker Trajectory**: Expand the **Patient Trajectory** hub to track multiple biomarkers (PSA vs AFP) on the same high-fidelity coordinate system. This identifies "Co-Elevation" symptoms that a single model might miss.
-*   **AI Research Chat Persistence**: Allow the **AI Copilot** to "Read" the current selected patient's biomarker drift. This enables a true **"Clinical Dialogue"** where the researcher can ask "Why did you flag patient P-1024 as high risk?"
-*   **Global Committee Sync**: Implement a way to load external **.pth** or **.h5** models into the expert committee from the **Control Panel** directly.
-
----
-
-## 3. High-Fidelity Professional Packaging
-*   **Production Deployment**: Re-run **PyInstaller** using the new `main.py` entry point. 
-*   **Clinical Branding Persistence**: ensure the `logo.png` is always bundled in the `/dist` assets directory for a professional standalone experience.
-
----
-
-*STRATEGIC SUGGESTIONS v1.1.0 | NO CODES, ONLY LOGIC — BIO-RECON ANALYTICS*
+**EXECUTIVE GOAL:** Stability First. Polish the "Nerve Center" to ensure the AI Committee's deliberations are always accurate, transparent, and responsive.

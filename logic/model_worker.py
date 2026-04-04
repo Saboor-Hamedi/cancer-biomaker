@@ -10,8 +10,14 @@ class ModelWorker(QThread):
         self.task_type = task_type
         self.mm = model_manager
         self.data = data
+        self._is_cancelled = False
+
+    def abort(self):
+        """Strategic AI Mission Abort Command."""
+        self._is_cancelled = True
 
     def run(self):
+        if self._is_cancelled: return
         try:
             if self.task_type == "train":
                 self.status.emit("Initiating Clinical AI Calibration...", "orange")
@@ -25,8 +31,13 @@ class ModelWorker(QThread):
                 self.finished.emit((success, msg))
             elif self.task_type == "predict":
                 self.status.emit("AI Committee Consensus in progress...", "blue")
-                predictions, confidences, risks = self.mm.predict_ensemble(self.data, is_single=True)
-                self.finished.emit((predictions[0], confidences[0], risks[0]))
+                result = self.mm.predict_ensemble(self.data, is_single=True)
+                # Emit full clinical analysis dictionary for forensic logging
+                self.finished.emit(result)
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             self.status.emit(f"Error: {str(e)}", "red")
             self.finished.emit(None)
+
+

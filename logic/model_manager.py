@@ -1057,9 +1057,11 @@ class ModelManager:
         AI Clinical Ensemble: Performs majority voting across all trained models.
         Returns prediction, confidence (agreement level), and risk (mean probability).
         """
-        available_models = ["Random Forest", "Logistic Regression", "SVM", "MLP"]
-        if HAS_XGB:   available_models.append("XGBoost")
-        if HAS_TORCH: available_models.append("GNN")
+        # ── THE CLINICAL AI VESTA COMMITTEE ──
+        # Restricted to exactly 4 members for maximum clinical deliberative clarity
+        available_models = ["Random Forest", "Logistic Regression", "SVM"]
+        if HAS_XGB: available_models.append("XGBoost")
+        else:       available_models.append("MLP")
 
         all_preds = []
         all_probs = []
@@ -1070,38 +1072,39 @@ class ModelManager:
                 model = self.load_model(name)
                 if model is not None:
                     if is_single:
-                        # Normalize single input for consistency and robustness (Zero-Fill safety)
+                        # 1. Prediction Engineering for Individual Samples
                         if isinstance(X_input, dict):
                             full_input = {feat: 0.0 for feat in self.feature_names}
                             for k, v in X_input.items():
-                                # Robust matching (case-insensitive)
                                 k_low = str(k).lower().strip()
                                 for feat in self.feature_names:
                                     if k_low == str(feat).lower().strip() or k_low in str(feat).lower():
-                                        try: full_input[feat] = float(str(v).split()[0]) # Handle "2.5 pg/ml"
+                                        try: full_input[feat] = float(str(v).split()[0])
                                         except: pass
                                         break
                             X_test = pd.DataFrame([full_input])[self.feature_names]
                         elif isinstance(X_input, pd.Series):
-                            # Map series to dataframe columns
                             full_input = {feat: 0.0 for feat in self.feature_names}
                             for feat in self.feature_names:
-                                if feat in X_input:
-                                    full_input[feat] = X_input[feat]
+                                if feat in X_input: full_input[feat] = X_input[feat]
                             X_test = pd.DataFrame([full_input])[self.feature_names]
                         else:
-                            # Fallback reindexing
                             X_test = pd.DataFrame([X_input]).reindex(columns=self.feature_names, fill_value=0.0)
-                        
+
                         pred = model.predict(X_test)[0]
                         prob = model.predict_proba(X_test)[0]
+                        
+                        all_preds.append(int(pred))
+                        all_probs.append(prob)
                     else:
+                        # 2. Batch Clinical Auditing Logic
                         X_test = X_input[self.feature_names]
                         pred = model.predict(X_test)
                         prob = model.predict_proba(X_test)
+                        
+                        all_preds.append(pred)
+                        all_probs.append(prob)
                     
-                    all_preds.append(pred)
-                    all_probs.append(prob)
                     model_names_loaded.append(name)
             except:
                 continue
