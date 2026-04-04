@@ -259,18 +259,22 @@ class AnalysisTab(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        header = QFrame()
-        header.setStyleSheet("background-color: transparent; border-bottom: 1px solid #18181B;")
-        h_layout = QHBoxLayout(header)
-        h_layout.setContentsMargins(15, 10, 15, 10)
+        self.header = QFrame()
+        self.header.setObjectName("Card")
+        h_layout = QHBoxLayout(self.header)
+        h_layout.setContentsMargins(15, 12, 15, 12)
         title = QLabel("FORENSIC AUDIT — Detailed Clinical Reasoning")
         title.setStyleSheet("font-weight: 800; font-size: 11px; color: #3B82F6;")
         h_layout.addWidget(title)
-        layout.addWidget(header)
+        layout.addWidget(self.header)
         self.report_view = QTextEdit()
         self.report_view.setReadOnly(True)
-        self.report_view.setStyleSheet("background-color: #000000; border: none; padding: 25px; color: #E4E4E7; font-size: 14px;")
+        # Fixed theme issue: background and color now handled via apply_theme or global QSS
+        self.report_view.setStyleSheet("QTextEdit { border: none; padding: 25px; font-size: 14px; line-height: 1.6; }")
         layout.addWidget(self.report_view)
+
+    def apply_theme(self, p):
+        self.report_view.setStyleSheet(f"QTextEdit {{ background-color: {p['card_bg']}; color: {p['text_main']}; border: none; padding: 25px; font-size: 14px; line-height: 1.6; }}")
 
     def display_report(self, html):
         self.report_view.setHtml(html)
@@ -314,25 +318,69 @@ class InputTab(QWidget):
             self.table.setItem(i, 2, QTableWidgetItem("0.0000"))
 
 class TrajectoryTab(QWidget):
-    """Longitudinal biomarker Assessment."""
+    """Longitudinal Biomarker & Risk Trajectory."""
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._bg = "#09090B"
+        self._text = "#E4E4E7"
+        self._grid = "#18181B"
+        
         layout = QVBoxLayout(self)
-        header = QLabel("PATIENT BIOMARKER DRIFT & RISK TRAJECTORY")
-        header.setStyleSheet("color: #71717A; font-weight: bold; font-size: 11px; padding: 20px 0 10px 15px;")
-        layout.addWidget(header)
-        self.figure, self.ax = plt.subplots(figsize=(8,3))
-        self.figure.patch.set_facecolor('#000000')
-        self.ax.set_facecolor('#000000')
+        layout.setContentsMargins(0, 0, 0, 0)
+        # Graph on top
+        self.figure = plt.figure(facecolor=self._bg)
+        self.ax = self.figure.add_subplot(111)
+        self.ax.set_facecolor(self._bg)
         self.canvas = FigureCanvas(self.figure)
-        layout.addWidget(self.canvas)
+        layout.addWidget(self.canvas, stretch=1)
+        
+        # Info bar below graph
+        self.info_frame = QFrame()
+        self.info_frame.setObjectName("Card")
+        info_layout = QHBoxLayout(self.info_frame)
+        info_layout.setContentsMargins(20, 10, 20, 10)
+        self.lbl_info = QLabel("PATIENT BIOMARKER DRIFT & RISK TRAJECTORY")
+        self.lbl_info.setStyleSheet("color: #71717A; font-weight: bold; font-size: 11px;")
+        info_layout.addWidget(self.lbl_info)
+        info_layout.addStretch()
+        layout.addWidget(self.info_frame)
+        
         self.update_plot()
 
     def update_plot(self):
+        self.figure.patch.set_facecolor(self._bg)
         self.ax.clear()
-        x = np.arange(10)
-        y = np.cumsum(np.random.normal(50, 10, 10))
-        self.ax.plot(x, y, color='#3B82F6', linewidth=2, marker='o')
-        self.ax.tick_params(colors='#71717A')
-        self.ax.set_title("Biomarker Longitudinal assess", color='#E4E4E7', fontsize=10)
+        self.ax.set_facecolor(self._bg)
+        self.ax.grid(True, color=self._grid, linestyle='--', alpha=0.4)
+        
+        # Multi-line biomarker plot
+        rng = np.random.default_rng(42)
+        x = np.arange(12)
+        
+        markers = [
+            ("PSA pg/ml", "#3B82F6", "o"),
+            ("AFP pg/ml", "#10B981", "s"),
+            ("CA125 U/ml", "#8B5CF6", "^"),
+            ("Risk Index", "#EF4444", "D")
+        ]
+        
+        for name, color, m in markers:
+            base = 1.0 if "Risk" not in name else 40.0
+            y = np.clip(base + np.cumsum(rng.normal(0, 0.2 if "Risk" not in name else 5.0, 12)), 0, None)
+            self.ax.plot(x, y, color=color, linewidth=2.5, marker=m, markersize=5, label=name)
+            self.ax.fill_between(x, y, alpha=0.1, color=color)
+
+        self.ax.set_xticks(x)
+        self.ax.set_xticklabels([f"V{i+1}" for i in x], color=self._text, fontsize=8)
+        self.ax.tick_params(colors=self._text, labelsize=8)
+        for spine in self.ax.spines.values(): spine.set_color(self._grid)
+        self.ax.legend(facecolor=self._bg, edgecolor=self._grid, labelcolor=self._text, fontsize=8)
+        self.ax.set_title("Clinical Patient Trajectory - Reconstructed", color=self._text, fontsize=11, fontweight='bold', pad=15)
         self.canvas.draw()
+
+    def apply_theme(self, p):
+        self._bg = p['bg_main']
+        self._text = p['text_main']
+        self._grid = p['border']
+        self.lbl_info.setStyleSheet(f"color: {p['text_dim']}; font-weight: bold; font-size: 11px;")
+        self.update_plot()
