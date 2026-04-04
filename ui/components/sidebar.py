@@ -23,8 +23,8 @@ class Sidebar(QFrame):
 
     def _setup_ui(self):
         self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(20, 25, 20, 25)
-        self._layout.setSpacing(10)
+        self._layout.setContentsMargins(16, 20, 16, 20)
+        self._layout.setSpacing(8)
 
         # ── Clinical Brand ──
         self.logo_path = os.path.join(self.user_data_path, "logo.png")

@@ -36,17 +36,7 @@ class ControlPanel(QFrame):
         
         # High-Fidelity Interactive Model Registry
         self.models_list = QListWidget()
-        self.models_list.setStyleSheet("""
-            QListWidget { 
-                background-color: transparent; 
-                border: none; 
-                color: #A1A1AA; 
-                font-size: 11px; 
-                outline: none;
-            }
-            QListWidget::item { padding: 4px; border-radius: 4px; }
-            QListWidget::item:selected { background-color: rgba(59, 130, 246, 0.2); color: #FFFFFF; }
-        """)
+        self.models_list.setObjectName("ModelList")
         sh_layout.addWidget(self.models_list)
         
         layout.addWidget(self.status_hud)
@@ -120,7 +110,8 @@ class ControlPanel(QFrame):
         dim = p['text_dim']
         acc = p['accent']
         self.setStyleSheet(f"QFrame#ControlPanel {{ background-color: {p['bg_sidebar']}; border-left: 1px solid {p['border']}; }}")
-        self.status_hud.setStyleSheet(f"QFrame#StatusHUD {{ background-color: rgba(0,0,0,0.15); border: 1px solid {p['border']}; border-radius: 12px; }}")
+        # StatusHUD inherits from global QSS (QFrame#StatusHUD rule in styles.py)
+        self.status_hud.setStyleSheet("")
         
         # Dynamic Action Buttons
         for btn in [self.btn_upload, self.btn_train, self.btn_reset]:

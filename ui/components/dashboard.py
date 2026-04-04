@@ -149,3 +149,7 @@ class Dashboard(QWidget):
 
     def update_data_info(self, rows=0, cols=0, samples=0):
         self.lbl_data_info.setText(f"Master DB: {rows} Records | Features: {cols} | Samples: {samples}")
+
+    def update_stats(self, bg='#09090B', text='#E4E4E7', grid='#27272A'):
+        """Re-render the performance timeline with theme-aware colors."""
+        pass  # Dashboard class uses narrative label, no matplotlib canvas here

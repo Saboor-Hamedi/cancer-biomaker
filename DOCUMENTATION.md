@@ -12,92 +12,60 @@ The core mission is **"Consensus-Driven Diagnosis"**, where no single AI model m
 
 ## 2. Core Technology Stack
 The platform utilizes a state-of-the-art Python-based engineering stack:
-*   **Interface (UI)**: Custom-themed **Tkinter** with a modern "Pure Dark" and "Pure Light" design system using the **Inter** and **Consolas** typography.
+*   **Interface (UI)**: Custom-themed **PySide6 (Qt6)** with a modern "Obsidian Zinc" design system.
 *   **AI Ensemble**: 
     *   **Random Forest**: For robust feature interaction detection.
     *   **SVM (Support Vector Machines)**: For high-dimensional boundary separation.
     *   **XGBoost**: For gradient-boosted diagnostic precision.
     *   **MLP (Multi-Layer Perceptron)**: For neural-pattern recognition.
-    *   **GNN (Graph Neural Network)**: For modeling complex biomarker-to-biomarker correlations.
-*   **XAI (Explainable AI)**: Integrated **SHAP**, **Permutation Importance**, and **Counterfactual Resilience** engines.
-*   **Serialization**: **Joblib** for model persistence and **PyTorch** for graph-based neural weights.
+*   **Threading Engine**: **ForensicWorker (QThread)** for non-blocking high-latency clinical audits.
+*   **Visualization**: **Matplotlib (FigureCanvasQTAgg)** for longitudinal biomarker drift.
+*   **AI Copilot**: Integrated **Multi-AI Research Assistant** (GPT/Claude/Gemini/DeepSeek).
 
 ---
 
-## 3. System Architecture
-The application follows a strict **Controller-Manager-View** (CMV) architecture:
+## 3. System Architecture (Six-Hub Controller)
+The application follows a professional **Six-Hub Mission Controller** architecture:
 
-### A. Logic Layer (Managers)
-*   **ModelManager**: Handles the training, loading, and pre-warming of the AI committee.
-*   **DataManager**: Manages the "Raw-to-Processed" pipeline, including **Outlier Removal** and **Robust Scaling**.
-*   **SettingsManager**: Persists user preferences and theme configurations in `settings_config.json`.
-*   **VelocityManager**: Analyzes longitudinal patient history to calculate biomarker trajectory and risk momentum.
+### A. Strategic Mission Hubs (Tabs)
+1.  **Dashboard HUD**: Central overview with Five-Card metrics (Avg Risk, Confidence, Triage, Consensus, Agreement).
+2.  **Clinical Audit**: Raw forensic registry with full export suite (CSV, Excel, Clipboard).
+3.  **Algorithm Rankings**: Olympic-grade standings with Gold, Silver, and Bronze medal logic.
+4.  **Performance Analysis**: "Black & Whitish" forensic report engine powered by background threads.
+5.  **Individual Diagnose**: Strategic biomarker entry console for manual patient verification.
+6.  **Patient Trajectory**: Longitudinal biomarker drift visualization using high-fidelity plot curves.
 
-### B. Orchestration Layer (Controllers)
-*   **ModelController**: Triggers ensemble training and manages single/batch predictions.
-*   **DataController**: Handles Excel I/O, dataset parsing, and preprocessing dialogs.
-*   **VisualizationController**: Orchestrates the rendering of complex Matplotlib plots inside Tkinter modals.
-
-### C. Visual Layer (Components)
-*   **Dashboard**: The central hub containing the High-Risk Clinical Registry and Metric Cards.
-*   **Sidebar**: Persistent model selection and high-level clinical controls.
-*   **Tabs**: Modular workspace for Input, Data View, AI Consensus, Performance Analysis, and System Logs.
+### B. Logic Layer (Managers)
+*   **ModelManager**: Handles training and calibration of the AI committee.
+*   **DataManager**: Manages the "Raw-to-Processed" pipeline with robust clinical scaling.
+*   **ForensicWorker**: Orbital background thread for generating deep cohort audits without UI freezing.
 
 ---
 
 ## 4. Clinical Workflow Guide
 
 ### Phase 1: Data Integration
-1.  **Upload Dataset**: Use `File → Upload Dataset` (.xlsx).
-2.  **Data Optimization**: Open `Data → Data Optimization`. Here you can toggle **Scaling** (Normalizing biomarker ranges) and **Outlier Removal** (Cleaning noise from the biology).
-3.  **Validation**: Check the **Data View** tab to ensure all patient records are parsed correctly.
+1.  **Upload Dataset**: Use the **Right Control Panel** → `📁 IMPORT CLINICAL DATA`.
+2.  **Audit Verification**: Check the **CLINICAL AUDIT** tab to ensure all biomarker records are ingested correctly.
+3.  **Exploration**: Use the **Dashboard HUD** to see a high-level triage of the current cohort.
 
 ### Phase 2: AI Committee Training
-1.  **Re-Train Models**: Use `Data → Re-Train All Models`.
-2.  **Stat Audit**: After training, verify the **Algorithm Leaderboard**. Look for high F1-Scores and low CV Stability (Variance).
-3.  **Pre-Warming**: The system automatically "warms up" the models into RAM on startup to ensure instant feedback.
+1.  **Re-Train Models**: Use `🧠 RE-TRAIN COMMITTEE` in the control panel.
+2.  **Stat Audit**: Verify the **ALGORITHM RANKINGS**. Look for high F1-Scores and medal badges (🥇 CHAMPION).
+3.  **Refreshing**: The system automatically refreshes the **AI Expert Committee** list in the right sidebar.
 
 ### Phase 3: Diagnostic Forensic
-1.  **Individual Diagnosis**: Select a patient in the **Data View** or enter values in **Input Features**.
-2.  **Consensus Check**: Switch to the **AI Consensus** tab. If models disagree (Red/Green conflict), proceed to forensic audit.
-3.  **XAI Audit**: Use the **Analytics** menu to generate **SHAP Profiles** or **What-If Counterfactuals**. This explains *why* the AI flagged a patient as high-risk.
+1.  **Individual Diagnosis**: Select a patient in the **Clinical Audit** hub or enter values in **Individual Diagnose**.
+2.  **Consensus Check**: View the updated **Metric Cards** in the Dashboard.
+3.  **Audit Generation**: Click `COHORT FORENSIC` in the left sidebar to launch the background audit mission.
 
 ---
 
-## 5. Forensic Diagnostic Modules
-
-### Biomarker Velocity (Longitudinal Tracking)
-The **Patient Trajectory** tab tracks a patient's biomarkers (PSA, AFP, etc.) over time. It calculates "Diagnostic Momentum"—if a biomarker is rising faster than the normal physiological rate, the AI flags it even if the current value is technically "within range."
-
-### AI Committee Consensus
-Unlike standard dashboards, we show the **Specific Vote** of every model. Clinical disagreement is a feature, not a bug; it flags cases that are too ambiguous for AI and require immediate human intervention.
-
-### Performance Analysis (Audit Log)
-Every major diagnostic event is logged in the **Performance Analysis** tab. This provides an ISO-compliant audit trail of every model's statistical reasoning for the current session.
+## 5. Security & Privacy
+*   **Local Inference**: No patient biomarker data ever leaves the local workstation. 
+*   **Secure Reset**: `🧼 SECURE CLINICAL WIPE` allows for immediate purging of all models and session data.
+*   **Audit Trail**: Every deliberation is captured in the **Performance Analysis** hub with ISO-compliant timestamps.
 
 ---
 
-## 6. Performance & Speed Optimization
-
-### Clinical Memory Caching
-To avoid the slowness of Excel files, we implemented a **Double-Layer Cache**:
-1.  **RAM Data Cache**: Once a dataset is loaded, it stays in the RAM. Moving between tabs does not re-read from the disk.
-2.  **Model Pre-Warming**: All AI models are loaded into the memory during the "Initializing environment" phase, making the first diagnostic click near-instant.
-
----
-
-## 7. Security & Privacy
-*   **Local Processing**: No patient data ever leaves your machine. All AI inference is performed locally using the onboard engines.
-*   **Python 2.6+ Security**: The system explicitly allowlists clinical GNN classes to prevent "Arbitrary Code Execution" during model restoration, ensuring a secure environment for medical data.
-
----
-
-## 8. Professional Deployment
-To build a standalone version for clinical workstations:
-1.  Run `python build_exe.py`.
-2.  The executable will be generated in `/dist`.
-3.  All assets, including the `views/models` and `static/` directories, are automatically bundled.
-
----
-
-*CONFIDENTIAL CLINICAL DOCUMENTATION v1.0.8 | BIO-RECON ANALYTICS — NO CODES, ONLY LOGIC*
+*CONFIDENTIAL CLINICAL DOCUMENTATION v1.1.0 (PySide6 Edition) | BIO-RECON ANALYTICS*

@@ -221,7 +221,7 @@ class AIChatModal(QDialog):
         if not prompt: return
         
         provider = self.provider_menu.currentText()
-        api_key = self.key_entry.get().strip()
+        api_key = self.key_entry.text().strip()
         
         if not api_key:
             QMessageBox.critical(self, "CREDENTIAL ERROR", f"Clinical API Key required for {provider}.")

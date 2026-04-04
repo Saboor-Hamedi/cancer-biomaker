@@ -1,82 +1,108 @@
-from PySide6.QtWidgets import (QFrame, QLabel, QHBoxLayout, QGraphicsOpacityEffect, QGraphicsDropShadowEffect)
-from PySide6.QtCore import Qt, QPropertyAnimation, QPoint, QEasingCurve, QTimer, Property
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QGraphicsDropShadowEffect
+from PySide6.QtCore import Qt, QPropertyAnimation, QPoint, QEasingCurve, QTimer
+from PySide6.QtGui import QColor
+
 
 class BannerNotification(QFrame):
-    """Modern Industrial Fully Opaque Obsidian Alert Banner."""
+    """Minimal, theme-aware notification banner — centered text, no border, no icon."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("BannerNotification")
-        self.setFixedHeight(65)
-        self.setFixedWidth(600)
-        
-        # Opaque Obsidian Foundation — Fixed the 'white layer' and 'ghosting'
-        self.setStyleSheet("""
-            QFrame#BannerNotification {
-                background-color: #09090B; 
-                border-radius: 12px;
-                border: 2px solid #3B82F6; 
-            }
-        """)
-        
-        # Depth Shadow
-        self.shadow = QGraphicsDropShadowEffect(self)
-        self.shadow.setBlurRadius(40)
-        self.shadow.setColor(QColor(0, 0, 0, 240))
-        self.shadow.setOffset(0, 10)
-        self.setGraphicsEffect(self.shadow)
+        self.setFixedHeight(48)
+        self.setFixedWidth(520)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(30, 0, 30, 0)
-        
-        self.icon = QLabel("📡")
-        self.icon.setStyleSheet("font-size: 24px;")
-        layout.addWidget(self.icon)
-        
+        # ── Soft shadow only (no border) ──
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(24)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        shadow.setOffset(0, 6)
+        self.setGraphicsEffect(shadow)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 0, 20, 0)
+        layout.setAlignment(Qt.AlignCenter)
+
         self.label = QLabel("SYSTEM STATUS: READY")
-        self.label.setStyleSheet("""
-            color: #FAFAFA; 
-            font-weight: 900; 
-            font-size: 16px; 
-            letter-spacing: 1px;
-            text-transform: uppercase;
-        """)
+        self.label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.label)
-        layout.addStretch()
-        
+
+        # Start hidden and off-screen
+        self._theme = 'pure_dark'
+        self._accent = "#3B82F6"
+        self._apply_style()
         self.hide()
 
-    def notify(self, message, color="#3B82F6"):
-        """Trigger a sliding high-contrast Obsidian alert."""
+    # ─────────────────────────────────────────────────────────
+    # Public API
+    # ─────────────────────────────────────────────────────────
+    def apply_theme(self, palette: dict):
+        """Sync with the active theme palette."""
+        self._theme = 'pure_light' if palette.get('bg_main', '#000') == '#F8FAFC' else 'pure_dark'
+        self._apply_style()
+
+    def notify(self, message: str, color: str = "#3B82F6"):
+        """Slide in a clean notification with theme-aware styling."""
+        self._accent = color
         self.label.setText(message)
-        self.icon.setText("📡" if "#10B981" in color else "⚠️" if "#EF4444" in color else "💡")
-        
-        self.setStyleSheet(f"""
-            QFrame#BannerNotification {{
-                background-color: #09090B;
-                border-radius: 12px;
-                border: 2px solid {color};
-            }}
-        """)
-        
+        self._apply_style(color)
+
         if self.parent():
             px = (self.parent().width() - self.width()) // 2
-            self.move(px, -200) # Start further off-screen
+            self.move(px, -80)
             self.show()
+            self.raise_()
+
             self.anim = QPropertyAnimation(self, b"pos")
-            self.anim.setDuration(750)
-            self.anim.setStartValue(QPoint(px, -200))
-            self.anim.setEndValue(QPoint(px, 30))
-            self.anim.setEasingCurve(QEasingCurve.OutExpo)
+            self.anim.setDuration(600)
+            self.anim.setStartValue(QPoint(px, -80))
+            self.anim.setEndValue(QPoint(px, 10))
+            self.anim.setEasingCurve(QEasingCurve.OutCubic)
             self.anim.start()
-            QTimer.singleShot(4500, self.dismiss)
+
+            QTimer.singleShot(3800, self.dismiss)
 
     def dismiss(self):
-        if not self.isVisible(): return
+        if not self.isVisible():
+            return
         px = self.pos().x()
         self.close_anim = QPropertyAnimation(self, b"pos")
-        self.close_anim.setDuration(500)
+        self.close_anim.setDuration(400)
         self.close_anim.setStartValue(self.pos())
-        self.close_anim.setEndValue(QPoint(px, -200)) # Increased off-screen distance to purge ghosting
+        self.close_anim.setEndValue(QPoint(px, -80))
+        self.close_anim.setEasingCurve(QEasingCurve.InCubic)
         self.close_anim.finished.connect(self.hide)
         self.close_anim.start()
+
+    # ─────────────────────────────────────────────────────────
+    # Internal
+    # ─────────────────────────────────────────────────────────
+    def _apply_style(self, color: str = None):
+        accent = color or self._accent
+        is_light = (self._theme == 'pure_light')
+
+        if is_light:
+            bg       = "#FFFFFF"
+            txt      = "#0F172A"          # Dark text on white
+            font_weight = "700"
+        else:
+            bg       = "#18181B"
+            txt      = "#FAFAFA"
+            font_weight = "800"
+
+        self.setStyleSheet(f"""
+            QFrame#BannerNotification {{
+                background-color: {bg};
+                border-radius: 10px;
+                border: none;
+            }}
+        """)
+
+        self.label.setStyleSheet(f"""
+            color: {txt};
+            font-weight: {font_weight};
+            font-size: 13px;
+            letter-spacing: 0.5px;
+            background: transparent;
+            border: none;
+        """)

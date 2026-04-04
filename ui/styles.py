@@ -111,29 +111,53 @@ class Styles:
             border: 1px solid {p['accent']};
         }}
 
-        /* ── Tabs (Notebook) ── */
-        QTabWidget::pane {{
-            border: 1px solid {p['border']};
-            top: -1px;
-            background-color: {p['bg_main']};
-            border-radius: 12px;
+        /* ── Tabs ── */
+        QTabWidget {{
+            border: none;
         }}
-        
-        QWidget#MainTabs > QWidget {{
+
+        QTabWidget::pane {{
+            border: none;
             background-color: {p['bg_main']};
         }}
 
+        QTabBar {{
+            background-color: {p['bg_sidebar']};
+            border-bottom: 1px solid {p['border']};
+        }}
+
         QTabBar::tab {{
-            background: {p['card_bg']};
-            padding: 10px 20px;
+            background: transparent;
             color: {p['text_dim']};
-            border-bottom: 2px solid transparent;
+            padding: 11px 22px;
+            margin-right: 2px;
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            border: none;
+            border-bottom: 3px solid transparent;
+            min-width: 100px;
+        }}
+
+        QTabBar::tab:hover {{
+            color: {p['text_main']};
+            background-color: {p['bg_main']};
         }}
 
         QTabBar::tab:selected {{
             color: {p['accent']};
-            border-bottom: 2px solid {p['accent']};
-            font-weight: bold;
+            background-color: {p['bg_main']};
+            border-bottom: 3px solid {p['accent']};
+            font-weight: 900;
+        }}
+
+        QTabBar::tab:first {{
+            margin-left: 8px;
+        }}
+
+        QWidget#MainTabs > QWidget {{
+            background-color: {p['bg_main']};
         }}
 
         /* ── Tables (Treeview Upgrade) ── */
@@ -143,6 +167,16 @@ class Styles:
             border-radius: 8px;
             gridline-color: {p['border']};
             outline: none;
+            color: {p['text_main']};
+        }}
+
+        QTableWidget::item {{
+            color: {p['text_main']};
+            border: none;
+        }}
+
+        QTableWidget::item:alternate {{
+            background-color: {p['bg_main']};
         }}
 
         QHeaderView::section {{
@@ -159,7 +193,31 @@ class Styles:
             background-color: {p['accent_glow']};
             color: {p['accent']};
         }}
-        
+
+        /* ── List Widgets (Model List, etc.) ── */
+        QListWidget {{
+            background-color: transparent;
+            border: none;
+            color: {p['text_dim']};
+            font-size: 12px;
+            outline: none;
+        }}
+        QListWidget::item {{
+            padding: 4px 6px;
+            border-radius: 4px;
+            border: none;
+        }}
+        QListWidget::item:selected {{
+            background-color: {p['accent_glow']};
+            color: {p['accent']};
+        }}
+
+        /* ── Status HUD Card ── */
+        QFrame#StatusHUD {{
+            background-color: {p['card_bg']};
+            border: 1px solid {p['border']};
+            border-radius: 12px;
+        }}
         /* ── Industrial Menus ── */
         QMenuBar {{
             background-color: {p['bg_sidebar']};
