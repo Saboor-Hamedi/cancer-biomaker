@@ -14,21 +14,21 @@ class MissionHeader(QFrame):
     """Industrial-Grade Clinical Header for High-Fidelity Modules."""
     def __init__(self, title, subtitle, icon="🤖", color="#3B82F6", parent=None):
         super().__init__(parent)
-        self.setFixedHeight(105)
+        self.setFixedHeight(68)
         self.setObjectName("MissionHeader")
         self.main_layout = QHBoxLayout(self)
-        self.main_layout.setContentsMargins(35, 0, 35, 0)
+        self.main_layout.setContentsMargins(20, 10, 20, 10)
         
         # Text Stack
         text_v = QVBoxLayout()
-        text_v.setSpacing(4)
+        text_v.setSpacing(2)
         
         self.title_lbl = QLabel(f"{icon} {title}")
-        self.title_lbl.setStyleSheet(f"font-weight: 900; font-size: 16px; color: {color}; letter-spacing: 2px;")
+        self.title_lbl.setStyleSheet(f"font-weight: 900; font-size: 14px; color: {color}; letter-spacing: 2px;")
         text_v.addWidget(self.title_lbl)
         
         self.sub_lbl = QLabel(subtitle)
-        self.sub_lbl.setStyleSheet("font-size: 10px; color: #71717A; font-weight: bold; text-transform: uppercase;")
+        self.sub_lbl.setStyleSheet("font-size: 9px; color: #71717A; font-weight: bold; text-transform: uppercase;")
         text_v.addWidget(self.sub_lbl)
         
         self.main_layout.addLayout(text_v)
@@ -47,19 +47,20 @@ class Dashboard(QWidget):
     """Clinical Command HUD — Strategic Overview Hub."""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.setSpacing(0)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         
         # ── 1. Orbital Mission Header ──
         self.header = MissionHeader("CLINICAL COMMAND HUD", "EXECUTIVE MISSION SUMMARY & ENSEMBLE REAL-TIME CALIBRATION", icon="📊", color="#3B82F6")
-        self.layout.addWidget(self.header)
+        layout.addWidget(self.header)
+        layout.addSpacing(10)
 
         # Content Main Hub
         content = QWidget()
         self.content_layout = QVBoxLayout(content)
-        self.content_layout.setContentsMargins(35, 35, 35, 35)
-        self.content_layout.setSpacing(35)
+        self.content_layout.setContentsMargins(0, 20, 0, 0)
+        self.content_layout.setSpacing(25)
 
         # 1. Executive Summary Cards (Top Grid)
         self.cards_layout = QHBoxLayout()
@@ -71,31 +72,42 @@ class Dashboard(QWidget):
         self.card_consensus = self._create_card("ENSEMBLE CONSENSUS", "0/4", "#10B981")
         self.card_agreement = self._create_card("COMMITTEE AGREEMENT", "0%", "#8B5CF6")
         
-        self.content_layout.addLayout(self.cards_layout)
+        self._card_meta = [
+            (self.card_avg_risk, "#EF4444"), (self.card_confidence, "#3B82F6"),
+            (self.card_triage, "#F59E0B"), (self.card_consensus, "#10B981"),
+            (self.card_agreement, "#8B5CF6")
+        ]
         
         # 2. Strategic Visualization (Clinical Drift Timeline)
         self.figure, self.ax = plt.subplots(figsize=(8, 4))
         self.figure.patch.set_facecolor('#000000') 
         self.ax.set_facecolor('#000000')
         self.canvas = FigureCanvas(self.figure)
-        self.content_layout.addWidget(self.canvas)
         
-        self.layout.addWidget(content)
+        # Wrap everything in the content layout
+        self.content_layout.addLayout(self.cards_layout)
+        self.content_layout.addSpacing(15)
+        self.content_layout.addWidget(self.canvas, stretch=1)
+        
+        layout.addWidget(content)
         self.update_stats()
 
     def _create_card(self, title, val, color):
         card = QFrame()
         card.setFixedHeight(110)
         card.setObjectName("StatusHUD")
+        card.setStyleSheet(f"QFrame#StatusHUD {{ border: 1px solid #27272A; border-radius: 0px; background-color: #09090B; }}")
+        
         c_layout = QVBoxLayout(card)
         c_layout.setContentsMargins(15, 15, 15, 15)
         
         t_lbl = QLabel(title)
-        t_lbl.setStyleSheet("font-weight: 800; font-size: 10px; color: #71717A; letter-spacing: 1.0px; border: none; background: transparent;")
+        t_lbl.setStyleSheet("font-weight: 800; font-size: 10px; color: #71717A; letter-spacing: 1.5px; border: none; background: transparent;")
         v_lbl = QLabel(val)
-        v_lbl.setStyleSheet(f"font-weight: 900; font-size: 24px; color: {color}; border: none; background: transparent;")
+        v_lbl.setStyleSheet(f"font-weight: 900; font-size: 26px; color: {color}; border: none; background: transparent; letter-spacing: -0.5px;")
         
         c_layout.addWidget(t_lbl)
+        c_layout.addStretch()
         c_layout.addWidget(v_lbl)
         self.cards_layout.addWidget(card)
         return v_lbl
@@ -136,6 +148,12 @@ class Dashboard(QWidget):
         text = p['text_main']
         grid = p['border']
         self.update_stats(bg=bg, text=text, grid=grid)
+        
+        # Update Dashboard Cards (Glassmorphic Sync)
+        card_qss = f"border: 1px solid {p['border']}; border-radius: 0px; background-color: {p['card_bg']};"
+        for lbl, color in self._card_meta:
+            lbl.parent().setStyleSheet(f"QFrame#StatusHUD {{ {card_qss} }}")
+            lbl.setStyleSheet(f"font-weight: 900; font-size: 26px; color: {color}; border: none; background: transparent; letter-spacing: -0.5px;")
 
 class DataTab(QWidget):
     """Modern Clinical Audit View — High Fidelity Registry."""
@@ -154,6 +172,7 @@ class DataTab(QWidget):
         # 1. Orbital Mission Header
         self.header = MissionHeader("CLINICAL FORENSIC AUDIT", "HIGH-FIDELITY COHORT REGISTRY & BIOMARKER DRIFT ANALYTICS", icon="📂", color="#8B5CF6")
         layout.addWidget(self.header)
+        layout.addSpacing(10)
 
         # ── Tactical Search HUD ──
         self.search_bar = QLineEdit()
@@ -164,7 +183,7 @@ class DataTab(QWidget):
             QLineEdit { 
                 background-color: rgba(0,0,0,0.15); 
                 border: 1px solid #27272A; 
-                border-radius: 8px; 
+                border-radius: 0px; 
                 padding-left: 15px; 
                 color: #FAFAFA;
                 font-size: 11px;
@@ -178,7 +197,7 @@ class DataTab(QWidget):
         # Content Main Hub
         content_container = QWidget()
         content_layout = QVBoxLayout(content_container)
-        content_layout.setContentsMargins(35, 35, 35, 35)
+        content_layout.setContentsMargins(0, 20, 0, 0)
         content_layout.setSpacing(25)
         
         # 2. Forensic Table
@@ -192,16 +211,34 @@ class DataTab(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setAlternatingRowColors(True)
-        self.table.setShowGrid(False)
-        self.table.setObjectName("ClinicalAuditTable")
-        
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.Interactive)
-        header.setSectionResizeMode(10, QHeaderView.Stretch) # Actions gets space
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        # We manually anchor the key ID columns to avoid over-stretching
+        header.setSectionResizeMode(0, QHeaderView.Fixed)
         self.table.setColumnWidth(0, 45) # SEL
+        header.setSectionResizeMode(1, QHeaderView.Interactive)
         self.table.setColumnWidth(1, 100) # ID
         
-        layout.addWidget(self.table)
+        content_layout.addWidget(self.table)
+        
+        # ── Clinical Vitality HUD (Sub-Table Status) ──
+        self.vitality_pan = QFrame()
+        self.vitality_pan.setFixedHeight(45)
+        self.vitality_pan.setStyleSheet("background-color: rgba(59, 130, 246, 0.05); border-top: 1px solid #27272A;")
+        v_layout = QHBoxLayout(self.vitality_pan)
+        v_layout.setContentsMargins(20, 0, 20, 0)
+        
+        self.lbl_row_count = QLabel("0 PATIENTS DETECTED")
+        self.lbl_row_count.setStyleSheet("color: #71717A; font-weight: bold; font-size: 10px; border: none;")
+        v_layout.addWidget(self.lbl_row_count)
+        v_layout.addStretch()
+        
+        self.lbl_last_sync = QLabel("SYNC STATUS: OPTIMAL")
+        self.lbl_last_sync.setStyleSheet("color: #10B981; font-weight: bold; font-size: 10px; border: none;")
+        v_layout.addWidget(self.lbl_last_sync)
+        
+        content_layout.addWidget(self.vitality_pan)
+        layout.addWidget(content_container)
         
         # Connect Selection Bridge
         self.table.itemSelectionChanged.connect(self._handle_selection)
@@ -234,6 +271,7 @@ class DataTab(QWidget):
     def update_data(self, df: pd.DataFrame):
         """High-Fidelity Forensic Ingestion Hub."""
         self.table.setRowCount(0)
+        self.lbl_row_count.setText(f"{len(df)} PATIENTS DETECTED")
         if df.empty: return
         
         # ── 1. Dynamic Column Retrieval ──
@@ -297,7 +335,7 @@ class DataTab(QWidget):
             btn_diag = QPushButton("DIAGNOSE 🎯")
             btn_diag.setCursor(Qt.PointingHandCursor)
             btn_diag.setStyleSheet("""
-                QPushButton { background-color: transparent; border: 1px solid #27272A; border-radius: 4px; color: #3B82F6; font-weight: bold; font-size: 9px; padding: 2px 5px; }
+                QPushButton { background-color: transparent; border: 1px solid #27272A; border-radius: 0px; color: #3B82F6; font-weight: bold; font-size: 9px; padding: 2px 5px; }
                 QPushButton:hover { background-color: rgba(59, 130, 246, 0.1); border-color: #3B82F6; }
             """)
             # Create a closure for the row data
@@ -370,6 +408,7 @@ class DataTab(QWidget):
 
     def apply_theme(self, p):
         if hasattr(self, 'header'): self.header.apply_theme(p)
+        self.table.setStyleSheet(f"QTableWidget {{ background-color: {p['card_bg']}; color: {p['text_main']}; border: 1px solid {p['border']}; }}")
 
 class LeaderboardTab(QWidget):
     """Olympic-Grade rankings Hub."""
@@ -378,20 +417,23 @@ class LeaderboardTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        
+
         # 1. Orbital Mission Header
         self.header = MissionHeader("ALGORITHM RANKINGS", "MULTI-MODEL EVALUATION — Global Clinical Precision Standings", icon="🏆", color="#F59E0B")
         layout.addWidget(self.header)
-
-        # Content Main Hub
+        layout.addSpacing(10)
+        
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(35, 35, 35, 35)
+        content_layout.setContentsMargins(0, 20, 0, 0)
         content_layout.setSpacing(25)
         
         self.table = QTableWidget(0, 10)
-        self.table.setHorizontalHeaderLabels(["RANK", "ALGORITHM", "ACCURACY", "F1 SCORE", "ROC-AUC", "PRECISION", "RECALL", "SPECIFICITY", "CV STABILITY", "BADGE"])
+        self.table.setHorizontalHeaderLabels(["#", "ALGORITHM", "ACCURACY", "F1 SCORE", "ROC-AUC", "PRECISION", "RECALL", "SPECIFICITY", "STABILITY", "BADGE"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
+        self.table.setColumnWidth(0, 45)
+        self.table.verticalHeader().setVisible(False)
         content_layout.addWidget(self.table)
         layout.addWidget(content)
 
@@ -496,22 +538,23 @@ class AnalysisTab(QWidget):
         # 1. Orbital Mission Header
         self.header = MissionHeader("PERFORMANCE ANALYSIS", "FORENSIC NARRATIVE — Neural Clinical Deliberation & Justification", icon="📄", color="#3B82F6")
         layout.addWidget(self.header)
+        layout.addSpacing(10)
 
         # Content Main Hub
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(35, 35, 35, 35)
+        content_layout.setContentsMargins(0, 20, 0, 0)
         content_layout.setSpacing(25)
         
         self.report_view = QTextEdit()
         self.report_view.setReadOnly(True)
-        self.report_view.setStyleSheet("QTextEdit { border: none; padding: 25px; font-size: 14px; line-height: 1.6; }")
+        self.report_view.setStyleSheet("QTextEdit { border: 1px solid #27272A; border-radius: 0px; padding: 25px; font-size: 14px; line-height: 1.6; }")
         content_layout.addWidget(self.report_view)
         layout.addWidget(content)
 
     def apply_theme(self, p):
         if hasattr(self, 'header'): self.header.apply_theme(p)
-        self.report_view.setStyleSheet(f"QTextEdit {{ background-color: {p['card_bg']}; color: {p['text_main']}; border: none; padding: 25px; font-size: 14px; line-height: 1.6; }}")
+        self.report_view.setStyleSheet(f"QTextEdit {{ background-color: {p['card_bg']}; color: {p['text_main']}; border: 1px solid {p['border']}; border-radius: 0px; padding: 25px; font-size: 14px; line-height: 1.6; }}")
 
     def display_report(self, html):
         self.report_view.setHtml(html)
@@ -527,12 +570,13 @@ class InputTab(QWidget):
         # 1. Orbital Mission Header
         self.header = MissionHeader("INDIVIDUAL DIAGNOSE", "TACTILE BIOMARKER ENTRY — Neural Clinical Consensus Lab", icon="🎯", color="#10B981")
         layout.addWidget(self.header)
+        layout.addSpacing(10)
 
         # Content Main Hub
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(45, 35, 45, 35)
-        content_layout.setSpacing(35)
+        content_layout.setContentsMargins(0, 20, 0, 0)
+        content_layout.setSpacing(25)
         
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels(["BIOMARKER NAME", "UNIT", "MEASURED VALUE"])
@@ -550,9 +594,9 @@ class InputTab(QWidget):
 
         # Consensus Display
         self.lbl_consensus_title = QLabel("AI COMMITTEE CONSENSUS")
-        self.lbl_consensus_title.setStyleSheet("color: #71717A; font-weight: bold; font-size: 10px; border: none;")
+        self.lbl_consensus_title.setStyleSheet("font-weight: bold; font-size: 10px; border: none;")
         self.lbl_consensus_val = QLabel("AWAITING DATA")
-        self.lbl_consensus_val.setStyleSheet("color: #E4E4E7; font-weight: 900; font-size: 22px; border: none;")
+        self.lbl_consensus_val.setStyleSheet("font-weight: 900; font-size: 22px; border: none;")
         
         c_vbox = QVBoxLayout()
         c_vbox.addWidget(self.lbl_consensus_title)
@@ -561,9 +605,9 @@ class InputTab(QWidget):
 
         # Risk Display
         self.lbl_risk_title = QLabel("CALIBRATED RISK")
-        self.lbl_risk_title.setStyleSheet("color: #71717A; font-weight: bold; font-size: 10px; border: none;")
+        self.lbl_risk_title.setStyleSheet("font-weight: bold; font-size: 10px; border: none;")
         self.lbl_risk_val = QLabel("—%")
-        self.lbl_risk_val.setStyleSheet("color: #EF4444; font-weight: 900; font-size: 22px; border: none;")
+        self.lbl_risk_val.setStyleSheet("font-weight: 900; font-size: 22px; border: none;")
         
         r_vbox = QVBoxLayout()
         r_vbox.addWidget(self.lbl_risk_title)
@@ -593,9 +637,13 @@ class InputTab(QWidget):
             QFrame#StatusHUD {{ 
                 background-color: {p['card_bg']}; 
                 border: 1px solid {p['border']}; 
-                border-radius: 12px; 
+                border-radius: 0px; 
             }}
         """)
+        self.lbl_consensus_title.setStyleSheet(f"color: {p['text_dim']}; background: transparent;")
+        self.lbl_consensus_val.setStyleSheet(f"color: {p['text_main']}; background: transparent;")
+        self.lbl_risk_title.setStyleSheet(f"color: {p['text_dim']}; background: transparent;")
+        self.lbl_risk_val.setStyleSheet(f"color: {p['danger']}; background: transparent;")
         self.lbl_consensus_title.setStyleSheet(f"color: {p['text_dim']}; font-weight: bold; font-size: 10px; border: none; background: transparent;")
         self.lbl_risk_title.setStyleSheet(f"color: {p['text_dim']}; font-weight: bold; font-size: 10px; border: none; background: transparent;")
 
@@ -642,20 +690,23 @@ class RawDataTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        
+
         # 1. Orbital Mission Header
         self.header = MissionHeader("RAW LABORATORY RECORDS", "UNPROCESSED DATA INGRESS — Strategic Biomarker Source Registry", icon="📑", color="#71717A")
         layout.addWidget(self.header)
+        layout.addSpacing(10)
 
         # Content Main Hub
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(35, 35, 35, 35)
+        content_layout.setContentsMargins(0, 20, 0, 0)
         content_layout.setSpacing(25)
         
         self.table = QTableWidget()
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(False)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         content_layout.addWidget(self.table)
         layout.addWidget(content)
 
@@ -669,7 +720,7 @@ class RawDataTab(QWidget):
         export_style = """
             QPushButton {
                 background-color: transparent; border: 1px solid #3B82F6; color: #3B82F6;
-                padding: 10px 22px; border-radius: 8px; font-weight: bold; font-size: 11px;
+                padding: 10px 22px; border-radius: 0px; font-weight: bold; font-size: 11px;
             }
             QPushButton:hover { background-color: rgba(59, 130, 246, 0.1); border-color: #60A5FA; }
         """
@@ -742,6 +793,7 @@ class RawDataTab(QWidget):
 
 class TrajectoryTab(QWidget):
     """Longitudinal Biomarker & Risk Trajectory."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._bg = "#09090B"
@@ -755,11 +807,12 @@ class TrajectoryTab(QWidget):
         # 1. Orbital Mission Header
         self.header = MissionHeader("PATIENT TRAJECTORY", "LONGITUDINAL MONITORING — Multi-Stage Biomarker DrillsDown", icon="📈", color="#EF4444")
         layout.addWidget(self.header)
+        layout.addSpacing(10)
 
         # Content Main Hub
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(35, 35, 35, 35)
+        content_layout.setContentsMargins(0, 20, 0, 0)
         content_layout.setSpacing(25)
         
         # Graph

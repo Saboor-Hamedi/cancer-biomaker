@@ -74,9 +74,14 @@ class ForensicWorker(QThread):
                  psa_val = afp_val = ca_val = "N/A"
              
              patient_id = str(row.iloc[id_idx])
-             risk_val = (i * 7.1) % 100.0 # Placeholder logic for individual risk mapping
-             consensus = "RF, SVM, XGB" if risk_val > 60 else "RF, LR, SVM"
-             rec = "IMMEDIATE MONITORING" if risk_val > 70 else "ROUTINE FOLLOW-UP"
+             
+             # Forensic Risk & Consensus (Real-world mapping)
+             risk_score = row.get("Risk", row.get("RISK", row.get("risk", 0.0)))
+             try: risk_val = float(risk_score) * 100.0 if float(risk_score) <= 1.0 else float(risk_score)
+             except: risk_val = 0.0
+             
+             consensus = row.get("Consensus", row.get("CONSENSUS", "AI Committee"))
+             rec = "IMMEDIATE MONITORING" if risk_val > 75 else "URGENT REVIEW" if risk_val > 45 else "ROUTINE FOLLOW-UP"
              
              # Forensic Theme Sync
              row_bg = bg_card if i % 2 == 0 else bg_main

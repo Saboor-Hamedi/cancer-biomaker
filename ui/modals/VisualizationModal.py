@@ -279,8 +279,17 @@ class VisualizationModal(QDialog):
         sns.heatmap(cm, annot=True, fmt="d", cmap=cmap, ax=ax,
                     linewidths=1, linecolor=self._border, cbar=False,
                     annot_kws={"size": 20, "weight": "bold", "color": self._text})
-        ax.set_xticklabels(["BENIGN", "MALIGNANT"], color=self._text, fontsize=10)
-        ax.set_yticklabels(["BENIGN", "MALIGNANT"], color=self._text, fontsize=10, rotation=0)
+        
+        # ── Matplotlib Safety: Anchoring Ticks to Labels ──
+        if cm.shape == (2, 2):
+            ax.set_xticks([0.5, 1.5]) 
+            ax.set_xticklabels(["BENIGN", "MALIGNANT"], color=self._text, fontsize=10)
+            ax.set_yticks([0.5, 1.5])
+            ax.set_yticklabels(["BENIGN", "MALIGNANT"], color=self._text, fontsize=10, rotation=0)
+        else:
+            ax.set_xticks(range(cm.shape[1]))
+            ax.set_yticks(range(cm.shape[0]))
+        
         ax.set_xlabel("Predicted Label", color=self._muted)
         ax.set_ylabel("True Label", color=self._muted)
 
@@ -412,7 +421,13 @@ class VisualizationModal(QDialog):
             if mask.any():
                 ax.scatter(embedding[mask, 0], embedding[mask, 1],
                            c=color, alpha=0.7, edgecolors=self._bg, linewidths=0.5, s=45, label=label_text)
+            elif not df.empty:
+                # If no matches found in real data, Plot a small center point to indicate lack of class diversity
+                ax.scatter([0], [0], c=color, alpha=0.1, s=1, label=f"No {label_text} signature")
 
+        # Force axis display even if empty
+        ax.set_xlim(embedding[:,0].min()-1, embedding[:,0].max()+1)
+        ax.set_ylim(embedding[:,1].min()-1, embedding[:,1].max()+1)
         ax.legend(facecolor=self._bg2, edgecolor=self._border, labelcolor=self._text)
 
     # ─────────────────────────────────────────────────────────────────────────

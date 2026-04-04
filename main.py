@@ -93,8 +93,8 @@ class ClinicalApp(QMainWindow):
         # 2. Central Workspace
         # ── Workspace Strategy Hub ──
         self.workspace_layout = QVBoxLayout()
-        self.workspace_layout.setContentsMargins(0, 6, 0, 0)  # 6px top gap from banner
-        self.workspace_layout.setSpacing(6)
+        self.workspace_layout.setContentsMargins(0, 0, 0, 0)
+        self.workspace_layout.setSpacing(0)
 
         # 2a. Tabs Hub
         self.tabs = QTabWidget()
@@ -181,40 +181,34 @@ class ClinicalApp(QMainWindow):
         file_menu = menubar.addMenu("&File")
         file_menu.addAction("Import Clinical Dataset", self._handle_upload, "Ctrl+O")
         file_menu.addSeparator()
-        file_menu.addAction("Export Clinical PDF", lambda: self.update_status("Exporting Forensic PDF...", "blue"))
-        file_menu.addAction("Export Excel Audit", lambda: self.update_status("Exporting Audit CSV...", "blue"))
+        file_menu.addAction("Export Clinical PDF", lambda: self.banner.notify("FORENSIC PDF ENGINE - BETA", "blue"))
+        file_menu.addAction("Export Excel Audit", lambda: self.tab_data._export_to_file("xlsx"), "Ctrl+E")
         file_menu.addSeparator()
         file_menu.addAction("Settings Console", self._on_open_settings, "Ctrl+,")
         file_menu.addAction("Delete Models", self._handle_reset)
         file_menu.addSeparator()
         file_menu.addAction("Exit Workspace", self.close, "Alt+F4")
 
-        # ── Analysis Menu ──
-        analysis_menu = menubar.addMenu("&Analysis")
+        # ── Forensic Research Console (Analysis Hub) ──
+        analysis_menu = menubar.addMenu("&Forensics")
         analysis_menu.addAction("Synchronize AI Committee", self._handle_train, "Ctrl+T")
         analysis_menu.addAction("Consensus Performance Report", self._handle_performance_report, "Ctrl+R")
-        analysis_menu.addAction("Diagnostic Probability Matrix", lambda: self._handle_viz("ROC"), "Ctrl+M")
-        analysis_menu.addAction("Clinical Triage Recommendation", lambda: self._handle_viz("PR Curve"), "Ctrl+G")
         analysis_menu.addSeparator()
-        analysis_menu.addAction("Clinical Confusion Matrix", lambda: self._handle_viz("Confusion Matrix"))
-        analysis_menu.addAction("Precision-Recall Analysis", lambda: self._handle_viz("PR Curve"))
+        # ── Specialized Visualizations ──
+        analysis_menu.addAction("Diagnostic Probability Matrix (ROC)", lambda: self._handle_viz("ROC"), "Ctrl+M")
+        analysis_menu.addAction("Clinical Triage Recommendation (PR)", lambda: self._handle_viz("PR Curve"), "Ctrl+G")
+        analysis_menu.addAction("Biomarker Correlation Map", lambda: self._handle_viz("Heatmap"))
         analysis_menu.addAction("Patient Similarity Map (t-SNE)", lambda: self._handle_viz("t-SNE"))
-
-        # ── Research & Statistics ──
-        # ── Research Lab & Statistics ──
-        research_menu = menubar.addMenu("&Analytics")
-        research_menu.addAction("Feature Importance Plot", self._on_show_importance)
-        research_menu.addAction("Patient Similarity Map (t-SNE)", lambda: self._handle_viz("t-SNE"))
-        research_menu.addSeparator()
-        research_menu.addAction("ROC-AUC Comparison", lambda: self._handle_viz("ROC"))
-        research_menu.addAction("Precision-Recall Curve", lambda: self._handle_viz("PR Curve"))
-        research_menu.addAction("Reliability Calibration Plot", lambda: self._handle_viz("Reliability"))
+        analysis_menu.addSeparator()
+        analysis_menu.addAction("Feature Importance Plot", self._on_show_importance)
+        analysis_menu.addAction("Clinical Confusion Matrix", lambda: self._handle_viz("Confusion Matrix"))
+        analysis_menu.addAction("Reliability Calibration Plot", lambda: self._handle_viz("Reliability"))
 
         # ── Visualization Lab (Direct Visual Hub) ──
         viz_menu = menubar.addMenu("&Visualizations")
         viz_menu.addAction("Biomarker KDE Distribution", lambda: self._handle_viz("KDE Distribution"))
         viz_menu.addAction("Correlation Heatmap",        lambda: self._handle_viz("Heatmap"))
-        viz_menu.addAction("Confusion Matrix",           lambda: self._handle_viz("Matrix"))
+        viz_menu.addAction("Confusion Matrix",           lambda: self._handle_viz("Confusion Matrix"))
 
         # ── Clinical Support (Help) ──
         help_menu = menubar.addMenu("&Help")
@@ -358,16 +352,17 @@ class ClinicalApp(QMainWindow):
                 if os.path.exists(models_dir): shutil.rmtree(models_dir)
                 os.makedirs(models_dir, exist_ok=True)
                 
-                # 3. Clear Data Manager Memory
+                # 3. Clear Data Manager & Model Manager Memory
                 self.data_manager.uploaded_df = None
                 self.data_manager.master_df = None
                 self.data_manager.data_path = None
                 self.last_dataset_path = ""
                 self.settings_manager.set('last_dataset_path', "")
+                self.model_manager.reset_internal_state()
                 
                 # 4. Global UI Reset
                 self.tab_dashboard.update_metrics(confidence=0, risk=0, triage="PURIFIED", consensus="RESET")
-                self.tab_dashboard.update_data_info(0, 0, 0)
+                self.tab_dashboard.update_stats()
                 
                 # Clear all analytical workbenches
                 empty_df = pd.DataFrame()
@@ -377,9 +372,8 @@ class ClinicalApp(QMainWindow):
                 self.tab_input.refresh_features([])
                 
                 # Clear trajectory if applicable
-                if hasattr(self.tab_trajectory, 'ax'):
-                    self.tab_trajectory.ax.clear()
-                    self.tab_trajectory.canvas.draw()
+                if hasattr(self.tab_trajectory, 'update_plot'):
+                    self.tab_trajectory.update_plot()
 
                 # Refresh model inventory (should be empty)
                 self.control_panel.refresh_models(os.path.join(self.user_data_path, "views", "models"))

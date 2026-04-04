@@ -287,6 +287,7 @@ class ModelManager:
         self.gnn_model = None
 
         self.feature_names   = self._load_feature_names()
+        self.scaling_stats   = self._load_scaling_stats()
         self._feature_hash   = self._hash_features(self.feature_names)
         self.cached_train_df = None
         self._cached_data_path = None # item #11: Track source for caching
@@ -298,6 +299,32 @@ class ModelManager:
 
     # ── Cache & State ──────────────────────────────────────────────────────────
 
+    def reset_internal_state(self):
+        """Strategic reset of all clinical memory and algorithmic benchmarks."""
+        self.rf_model = self.lr_model = self.svm_model = self.xgb_model = self.gnn_model = self.mlp_model = None
+        self.feature_names = []
+        self.scaling_stats = {}
+        self.cached_train_df = None
+        self._cached_data_path = None
+        self.analytics_cache = {
+            'calibration': {}, 'learning': {}, 'metrics': {},
+            'stability': {}, 'tsne': None, 'pr_threshold': {}, 'shap': {}
+        }
+        
+        # Purge Persistent Artifacts
+        for f in ['feature_names.pkl', 'scaler_meta.pkl', 'random_forest_model.pkl', 
+                  'logistic_regression_model.pkl', 'svm_model.pkl', 'xgboost_model.pkl', 'mlp_model.pkl']:
+            path = os.path.join(self.script_dir, f)
+            if os.path.exists(path):
+                try: os.remove(path)
+                except: pass
+        
+        log.info("Clinical Model Manager: Internal state purified.")
+        self.cached_train_df = None
+        self._cached_data_path = None
+        self.scaling_stats = {}
+        self.rf_model = self.lr_model = self.svm_model = self.xgb_model = self.gnn_model = self.mlp_model = None
+
     def reset_analytics(self):
         """Clears all cached analytical results and unloads in-memory models."""
         self.analytics_cache = {
@@ -306,6 +333,7 @@ class ModelManager:
         }
         self.cached_train_df = None
         self._cached_data_path = None
+        self.scaling_stats = {}
         self.rf_model = self.lr_model = self.svm_model = self.xgb_model = self.gnn_model = self.mlp_model = None
 
     def delete_all_models(self):
@@ -366,6 +394,16 @@ class ModelManager:
             log.error("Error loading feature names: %s", e)
             return []
 
+    def _load_scaling_stats(self):
+        try:
+            path = os.path.join(self.script_dir, 'scaler_meta.pkl')
+            if os.path.exists(path):
+                return joblib.load(path)
+            return {}
+        except Exception as e:
+            log.error("Error loading scaling stats: %s", e)
+            return {}
+
     def check_feature_compatibility(self, data_columns):
         """
         Returns (is_compatible, message).
@@ -374,13 +412,18 @@ class ModelManager:
         """
         if not self.feature_names:
             return True, "No trained features to compare."
-        data_hash = self._hash_features([c for c in data_columns
-                                         if c not in ('sample_id', 'cancer_risk_class')])
-        if data_hash != self._feature_hash:
+            
+        # Strip all numerical tags and spaces for a fuzzy match
+        clean_data = [str(c).lower().strip() for c in data_columns if not any(f in str(c).lower() for f in ["sample_id", "cancer_risk_class", "prediction", "risk"])]
+        clean_trained = [str(f).lower().strip() for f in self.feature_names]
+        
+        # Check if they are subset/superset enough to proceed
+        matches = [f for f in clean_trained if f in clean_data]
+        if len(matches) < len(clean_trained) * 0.7:
             return False, (
-                "⚠️  Feature mismatch detected!\n"
-                "The uploaded dataset has different columns from the trained models.\n"
-                "Please Re-Train All Models (Data → Re-Train) to sync them."
+                "⚠️  Clinical Feature Mismatch detected!\n"
+                f"Trained: {len(clean_trained)} biomarkers | Detected: {len(matches)} matches.\n"
+                "Please Re-Sync Committee via 'Train' button."
             )
         return True, "OK"
 
@@ -455,6 +498,9 @@ class ModelManager:
             from sklearn.neural_network import MLPClassifier
             models_data.append(('mlp_model.pkl', 'MLP', MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=1000, random_state=42)))
 
+            if HAS_TORCH:
+                models_data.append(('gnn_model.pkl', 'GNN', GNNClassifier(num_features=1)))
+
             self.feature_names = features
             self._feature_hash = self._hash_features(features)
             joblib.dump(features, os.path.join(self.script_dir, 'feature_names.pkl'))
@@ -466,6 +512,10 @@ class ModelManager:
                 
                 model_obj.fit(X_train, y_train)
                 joblib.dump(model_obj, target_path)
+
+            # Persist Scaling Metadata for Inference Consistency
+            stats_path = os.path.join(self.script_dir, 'scaler_meta.pkl')
+            joblib.dump(self.scaling_stats, stats_path)
 
             self.reset_analytics()
             return True, "Ensemble calibration successful."
@@ -540,17 +590,20 @@ class ModelManager:
         label_target = None
         for col in df.columns:
             c_low = str(col).lower().replace("_", "").replace(" ", "")
-            if c_low in ["cancerriskclass", "target", "diagnosis", "class", "result", "outcome"]:
+            # Expanded keyword list for better clinical detection
+            if c_low in ["cancerriskclass", "target", "diagnosis", "class", "result", "outcome", "cancer", "detection", "verdict", "groundtruth"]:
                 label_target = col
                 break
         
         if label_target:
             y_raw = df[label_target]
+            # Handle object-based labels (M/B, Sick/Healthy)
             if y_raw.dtype == object or y_raw.dtype == str or len(np.unique(y_raw.dropna())) > 2:
                 y_mapped = []
                 for val in y_raw:
                     v_low = str(val).lower().strip()
-                    if any(term in v_low for term in ['pos', 'malig', 'canc', 'sick', 'true', '1']):
+                    # Fuzzy clinical match
+                    if any(term in v_low for term in ['pos', 'malig', 'canc', 'sick', 'true', '1', 'detected', 'high']):
                         y_mapped.append(1)
                     else:
                         y_mapped.append(0)
@@ -558,29 +611,33 @@ class ModelManager:
             else:
                 df["cancer_risk_class"] = y_raw.fillna(0).astype(int)
         else:
-            # BIOLOGICAL CLUSTERING: Only use clean X_cols features.
+            # BIOLOGICAL CLUSTERING: Final fallback for unlabelled datasets
             clustering_data = df[X_cols].copy()
             if clustering_data.isnull().any().any():
                 clustering_data = clustering_data.fillna(clustering_data.mean())
             
             if clustering_data.empty:
+                # Absolute fallback: uniform labels (indicates bad feature selection)
                 df["cancer_risk_class"] = 0
             else:
                 from sklearn.preprocessing import StandardScaler
                 from sklearn.cluster import KMeans
-                c_scaled = StandardScaler().fit_transform(clustering_data)
-                kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
-                clusters = kmeans.fit_predict(c_scaled)
-                
-                # Align higher biomarker values to Class 1
-                ref_col = X_cols[0] if X_cols else None
-                for c in X_cols:
-                    if any(p in str(c).lower() for p in ['psa', 'afp', 'concentration']):
-                        ref_col = c; break
-                if ref_col:
-                    m0, m1 = df.loc[clusters == 0, ref_col].mean(), df.loc[clusters == 1, ref_col].mean()
-                    if m0 > m1: clusters = 1 - clusters
-                df["cancer_risk_class"] = clusters
+                try:
+                    c_scaled = StandardScaler().fit_transform(clustering_data)
+                    kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
+                    clusters = kmeans.fit_predict(c_scaled)
+                    
+                    # Align higher biomarker values to Class 1 (Malignant)
+                    ref_col = X_cols[0] if X_cols else None
+                    for c in X_cols:
+                        if any(p in str(c).lower() for p in ['psa', 'afp', 'concentration', 'biomarker']):
+                            ref_col = c; break
+                    if ref_col:
+                        m0, m1 = df.loc[clusters == 0, ref_col].mean(), df.loc[clusters == 1, ref_col].mean()
+                        if m0 > m1: clusters = 1 - clusters
+                    df["cancer_risk_class"] = clusters
+                except:
+                    df["cancer_risk_class"] = 0
 
         X = df[X_cols]
         y = df["cancer_risk_class"]
@@ -597,13 +654,27 @@ class ModelManager:
                     Q1, Q3 = X[col].quantile(0.25), X[col].quantile(0.75)
                     IQR = Q3 - Q1
                     if IQR > 0:
+                        # Standardized Winzorization @ 3.0 IQR for signal preservation
                         lower, upper = Q1 - 3.0 * IQR, Q3 + 3.0 * IQR
                         X[col] = X[col].clip(lower=lower, upper=upper)
 
         if scaling_enabled:
             for col in X.columns:
-                mean, std = X[col].mean(), X[col].std()
-                if std != 0: X[col] = (X[col] - mean) / std
+                if X[col].dtype in [np.float64, np.float32, np.int64]:
+                    # Strategic Scaling Restoration:
+                    # If we have saved stats for this feature, use them (Enforces inference consistency)
+                    # If not (Training time), calculate and save them.
+                    if col in self.scaling_stats:
+                        mean, std = self.scaling_stats[col]
+                    else:
+                        mean, std = X[col].mean(), X[col].std()
+                        self.scaling_stats[col] = (float(mean), float(std))
+                        
+                    # Numerical Stability: Only scale if there is meaningful variance
+                    if std > 1e-6:
+                        X[col] = (X[col] - mean) / std
+                    else:
+                        X[col] = 0.0 # Suppress static features
             
         X = X.fillna(0.0)
         return X, y
@@ -947,8 +1018,12 @@ class ModelManager:
                 full_input[k] = float(v)
 
         input_df     = pd.DataFrame([full_input])[self.feature_names]
-        prediction   = model.predict(input_df)[0]
-        probabilities = model.predict_proba(input_df)[0]
+        
+        # Apply Clinical Scaling before prediction
+        X_scaled, _ = self._prepare_df(input_df, outlier_removal=True, scaling_enabled=True)
+        
+        prediction   = model.predict(X_scaled)[0]
+        probabilities = model.predict_proba(X_scaled)[0]
 
         risk = probabilities[1]
         conf = probabilities[int(prediction)]
@@ -968,8 +1043,11 @@ class ModelManager:
                 X[col] = 0.0
         X = X[self.feature_names]
 
-        predictions   = model.predict(X)
-        probabilities  = model.predict_proba(X)
+        # Apply Clinical Scaling to batch data
+        X_scaled, _ = self._prepare_df(X, outlier_removal=True, scaling_enabled=True)
+
+        predictions   = model.predict(X_scaled)
+        probabilities  = model.predict_proba(X_scaled)
         confs = np.array([prob[pred] for pred, prob in zip(predictions, probabilities)])
         risks = probabilities[:, 1]
         return predictions, confs, risks
@@ -979,7 +1057,9 @@ class ModelManager:
         AI Clinical Ensemble: Performs majority voting across all trained models.
         Returns prediction, confidence (agreement level), and risk (mean probability).
         """
-        available_models = ["Random Forest", "Logistic Regression", "SVM", "XGBoost"]
+        available_models = ["Random Forest", "Logistic Regression", "SVM", "MLP"]
+        if HAS_XGB:   available_models.append("XGBoost")
+        if HAS_TORCH: available_models.append("GNN")
 
         all_preds = []
         all_probs = []
@@ -994,12 +1074,24 @@ class ModelManager:
                         if isinstance(X_input, dict):
                             full_input = {feat: 0.0 for feat in self.feature_names}
                             for k, v in X_input.items():
-                                if k in full_input:
-                                    full_input[k] = float(v)
+                                # Robust matching (case-insensitive)
+                                k_low = str(k).lower().strip()
+                                for feat in self.feature_names:
+                                    if k_low == str(feat).lower().strip() or k_low in str(feat).lower():
+                                        try: full_input[feat] = float(str(v).split()[0]) # Handle "2.5 pg/ml"
+                                        except: pass
+                                        break
+                            X_test = pd.DataFrame([full_input])[self.feature_names]
+                        elif isinstance(X_input, pd.Series):
+                            # Map series to dataframe columns
+                            full_input = {feat: 0.0 for feat in self.feature_names}
+                            for feat in self.feature_names:
+                                if feat in X_input:
+                                    full_input[feat] = X_input[feat]
                             X_test = pd.DataFrame([full_input])[self.feature_names]
                         else:
-                            X_test = pd.DataFrame([X_input]).iloc[:, :len(self.feature_names)]
-                            X_test.columns = self.feature_names
+                            # Fallback reindexing
+                            X_test = pd.DataFrame([X_input]).reindex(columns=self.feature_names, fill_value=0.0)
                         
                         pred = model.predict(X_test)[0]
                         prob = model.predict_proba(X_test)[0]

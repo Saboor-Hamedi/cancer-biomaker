@@ -64,20 +64,20 @@ class Styles:
         QFrame#Card {{
             background-color: {p['card_bg']};
             border: 1px solid {p['border']};
-            border-radius: 12px;
+            border-radius: 0px;
         }}
         
         QFrame#RiskCard_DANGER {{
             background-color: {p['card_bg']};
             border: 1px solid {p['danger']};
-            border-radius: 12px;
+            border-radius: 0px;
         }}
 
         /* ── Buttons (Premium Aesthetic) ── */
         QPushButton {{
             background-color: {p['card_bg']};
             border: 1px solid {p['border']};
-            border-radius: 6px;
+            border-radius: 0px;
             padding: 8px 16px;
             color: {p['text_main']};
             font-weight: 500;
@@ -102,7 +102,7 @@ class Styles:
         QLineEdit, QSpinBox, QComboBox {{
             background-color: {p['bg_main']};
             border: 1px solid {p['border']};
-            border-radius: 6px;
+            border-radius: 0px;
             padding: 6px;
             color: {p['text_main']};
         }}
@@ -123,21 +123,22 @@ class Styles:
 
         QTabBar {{
             background-color: {p['bg_sidebar']};
-            border-bottom: 1px solid {p['border']};
+            border-bottom: 2px solid {p['border']};
         }}
 
         QTabBar::tab {{
             background: transparent;
             color: {p['text_dim']};
-            padding: 11px 22px;
-            margin-right: 2px;
+            padding: 12px 24px;
+            margin-right: 0px;
             font-family: 'Inter', 'Segoe UI', sans-serif;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
             border: none;
             border-bottom: 3px solid transparent;
-            min-width: 100px;
+            min-width: 120px;
         }}
 
         QTabBar::tab:hover {{
@@ -164,7 +165,7 @@ class Styles:
         QTableWidget, QTreeView {{
             background-color: {p['card_bg']};
             border: 1px solid {p['border']};
-            border-radius: 8px;
+            border-radius: 0px;
             gridline-color: {p['border']};
             outline: none;
             color: {p['text_main']};
@@ -204,7 +205,7 @@ class Styles:
         }}
         QListWidget::item {{
             padding: 4px 6px;
-            border-radius: 4px;
+            border-radius: 0px;
             border: none;
         }}
         QListWidget::item:selected {{
@@ -216,7 +217,7 @@ class Styles:
         QFrame#StatusHUD {{
             background-color: {p['card_bg']};
             border: 1px solid {p['border']};
-            border-radius: 12px;
+            border-radius: 0px;
         }}
         /* ── Industrial Menus ── */
         QMenuBar {{
@@ -228,7 +229,7 @@ class Styles:
         QMenuBar::item {{
             background: transparent;
             padding: 8px 12px;
-            border-radius: 4px;
+            border-radius: 0px;
         }}
         QMenuBar::item:selected {{
             background-color: {p['bg_main']};
@@ -238,7 +239,7 @@ class Styles:
             background-color: {p['bg_sidebar']};
             color: {p['text_main']};
             border: 1px solid {p['border']};
-            border-radius: 8px;
+            border-radius: 0px;
             padding: 5px 0;
         }}
         QMenu::item {{
@@ -258,12 +259,12 @@ class Styles:
         QProgressBar {{
             background-color: {p['card_bg']};
             border: 1px solid {p['border']};
-            border-radius: 4px;
+            border-radius: 0px;
             text-align: center;
         }}
 
         QProgressBar::chunk {{
             background-color: {p['accent']};
-            border-radius: 3px;
+            border-radius: 0px;
         }}
         """
