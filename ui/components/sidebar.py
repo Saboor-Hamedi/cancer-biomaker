@@ -52,7 +52,7 @@ class Sidebar(QFrame):
         # ── Tactical Missions ──
         # 🎯 Mission 1: Individual Diagnose (Input Tab)
         self.btn_diag = self._create_mission_btn(" INDIVIDUAL DIAGNOSE", "🎯", "#3B82F6")
-        self.btn_diag.clicked.connect(lambda: self.tab_changed.emit(4))
+        self.btn_diag.clicked.connect(lambda: self.tab_changed.emit(5))
         
         # 📊 Mission 2: Cohort Forensics (Performance Report)
         self.btn_cohort = self._create_mission_btn(" COHORT FORENSICS", "📊", "#8B5CF6")

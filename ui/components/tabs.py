@@ -1,24 +1,69 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, 
                              QTableWidgetItem, QHeaderView, QPushButton, QLabel, 
-                             QFrame, QTextEdit, QTabWidget, QSpacerItem, QSizePolicy)
+                             QFrame, QTextEdit, QTabWidget, QSpacerItem, QSizePolicy,
+                             QLineEdit)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 import numpy as np
+import re
+
+class MissionHeader(QFrame):
+    """Industrial-Grade Clinical Header for High-Fidelity Modules."""
+    def __init__(self, title, subtitle, icon="🤖", color="#3B82F6", parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(105)
+        self.setObjectName("MissionHeader")
+        self.main_layout = QHBoxLayout(self)
+        self.main_layout.setContentsMargins(35, 0, 35, 0)
+        
+        # Text Stack
+        text_v = QVBoxLayout()
+        text_v.setSpacing(4)
+        
+        self.title_lbl = QLabel(f"{icon} {title}")
+        self.title_lbl.setStyleSheet(f"font-weight: 900; font-size: 16px; color: {color}; letter-spacing: 2px;")
+        text_v.addWidget(self.title_lbl)
+        
+        self.sub_lbl = QLabel(subtitle)
+        self.sub_lbl.setStyleSheet("font-size: 10px; color: #71717A; font-weight: bold; text-transform: uppercase;")
+        text_v.addWidget(self.sub_lbl)
+        
+        self.main_layout.addLayout(text_v)
+        self.main_layout.addStretch()
+        
+    def apply_theme(self, p):
+        self.setStyleSheet(f"""
+            QFrame#MissionHeader {{ 
+                background-color: {p['bg_sidebar']}; 
+                border-bottom: 2px solid {p['border']}; 
+            }}
+        """)
+        self.sub_lbl.setStyleSheet(f"font-size: 10px; color: {p['text_dim']}; font-weight: bold; text-transform: uppercase;")
 
 class Dashboard(QWidget):
     """Clinical Command HUD — Strategic Overview Hub."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(25, 25, 25, 25)
-        self.layout.setSpacing(25)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(0)
         
+        # ── 1. Orbital Mission Header ──
+        self.header = MissionHeader("CLINICAL COMMAND HUD", "EXECUTIVE MISSION SUMMARY & ENSEMBLE REAL-TIME CALIBRATION", icon="📊", color="#3B82F6")
+        self.layout.addWidget(self.header)
+
+        # Content Main Hub
+        content = QWidget()
+        self.content_layout = QVBoxLayout(content)
+        self.content_layout.setContentsMargins(35, 35, 35, 35)
+        self.content_layout.setSpacing(35)
+
         # 1. Executive Summary Cards (Top Grid)
         self.cards_layout = QHBoxLayout()
-        self.cards_layout.setSpacing(15)
+        self.cards_layout.setSpacing(20)
         
         self.card_avg_risk = self._create_card("AVG CLINICAL RISK", "0.0%", "#EF4444")
         self.card_confidence = self._create_card("MODELS CONFIDENCE", "0.0%", "#3B82F6")
@@ -26,27 +71,29 @@ class Dashboard(QWidget):
         self.card_consensus = self._create_card("ENSEMBLE CONSENSUS", "0/4", "#10B981")
         self.card_agreement = self._create_card("COMMITTEE AGREEMENT", "0%", "#8B5CF6")
         
-        self.layout.addLayout(self.cards_layout)
+        self.content_layout.addLayout(self.cards_layout)
         
         # 2. Strategic Visualization (Clinical Drift Timeline)
         self.figure, self.ax = plt.subplots(figsize=(8, 4))
         self.figure.patch.set_facecolor('#000000') 
         self.ax.set_facecolor('#000000')
         self.canvas = FigureCanvas(self.figure)
-        self.layout.addWidget(self.canvas)
+        self.content_layout.addWidget(self.canvas)
+        
+        self.layout.addWidget(content)
         self.update_stats()
 
     def _create_card(self, title, val, color):
         card = QFrame()
         card.setFixedHeight(110)
-        card.setStyleSheet("QFrame { background-color: #09090B; border: 1px solid #18181B; border-radius: 12px; }")
+        card.setObjectName("StatusHUD")
         c_layout = QVBoxLayout(card)
         c_layout.setContentsMargins(15, 15, 15, 15)
         
         t_lbl = QLabel(title)
-        t_lbl.setStyleSheet("font-weight: 800; font-size: 10px; color: #71717A; letter-spacing: 1px; border: none;")
+        t_lbl.setStyleSheet("font-weight: 800; font-size: 10px; color: #71717A; letter-spacing: 1.0px; border: none; background: transparent;")
         v_lbl = QLabel(val)
-        v_lbl.setStyleSheet(f"font-weight: 900; font-size: 24px; color: {color}; border: none;")
+        v_lbl.setStyleSheet(f"font-weight: 900; font-size: 24px; color: {color}; border: none; background: transparent;")
         
         c_layout.addWidget(t_lbl)
         c_layout.addWidget(v_lbl)
@@ -65,7 +112,7 @@ class Dashboard(QWidget):
         agreement_pct = (num_agree / 4.0) * 100
         self.card_agreement.setText(f"{agreement_pct:.0f}%")
 
-    def update_stats(self, bg='#000000', text='#E4E4E7', grid='#18181B'):
+    def update_stats(self, bg='#09090B', text='#E4E4E7', grid='#18181B'):
         """Render the performance timeline with theme-aware colors."""
         self.figure.patch.set_facecolor(bg)
         self.ax.clear()
@@ -78,8 +125,17 @@ class Dashboard(QWidget):
         self.ax.tick_params(colors=text, labelsize=8)
         for spine in self.ax.spines.values(): spine.set_color(grid)
         self.ax.set_title("Neural Performance Calibration Timeline",
-                          color=text, fontsize=11, fontweight='bold')
+                          color=text, fontsize=11, fontweight='bold', pad=15)
+        self.figure.tight_layout()
         self.canvas.draw()
+
+    def apply_theme(self, p):
+        """Strategic UI Sync."""
+        if hasattr(self, 'header'): self.header.apply_theme(p)
+        bg = p['bg_main']
+        text = p['text_main']
+        grid = p['border']
+        self.update_stats(bg=bg, text=text, grid=grid)
 
 class DataTab(QWidget):
     """Modern Clinical Audit View — High Fidelity Registry."""
@@ -93,26 +149,44 @@ class DataTab(QWidget):
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         
-        # 1. Header
-        self.header = QFrame()
-        self.header.setFixedHeight(60)
-        self.header.setObjectName("Card")
-        h_layout = QHBoxLayout(self.header)
-        h_layout.setContentsMargins(25, 0, 25, 0)
-        
-        lbl = QLabel("CLINICAL FORENSIC AUDIT — COHORT REGISTRY")
-        lbl.setStyleSheet("font-weight: 900; font-size: 12px; letter-spacing: 1.5px;")
-        h_layout.addWidget(lbl)
-        h_layout.addStretch()
+        # 1. Orbital Mission Header
+        self.header = MissionHeader("CLINICAL FORENSIC AUDIT", "HIGH-FIDELITY COHORT REGISTRY & BIOMARKER DRIFT ANALYTICS", icon="📂", color="#8B5CF6")
         layout.addWidget(self.header)
 
+        # ── Tactical Search HUD ──
+        self.search_bar = QLineEdit()
+        self.search_bar.setPlaceholderText("🔍 SCAN COHORT ID...")
+        self.search_bar.setFixedWidth(240)
+        self.search_bar.setFixedHeight(38)
+        self.search_bar.setStyleSheet("""
+            QLineEdit { 
+                background-color: rgba(0,0,0,0.15); 
+                border: 1px solid #27272A; 
+                border-radius: 8px; 
+                padding-left: 15px; 
+                color: #FAFAFA;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QLineEdit:focus { border-color: #3B82F6; }
+        """)
+        self.search_bar.textChanged.connect(self._handle_search)
+        self.header.main_layout.addWidget(self.search_bar)
+
+        # Content Main Hub
+        content_container = QWidget()
+        content_layout = QVBoxLayout(content_container)
+        content_layout.setContentsMargins(35, 35, 35, 35)
+        content_layout.setSpacing(25)
+        
         # 2. Forensic Table
         self.table = QTableWidget()
-        self.table.setColumnCount(10)
+        self.table.setColumnCount(11)
         self.table.setHorizontalHeaderLabels([
-            "SAMPLE ID", "PSA", "AFP", "CA125", "PREDICTION",
-            "RISK SCORE", "CANCER CLASS", "CONFIDENCE", "CONSENSUS", "AI REASONING"
+            "SEL", "SAMPLE ID", "PSA", "AFP", "CA125", "PREDICTION",
+            "RISK SCORE", "CANCER CLASS", "CONFIDENCE", "CONSENSUS", "ACTIONS"
         ])
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -123,8 +197,9 @@ class DataTab(QWidget):
         
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Interactive)
-        header.setSectionResizeMode(9, QHeaderView.Stretch) # Reasoning gets space
-        self.table.setColumnWidth(0, 100)
+        header.setSectionResizeMode(10, QHeaderView.Stretch) # Actions gets space
+        self.table.setColumnWidth(0, 45) # SEL
+        self.table.setColumnWidth(1, 100) # ID
         
         layout.addWidget(self.table)
         
@@ -135,16 +210,24 @@ class DataTab(QWidget):
         footer = QFrame()
         f_layout = QHBoxLayout(footer)
         f_layout.setContentsMargins(15, 10, 15, 10)
-        btn_copy = QPushButton("Copy Selected")
+        export_style = """
+            QPushButton { background-color: #18181B; color: #E4E4E7; border: 1px solid #27272A; border-radius: 6px; padding: 5px 15px; font-weight: bold; font-size: 11px; }
+            QPushButton:hover { background-color: #27272A; border-color: #3B82F6; }
+            QPushButton:pressed { background-color: #09090B; }
+        """
+        btn_copy = QPushButton(" 📋 Copy Table")
         btn_copy.setFixedWidth(140)
+        btn_copy.setStyleSheet(export_style)
         btn_copy.clicked.connect(self._copy_to_clipboard)
         f_layout.addWidget(btn_copy)
         f_layout.addStretch()
-        btn_csv = QPushButton("Export CSV")
-        btn_csv.setObjectName("PrimaryBtn")
+        btn_csv = QPushButton(" 📄 Export CSV")
+        btn_csv.setStyleSheet(export_style.replace("#3B82F6", "#10B981"))
+        btn_csv.clicked.connect(lambda: self._export_to_file("csv"))
         f_layout.addWidget(btn_csv)
-        btn_excel = QPushButton("Export Excel")
-        btn_excel.setObjectName("PrimaryBtn")
+        btn_excel = QPushButton(" 💹 Export Excel")
+        btn_excel.setStyleSheet(export_style.replace("#3B82F6", "#8B5CF6"))
+        btn_excel.clicked.connect(lambda: self._export_to_file("xlsx"))
         f_layout.addWidget(btn_excel)
         layout.addWidget(footer)
 
@@ -153,56 +236,90 @@ class DataTab(QWidget):
         self.table.setRowCount(0)
         if df.empty: return
         
-        # ── 1. Column Identity Retrieval ──
+        # ── 1. Dynamic Column Retrieval ──
         cols = [str(c).upper() for c in df.columns]
         
-        # Mapping Clinical Constants
-        psa_idx = cols.index("PSA_PG_PER_ML") if "PSA_PG_PER_ML" in cols else -1
-        afp_idx = cols.index("AFP_PG_PER_ML") if "AFP_PG_PER_ML" in cols else -1
-        ca_idx = cols.index("CA125_U_PER_ML") if "CA125_U_PER_ML" in cols else -1
-        id_idx = cols.index("SAMPLE_ID") if "SAMPLE_ID" in cols else 0
+        # Mapping Clinical Markers (Fuzzy Match)
+        psa_idx = next((i for i, c in enumerate(cols) if "PSA" in c), -1)
+        afp_idx = next((i for i, c in enumerate(cols) if "AFP" in c), -1)
+        ca_idx = next((i for i, c in enumerate(cols) if "CA125" in c), -1)
+        id_idx = next((i for i, c in enumerate(cols) if "ID" in c or "PATIENT" in c), 0)
         
         # Mapping AI Forensics
-        diag_idx = cols.index("PREDICTION") if "PREDICTION" in cols else -1
-        risk_idx = cols.index("RISK_SCORE") if "RISK_SCORE" in cols else -1
-        class_idx = cols.index("CANCER RISK CLASS") if "CANCER RISK CLASS" in cols else -1
-        conf_idx = cols.index("CONFIDENCE") if "CONFIDENCE" in cols else -1
-        cons_idx = cols.index("CONSENSUS_COUNT") if "CONSENSUS_COUNT" in cols else -1
-        reason_idx = cols.index("REASONING") if "REASONING" in cols else -1
+        diag_idx = next((i for i, c in enumerate(cols) if "PREDICTION" in c), -1)
+        risk_idx = next((i for i, c in enumerate(cols) if "RISK" in c), -1)
+        class_idx = next((i for i, c in enumerate(cols) if "CLASS" in c), -1)
+        conf_idx = next((i for i, c in enumerate(cols) if "CONFIDENCE" in c), -1)
+        cons_idx = next((i for i, c in enumerate(cols) if "CONSENSUS" in c), -1)
+        reason_idx = next((i for i, c in enumerate(cols) if "REASONING" in c), -1)
         
         self.table.setRowCount(len(df))
         for r_idx, (idx, row) in enumerate(df.iterrows()):
-            # Column 0: Sample ID
-            id_val = str(row.iloc[id_idx])
-            self.table.setItem(r_idx, 0, QTableWidgetItem(f"P-{id_val}"))
-            
-            # Markers
-            self.table.setItem(r_idx, 1, QTableWidgetItem(f"{float(row.iloc[psa_idx]):.2f}" if psa_idx != -1 else "0.0"))
-            self.table.setItem(r_idx, 2, QTableWidgetItem(f"{float(row.iloc[afp_idx]):.2f}" if afp_idx != -1 else "0.0"))
-            self.table.setItem(r_idx, 3, QTableWidgetItem(f"{float(row.iloc[ca_idx]):.2f}" if ca_idx != -1 else "0.0"))
+            # 0. Selection Checkbox
+            chk_item = QTableWidgetItem()
+            chk_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            chk_item.setCheckState(Qt.Unchecked)
+            self.table.setItem(r_idx, 0, chk_item)
 
-            # Prediction Hub
+            # 1. ID
+            id_val = str(row.iloc[id_idx]) if id_idx != -1 else str(idx)
+            self.table.setItem(r_idx, 1, QTableWidgetItem(f"P-{id_val}"))
+            
+            # Biomarkers (Safe float cast)
+            for i, c_idx in enumerate([psa_idx, afp_idx, ca_idx], 2):
+                val = "0.00"
+                if c_idx != -1:
+                    try: val = f"{float(row.iloc[c_idx]):.2f}"
+                    except: val = str(row.iloc[c_idx])
+                self.table.setItem(r_idx, i, QTableWidgetItem(val))
+
+            # AI Logic
             pred = row.iloc[diag_idx] if diag_idx != -1 else "N/A"
             p_item = QTableWidgetItem(str(pred))
-            p_item.setForeground(QColor("#EF4444") if str(pred).upper() == "POSITIVE" else QColor("#10B981"))
-            self.table.setItem(r_idx, 4, p_item)
+            if str(pred).upper() in ["POSITIVE", "1", "1.0", "MALIGNANT"]:
+                p_item.setForeground(QColor("#EF4444"))
+            else:
+                p_item.setForeground(QColor("#10B981"))
+            self.table.setItem(r_idx, 5, p_item)
 
-            # Deep Metrics
             try:
                 risk_val = float(row.iloc[risk_idx]) if risk_idx != -1 else 0.0
-                risk_str = f"{risk_val:.2%}"
-            except (ValueError, TypeError):
-                risk_str = str(row.iloc[risk_idx]) if risk_idx != -1 else "N/A"
-            self.table.setItem(r_idx, 5, QTableWidgetItem(risk_str))
+                risk_str = f"{risk_val:.2%}" if risk_val <= 1.0 else f"{risk_val:.1f}%"
+            except:
+                risk_str = str(row.iloc[risk_idx]) if risk_idx != -1 else "0%"
+            self.table.setItem(r_idx, 6, QTableWidgetItem(risk_str))
             
-            class_val = str(row.iloc[class_idx]) if class_idx != -1 else ""
-            c_item = QTableWidgetItem(class_val)
-            c_item.setForeground(QColor("#F59E0B") if class_val else QColor("#71717A"))
-            self.table.setItem(r_idx, 6, c_item)
+            self.table.setItem(r_idx, 7, QTableWidgetItem(str(row.iloc[class_idx]) if class_idx != -1 else ""))
+            self.table.setItem(r_idx, 8, QTableWidgetItem(f"{row.iloc[conf_idx]:.3f}" if conf_idx != -1 else "1.000"))
+            self.table.setItem(r_idx, 9, QTableWidgetItem(str(row.iloc[cons_idx]) if cons_idx != -1 else "Batch"))
             
-            self.table.setItem(r_idx, 7, QTableWidgetItem(f"{row.iloc[conf_idx]:.3f}" if conf_idx != -1 else "1.000"))
-            self.table.setItem(r_idx, 8, QTableWidgetItem(str(row.iloc[cons_idx]) if cons_idx != -1 else "3"))
-            self.table.setItem(r_idx, 9, QTableWidgetItem(str(row.iloc[reason_idx]) if reason_idx != -1 else "No deliberation log."))
+            # 10. Actions Hub
+            btn_diag = QPushButton("DIAGNOSE 🎯")
+            btn_diag.setCursor(Qt.PointingHandCursor)
+            btn_diag.setStyleSheet("""
+                QPushButton { background-color: transparent; border: 1px solid #27272A; border-radius: 4px; color: #3B82F6; font-weight: bold; font-size: 9px; padding: 2px 5px; }
+                QPushButton:hover { background-color: rgba(59, 130, 246, 0.1); border-color: #3B82F6; }
+            """)
+            # Create a closure for the row data
+            current_row_data = {self.table.horizontalHeaderItem(c).text(): self.table.item(r_idx, c).text() if self.table.item(r_idx, c) else "" for c in range(10)}
+            btn_diag.clicked.connect(lambda checked=False, r=current_row_data: self.row_selected.emit(r))
+            self.table.setCellWidget(r_idx, 10, btn_diag)
+
+    def apply_theme(self, p):
+        if hasattr(self, 'header'): self.header.apply_theme(p)
+        self.table.setStyleSheet(f"QTableWidget {{ background-color: {p['card_bg']}; color: {p['text_main']}; border: 1px solid {p['border']}; }}")
+
+    def _handle_search(self, text):
+        """Tactical Filtering of the Clinical Registry."""
+        text = text.upper()
+        for r in range(self.table.rowCount()):
+            match = False
+            # Check ID column (1)
+            item = self.table.item(r, 1)
+            if item and text in item.text().upper():
+                match = True
+            self.table.setRowHidden(r, not match)
+
 
     def _handle_selection(self):
         selected_items = self.table.selectedItems()
@@ -218,14 +335,41 @@ class DataTab(QWidget):
 
     def _copy_to_clipboard(self):
         from PySide6.QtGui import QGuiApplication
-        selection = self.table.selectedRanges()
-        if not selection: return
         output = []
-        for r in selection:
-            for row in range(r.topRow(), r.bottomRow() + 1):
-                row_data = [self.table.item(row, col).text() if self.table.item(row, col) else "" for col in range(self.table.columnCount())]
-                output.append("\t".join(row_data))
+        # Copy Entire Table
+        for row in range(self.table.rowCount()):
+            row_data = []
+            for col in range(self.table.columnCount() - 1): # Exclude Actions
+                item = self.table.item(row, col)
+                row_data.append(item.text() if item else "")
+            output.append("\t".join(row_data))
         QGuiApplication.clipboard().setText("\n".join(output))
+
+    def _export_to_file(self, ext):
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        
+        if self.table.rowCount() == 0:
+             QMessageBox.warning(self, "EXPORT REJECTED ⚠️", "The clinical registry is currently empty. Please ingest a cohort dataset before attempting a forensic export.")
+             return
+
+        filename, _ = QFileDialog.getSaveFileName(self, f"Export as {ext.upper()}", f"clinical_audit.{ext}", f"{ext.upper()} Files (*.{ext})")
+        if not filename: return
+        
+        data = []
+        cols = [self.table.horizontalHeaderItem(c).text() for c in range(self.table.columnCount() - 1)]
+        for r in range(self.table.rowCount()):
+            row = [self.table.item(r, c).text() if self.table.item(r, c) else "" for c in range(self.table.columnCount() - 1)]
+            data.append(row)
+        
+        df = pd.DataFrame(data, columns=cols)
+        try:
+            if ext == "csv": df.to_csv(filename, index=False)
+            else: df.to_excel(filename, index=False)
+        except Exception as e:
+            print(f"Export Error: {e}")
+
+    def apply_theme(self, p):
+        if hasattr(self, 'header'): self.header.apply_theme(p)
 
 class LeaderboardTab(QWidget):
     """Olympic-Grade rankings Hub."""
@@ -233,25 +377,113 @@ class LeaderboardTab(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        header = QLabel("ALGORITHM BENCHMARK & CLINICAL STANDINGS")
-        header.setStyleSheet("color: #71717A; font-weight: bold; font-size: 11px; padding: 20px 0 10px 15px;")
-        layout.addWidget(header)
+        layout.setSpacing(0)
+        
+        # 1. Orbital Mission Header
+        self.header = MissionHeader("ALGORITHM RANKINGS", "MULTI-MODEL EVALUATION — Global Clinical Precision Standings", icon="🏆", color="#F59E0B")
+        layout.addWidget(self.header)
+
+        # Content Main Hub
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(35, 35, 35, 35)
+        content_layout.setSpacing(25)
+        
         self.table = QTableWidget(0, 10)
         self.table.setHorizontalHeaderLabels(["RANK", "ALGORITHM", "ACCURACY", "F1 SCORE", "ROC-AUC", "PRECISION", "RECALL", "SPECIFICITY", "CV STABILITY", "BADGE"])
-        self.table.setStyleSheet("QTableWidget { background-color: #000000; border: none; } QHeaderView::section { background-color: #09090B; color: #71717A; padding: 12px; border: none; }")
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        layout.addWidget(self.table)
+        content_layout.addWidget(self.table)
+        layout.addWidget(content)
+
+        # 3. Footer (Exports)
+        footer = QFrame()
+        footer.setFixedHeight(85)
+        f_layout = QHBoxLayout(footer)
+        f_layout.setContentsMargins(35, 0, 35, 0)
+        export_style = """
+            QPushButton { background-color: #18181B; color: #E4E4E7; border: 1px solid #27272A; border-radius: 6px; padding: 5px 15px; font-weight: bold; font-size: 11px; }
+            QPushButton:hover { background-color: #27272A; border-color: #3B82F6; }
+            QPushButton:pressed { background-color: #09090B; }
+        """
+        btn_copy = QPushButton(" 📋 Copy Table")
+        btn_copy.setFixedWidth(140)
+        btn_copy.setStyleSheet(export_style)
+        btn_copy.clicked.connect(self._copy_to_clipboard)
+        f_layout.addWidget(btn_copy)
+        f_layout.addStretch()
+        btn_csv = QPushButton(" 📄 Export CSV")
+        btn_csv.setStyleSheet(export_style.replace("#3B82F6", "#10B981"))
+        btn_csv.clicked.connect(lambda: self._export_to_file("csv"))
+        f_layout.addWidget(btn_csv)
+        btn_excel = QPushButton(" 💹 Export Excel")
+        btn_excel.setStyleSheet(export_style.replace("#3B82F6", "#8B5CF6"))
+        btn_excel.clicked.connect(lambda: self._export_to_file("xlsx"))
+        f_layout.addWidget(btn_excel)
+        layout.addWidget(footer)
 
     def update_leaderboard(self, lb):
         self.table.setRowCount(0)
         for i, en in enumerate(lb):
             row = self.table.rowCount()
             self.table.insertRow(row)
-            items = [f"#{i+1}", en['model'], f"{en['accuracy']:.1%}", f"{en['f1']:.1%}", f"{en['auc']:.1%}", "...", "...", "...", "...", "REVIEW"]
-            for col, t in enumerate(items):
-                item = QTableWidgetItem(t)
-                if i == 0: item.setForeground(QColor("#FFFFFF"))
-                self.table.setItem(row, col, item)
+            
+            # ── 1. Tactical Forensic Rows ──
+            badge = "🏆 CHAMPION" if i == 0 else "✅ AUDITED" if en.get('f1',0) > 0.9 else "⚠️ CALIBRATING"
+            items = [
+                f"#{i+1}", 
+                str(en.get('model', 'N/A')), 
+                f"{en.get('accuracy',0):.1%}", 
+                f"{en.get('f1',0):.1%}", 
+                f"{en.get('auc',0):.1%}", 
+                f"{en.get('precision',0):.1%}", 
+                f"{en.get('recall',0):.1%}", 
+                f"{en.get('specificity',0):.1%}", 
+                f"{en.get('cv_mean',0):.1%} +/- {en.get('cv_std',0):.2f}", 
+                badge
+            ]
+            
+            for c, text in enumerate(items):
+                item = QTableWidgetItem(text)
+                item.setTextAlignment(Qt.AlignCenter) # ID's are now centered (fixed offset)
+                self.table.setItem(row, c, item)
+
+    def _copy_to_clipboard(self):
+        from PySide6.QtGui import QGuiApplication
+        output = []
+        # Copy Headers
+        headers = [self.table.horizontalHeaderItem(c).text() for c in range(self.table.columnCount())]
+        output.append("\t".join(headers))
+        # Copy Entire Table
+        for row in range(self.table.rowCount()):
+            row_data = [self.table.item(row, col).text() if self.table.item(row, col) else "" for col in range(self.table.columnCount())]
+            output.append("\t".join(row_data))
+        QGuiApplication.clipboard().setText("\n".join(output))
+
+    def _export_to_file(self, ext):
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+        if self.table.rowCount() == 0:
+             QMessageBox.warning(self, "COMMAND HALTED ⚠️", "The Algorithm Rankings are currently uncalibrated. Export is blocked until metrics are available.")
+             return
+
+        filename, _ = QFileDialog.getSaveFileName(self, f"Export as {ext.upper()}", f"algorithm_rankings.{ext}", f"{ext.upper()} Files (*.{ext})")
+        if not filename: return
+        
+        data = []
+        cols = [self.table.horizontalHeaderItem(c).text() for c in range(self.table.columnCount())]
+        for r in range(self.table.rowCount()):
+            row = [self.table.item(r, c).text() if self.table.item(r, c) else "" for c in range(self.table.columnCount())]
+            data.append(row)
+        
+        df = pd.DataFrame(data, columns=cols)
+        try:
+            if ext == "csv": df.to_csv(filename, index=False)
+            else: df.to_excel(filename, index=False)
+        except Exception as e:
+            print(f"Export Error: {e}")
+
+    def apply_theme(self, p):
+        if hasattr(self, 'header'): self.header.apply_theme(p)
 
 class AnalysisTab(QWidget):
     """Forensic Narrative Engine."""
@@ -259,21 +491,26 @@ class AnalysisTab(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.header = QFrame()
-        self.header.setObjectName("Card")
-        h_layout = QHBoxLayout(self.header)
-        h_layout.setContentsMargins(15, 12, 15, 12)
-        title = QLabel("FORENSIC AUDIT — Detailed Clinical Reasoning")
-        title.setStyleSheet("font-weight: 800; font-size: 11px; color: #3B82F6;")
-        h_layout.addWidget(title)
+        layout.setSpacing(0)
+        
+        # 1. Orbital Mission Header
+        self.header = MissionHeader("PERFORMANCE ANALYSIS", "FORENSIC NARRATIVE — Neural Clinical Deliberation & Justification", icon="📄", color="#3B82F6")
         layout.addWidget(self.header)
+
+        # Content Main Hub
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(35, 35, 35, 35)
+        content_layout.setSpacing(25)
+        
         self.report_view = QTextEdit()
         self.report_view.setReadOnly(True)
-        # Fixed theme issue: background and color now handled via apply_theme or global QSS
         self.report_view.setStyleSheet("QTextEdit { border: none; padding: 25px; font-size: 14px; line-height: 1.6; }")
-        layout.addWidget(self.report_view)
+        content_layout.addWidget(self.report_view)
+        layout.addWidget(content)
 
     def apply_theme(self, p):
+        if hasattr(self, 'header'): self.header.apply_theme(p)
         self.report_view.setStyleSheet(f"QTextEdit {{ background-color: {p['card_bg']}; color: {p['text_main']}; border: none; padding: 25px; font-size: 14px; line-height: 1.6; }}")
 
     def display_report(self, html):
@@ -285,65 +522,255 @@ class InputTab(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        header = QFrame()
-        header.setStyleSheet("background-color: transparent; border-bottom: 2px solid #18181B;")
-        h_layout = QHBoxLayout(header)
-        h_layout.setContentsMargins(15, 12, 15, 12)
-        title = QLabel("BIOMARKER PROFILE — Manual Patient Entry & Verification")
-        title.setStyleSheet("font-weight: 800; font-size: 11px; color: #10B981;")
-        h_layout.addWidget(title)
-        layout.addWidget(header)
+        layout.setSpacing(0)
+        
+        # 1. Orbital Mission Header
+        self.header = MissionHeader("INDIVIDUAL DIAGNOSE", "TACTILE BIOMARKER ENTRY — Neural Clinical Consensus Lab", icon="🎯", color="#10B981")
+        layout.addWidget(self.header)
+
+        # Content Main Hub
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(45, 35, 45, 35)
+        content_layout.setSpacing(35)
+        
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels(["BIOMARKER NAME", "UNIT", "MEASURED VALUE"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.verticalHeader().setVisible(False)
-        self.table.setStyleSheet("QTableWidget { background-color: #000000; border: none; }")
-        layout.addWidget(self.table)
+        content_layout.addWidget(self.table)
+        
+        # ── 3. AI Assessment Findings (Dynamic Results) ──
+        self.results_frame = QFrame()
+        self.results_frame.setObjectName("StatusHUD")
+        self.results_frame.setFixedHeight(120)
+        res_layout = QHBoxLayout(self.results_frame)
+        res_layout.setContentsMargins(20, 10, 20, 10)
+        res_layout.setSpacing(30)
+
+        # Consensus Display
+        self.lbl_consensus_title = QLabel("AI COMMITTEE CONSENSUS")
+        self.lbl_consensus_title.setStyleSheet("color: #71717A; font-weight: bold; font-size: 10px; border: none;")
+        self.lbl_consensus_val = QLabel("AWAITING DATA")
+        self.lbl_consensus_val.setStyleSheet("color: #E4E4E7; font-weight: 900; font-size: 22px; border: none;")
+        
+        c_vbox = QVBoxLayout()
+        c_vbox.addWidget(self.lbl_consensus_title)
+        c_vbox.addWidget(self.lbl_consensus_val)
+        res_layout.addLayout(c_vbox)
+
+        # Risk Display
+        self.lbl_risk_title = QLabel("CALIBRATED RISK")
+        self.lbl_risk_title.setStyleSheet("color: #71717A; font-weight: bold; font-size: 10px; border: none;")
+        self.lbl_risk_val = QLabel("—%")
+        self.lbl_risk_val.setStyleSheet("color: #EF4444; font-weight: 900; font-size: 22px; border: none;")
+        
+        r_vbox = QVBoxLayout()
+        r_vbox.addWidget(self.lbl_risk_title)
+        r_vbox.addWidget(self.lbl_risk_val)
+        res_layout.addLayout(r_vbox)
+
+        res_layout.addStretch()
+        layout.addWidget(self.results_frame)
+
         footer = QHBoxLayout()
         footer.setContentsMargins(15, 20, 15, 20)
-        btn_clear = QPushButton(" RESET VALUES")
-        btn_clear.setFixedWidth(140)
-        footer.addWidget(btn_clear)
+        self.btn_clear = QPushButton(" RESET VALUES")
+        self.btn_clear.setFixedWidth(140)
+        footer.addWidget(self.btn_clear)
         footer.addStretch()
-        btn_predict = QPushButton("RUN AI PREDICTION ENGINE")
-        btn_predict.setFixedWidth(240)
-        footer.addWidget(btn_predict)
-        layout.addLayout(footer)
+        self.btn_predict = QPushButton("RUN AI PREDICTION ENGINE")
+        self.btn_predict.setObjectName("PrimaryBtn")
+        self.btn_predict.setFixedWidth(240)
+        footer.addWidget(self.btn_predict)
+        content_layout.addLayout(footer)
+        
+        layout.addWidget(content)
+
+    def apply_theme(self, p):
+        if hasattr(self, 'header'): self.header.apply_theme(p)
+        self.results_frame.setStyleSheet(f"""
+            QFrame#StatusHUD {{ 
+                background-color: {p['card_bg']}; 
+                border: 1px solid {p['border']}; 
+                border-radius: 12px; 
+            }}
+        """)
+        self.lbl_consensus_title.setStyleSheet(f"color: {p['text_dim']}; font-weight: bold; font-size: 10px; border: none; background: transparent;")
+        self.lbl_risk_title.setStyleSheet(f"color: {p['text_dim']}; font-weight: bold; font-size: 10px; border: none; background: transparent;")
+
+    def update_results(self, consensus, risk):
+        """High-Fidelity Neural Update for Manual Entry Results."""
+        self.lbl_consensus_val.setText(str(consensus).upper())
+        self.lbl_risk_val.setText(f"{risk:.1%}")
+        # Dynamic Diagnostic Coloring
+        if str(consensus).upper() in ["MALIGNANT", "POSITIVE"]:
+             self.lbl_consensus_val.setStyleSheet(f"color: #EF4444; font-weight: 900; font-size: 22px; border: none; background: transparent;")
+        else:
+             self.lbl_consensus_val.setStyleSheet(f"color: #10B981; font-weight: 900; font-size: 22px; border: none; background: transparent;")
 
     def refresh_features(self, features):
+        if not features: return
         self.table.setRowCount(len(features))
         for i, f in enumerate(features):
             self.table.setItem(i, 0, QTableWidgetItem(str(f).upper().replace("_", " ")))
-            self.table.setItem(i, 1, QTableWidgetItem("ng/mL"))
-            self.table.setItem(i, 2, QTableWidgetItem("0.0000"))
+            self.table.setItem(i, 1, QTableWidgetItem("pg/ml" if "PSA" in str(f).upper() else "U/ml" if "CA125" in str(f).upper() else "ng/ml"))
+            item = QTableWidgetItem("0.00")
+            item.setFlags(item.flags() | Qt.ItemIsEditable)
+            self.table.setItem(i, 2, item)
+
+    def set_patient_data(self, data):
+        """Strategic Data Handoff from Clinical Registry."""
+        # Map table data to input fields
+        for i in range(self.table.rowCount()):
+            feature_name = self.table.item(i, 0).text()
+            # Try to find match in the incoming data
+            for key, val in data.items():
+                if str(key).upper().replace("_", " ") in feature_name or feature_name in str(key).upper().replace("_", " "):
+                    # Extract numeric value
+                    match = re.search(r"[-+]?\d*\.\d+|\d+", str(val))
+                    if match:
+                        self.table.item(i, 2).setText(match.group())
+                    else:
+                        self.table.item(i, 2).setText(str(val))
+                    break
+
+class RawDataTab(QWidget):
+    """Untransformed Patient Laboratory Database."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # 1. Orbital Mission Header
+        self.header = MissionHeader("RAW LABORATORY RECORDS", "UNPROCESSED DATA INGRESS — Strategic Biomarker Source Registry", icon="📑", color="#71717A")
+        layout.addWidget(self.header)
+
+        # Content Main Hub
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(35, 35, 35, 35)
+        content_layout.setSpacing(25)
+        
+        self.table = QTableWidget()
+        self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)
+        content_layout.addWidget(self.table)
+        layout.addWidget(content)
+
+        # 3. Footer (Exports)
+        footer = QFrame()
+        footer.setFixedHeight(85)
+        f_layout = QHBoxLayout(footer)
+        f_layout.setContentsMargins(35, 0, 35, 0)
+        f_layout.setSpacing(20)
+
+        export_style = """
+            QPushButton {
+                background-color: transparent; border: 1px solid #3B82F6; color: #3B82F6;
+                padding: 10px 22px; border-radius: 8px; font-weight: bold; font-size: 11px;
+            }
+            QPushButton:hover { background-color: rgba(59, 130, 246, 0.1); border-color: #60A5FA; }
+        """
+
+        btn_copy = QPushButton(" 📋 Copy Table")
+        btn_copy.setFixedWidth(140)
+        btn_copy.setStyleSheet(export_style)
+        btn_copy.clicked.connect(self._copy_to_clipboard)
+        f_layout.addWidget(btn_copy)
+        f_layout.addStretch()
+        
+        btn_csv = QPushButton(" 📄 Export CSV")
+        btn_csv.setStyleSheet(export_style.replace("#3B82F6", "#10B981"))
+        btn_csv.clicked.connect(lambda: self._export_to_file("csv"))
+        f_layout.addWidget(btn_csv)
+        
+        btn_excel = QPushButton(" 💹 Export Excel")
+        btn_excel.setStyleSheet(export_style.replace("#3B82F6", "#8B5CF6"))
+        btn_excel.clicked.connect(lambda: self._export_to_file("xlsx"))
+        f_layout.addWidget(btn_excel)
+        layout.addWidget(footer)
+
+    def update_data(self, df: pd.DataFrame):
+        self.table.setRowCount(0)
+        self.table.setColumnCount(len(df.columns))
+        self.table.setHorizontalHeaderLabels(df.columns)
+        self.table.setRowCount(len(df))
+        for r, (_, row) in enumerate(df.iterrows()):
+            for c, val in enumerate(row):
+                self.table.setItem(r, c, QTableWidgetItem(str(val)))
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+
+    def _copy_to_clipboard(self):
+        from PySide6.QtGui import QGuiApplication
+        output = []
+        # Copy Headers
+        headers = [self.table.horizontalHeaderItem(c).text() for c in range(self.table.columnCount())]
+        output.append("\t".join(headers))
+        # Copy Entire Table
+        for row in range(self.table.rowCount()):
+            row_data = [self.table.item(row, col).text() if self.table.item(row, col) else "" for col in range(self.table.columnCount())]
+            output.append("\t".join(row_data))
+        QGuiApplication.clipboard().setText("\n".join(output))
+
+    def _export_to_file(self, ext):
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+        if self.table.rowCount() == 0:
+             QMessageBox.warning(self, "SYSTEM HALT ⚠️", "No raw clinical records detected. Data ingress is required before proceeding with forensic export.")
+             return
+
+        filename, _ = QFileDialog.getSaveFileName(self, f"Export as {ext.upper()}", f"raw_laboratory_records.{ext}", f"{ext.upper()} Files (*.{ext})")
+        if not filename: return
+        
+        data = []
+        cols = [self.table.horizontalHeaderItem(c).text() for c in range(self.table.columnCount())]
+        for r in range(self.table.rowCount()):
+            row = [self.table.item(r, c).text() if self.table.item(r, c) else "" for c in range(self.table.columnCount())]
+            data.append(row)
+        
+        df = pd.DataFrame(data, columns=cols)
+        try:
+            if ext == "csv": df.to_csv(filename, index=False)
+            else: df.to_excel(filename, index=False)
+        except Exception as e:
+            print(f"Export Error: {e}")
+
+    def apply_theme(self, p):
+        if hasattr(self, 'header'): self.header.apply_theme(p)
 
 class TrajectoryTab(QWidget):
     """Longitudinal Biomarker & Risk Trajectory."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self._bg = "#09090B"
-        self._text = "#E4E4E7"
+        self._text = "#FAFAFA"
         self._grid = "#18181B"
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        # Graph on top
+        layout.setSpacing(0)
+
+        # 1. Orbital Mission Header
+        self.header = MissionHeader("PATIENT TRAJECTORY", "LONGITUDINAL MONITORING — Multi-Stage Biomarker DrillsDown", icon="📈", color="#EF4444")
+        layout.addWidget(self.header)
+
+        # Content Main Hub
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(35, 35, 35, 35)
+        content_layout.setSpacing(25)
+        
+        # Graph
         self.figure = plt.figure(facecolor=self._bg)
         self.ax = self.figure.add_subplot(111)
         self.ax.set_facecolor(self._bg)
         self.canvas = FigureCanvas(self.figure)
-        layout.addWidget(self.canvas, stretch=1)
+        content_layout.addWidget(self.canvas, stretch=1)
         
-        # Info bar below graph
-        self.info_frame = QFrame()
-        self.info_frame.setObjectName("Card")
-        info_layout = QHBoxLayout(self.info_frame)
-        info_layout.setContentsMargins(20, 10, 20, 10)
-        self.lbl_info = QLabel("PATIENT BIOMARKER DRIFT & RISK TRAJECTORY")
-        self.lbl_info.setStyleSheet("color: #71717A; font-weight: bold; font-size: 11px;")
-        info_layout.addWidget(self.lbl_info)
-        info_layout.addStretch()
-        layout.addWidget(self.info_frame)
+        layout.addWidget(content)
+        self.update_plot()
         
         self.update_plot()
 
@@ -370,17 +797,21 @@ class TrajectoryTab(QWidget):
             self.ax.plot(x, y, color=color, linewidth=2.5, marker=m, markersize=5, label=name)
             self.ax.fill_between(x, y, alpha=0.1, color=color)
 
+        # ── Matplotlib Safety Layer ── (CVE-FIX: Tick Label Mismatch)
         self.ax.set_xticks(x)
-        self.ax.set_xticklabels([f"V{i+1}" for i in x], color=self._text, fontsize=8)
+        labels = [f"V{i+1}" for i in x]
+        if len(labels) == len(x):
+            self.ax.set_xticklabels(labels, color=self._text, fontsize=8)
+        
         self.ax.tick_params(colors=self._text, labelsize=8)
         for spine in self.ax.spines.values(): spine.set_color(self._grid)
         self.ax.legend(facecolor=self._bg, edgecolor=self._grid, labelcolor=self._text, fontsize=8)
-        self.ax.set_title("Clinical Patient Trajectory - Reconstructed", color=self._text, fontsize=11, fontweight='bold', pad=15)
+        self.ax.set_title("Clinical Patient Trajectory - Multi-Biomarker Drilldown", color=self._text, fontsize=11, fontweight='bold', pad=15)
         self.canvas.draw()
 
     def apply_theme(self, p):
+        if hasattr(self, 'header'): self.header.apply_theme(p)
         self._bg = p['bg_main']
         self._text = p['text_main']
         self._grid = p['border']
-        self.lbl_info.setStyleSheet(f"color: {p['text_dim']}; font-weight: bold; font-size: 11px;")
         self.update_plot()

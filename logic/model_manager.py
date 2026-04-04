@@ -347,8 +347,11 @@ class ModelManager:
 
     @staticmethod
     def _hash_features(features):
-        """Return a stable hash of a feature list for mismatch detection."""
-        return hash(tuple(sorted(features))) if features else 0
+        """Return a stable SHA-256 hash of a feature list for mismatch detection."""
+        if not features: return "0"
+        import hashlib
+        feat_str = ",".join(sorted(str(f).upper().strip() for f in features))
+        return hashlib.sha256(feat_str.encode()).hexdigest()[:16]
 
     # ── Feature Names ──────────────────────────────────────────────────────────
 
@@ -386,73 +389,86 @@ class ModelManager:
     def check_and_train_models(self, data_path, status_callback=None, force=False, validation_split=0.2, outlier_removal=True, scaling_enabled=True):
         """Check if models exist. Trains ONLY if missing and data is available."""
         if not data_path:
-            # ... (rest of guards) ...
-            required_models = ['random_forest_model.pkl', 'logistic_regression_model.pkl', 'svm_model.pkl']
-            if HAS_XGB:
-                required_models.append('xgboost_model.pkl')
+            required_models = [
+                'random_forest_model.pkl', 'logistic_regression_model.pkl', 
+                'svm_model.pkl', 'mlp_model.pkl'
+            ]
+            if HAS_XGB:   required_models.append('xgboost_model.pkl')
+            if HAS_TORCH: required_models.append('gnn_model.pkl')
                 
             models_exist = all(os.path.exists(os.path.join(self.script_dir, m)) for m in required_models)
-            if models_exist:
-                return True, "Models present"
-            return False, "Dataset path is empty. Please upload a dataset to train models."
+            if models_exist and os.path.exists(os.path.join(self.script_dir, 'feature_names.pkl')):
+                return True, "Ensemble committee is fully calibrated and present."
+            return False, "Strategic calibration required. Please upload a dataset to begin."
 
         # ... (rest of guards) ...
 
         if not os.path.exists(data_path) and not force:
             return False, "Dataset file not found. Please upload a dataset to train models."
 
-        models_data = [
-            ('random_forest_model.pkl',  'Random Forest',       RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')),
-            ('logistic_regression_model.pkl',  'Logistic Regression',  LogisticRegression(random_state=42, max_iter=1000, class_weight='balanced')),
-            ('svm_model.pkl', 'SVM',                  SVC(probability=True, random_state=42, class_weight='balanced')),
-        ]
-        if HAS_XGB:
-            from xgboost import XGBClassifier
-            # XGBoost handles imbalance via scale_pos_weight (Ratio of negative to positive)
-            models_data.append(('xgboost_model.pkl', 'XGBoost',
-                                 XGBClassifier(eval_metric='logloss', random_state=42, scale_pos_weight=10)))
-        if HAS_TORCH:
-            models_data.append(('gnn_model.pkl', 'Graph Neural Network', GNNClassifier()))
-        
-        # Add MLP (Neural Network) to the suite
-        from sklearn.neural_network import MLPClassifier
-        models_data.append(('mlp_model.pkl', 'MLP', MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=1000, random_state=42)))
- 
-        missing = [m for m in models_data
-                   if not os.path.exists(os.path.join(self.script_dir, m[0]))]
-        if not missing and not force and os.path.exists(os.path.join(self.script_dir, 'feature_names.pkl')):
-            return True, "Models present"
-
-        if not data_path or not os.path.exists(data_path):
-            return False, "Training required but dataset missing."
+        # Strategic Verification: Should we skip training?
+        if not force and os.path.exists(os.path.join(self.script_dir, 'feature_names.pkl')):
+            required = ['random_forest_model.pkl', 'logistic_regression_model.pkl', 'svm_model.pkl', 'mlp_model.pkl']
+            if all(os.path.exists(os.path.join(self.script_dir, m)) for m in required):
+                return True, "Models present"
 
         if status_callback:
             status_callback("Training models… This might take a moment.", "orange")
 
         try:
+            # ── Strategic Schema Reset ──
+            if force:
+                log.info("Clinical Context: Resetting feature schema for new training session.")
+                self.feature_names = None
+
             X_train, X_test, y_train, y_test, features = self._load_training_data(
                 data_path, 
                 validation_split=validation_split,
                 outlier_removal=outlier_removal,
                 scaling_enabled=scaling_enabled
             )
+
+            # Signal Strength Verification
+            f_count = len(features)
+            if status_callback:
+                status_callback(f"Identified {f_count} critical biomarkers. Calibrating Committee…", "orange")
+            log.info("Training on %d features. Class distribution: %s", f_count, np.bincount(y_train))
+
+            models_data = [
+                ('random_forest_model.pkl',  'Random Forest',       RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')),
+                ('logistic_regression_model.pkl',  'Logistic Regression',  LogisticRegression(random_state=42, max_iter=1000, class_weight='balanced')),
+                ('svm_model.pkl', 'SVM',                  SVC(probability=True, random_state=42, class_weight='balanced')),
+            ]
+            
+            # Mission Scoped Metrics Extraction
+            counts = np.bincount(y_train)
+            xgb_weight = counts[0] / counts[1] if len(counts) >= 2 and counts[1] > 0 else 1.0
+            
+            if len(counts) >= 2 and (counts[0] < 5 or counts[1] < 5):
+                if status_callback: status_callback("Alert: Weak biological diversity detected.", "orange")
+
+            if HAS_XGB:
+                from xgboost import XGBClassifier
+                models_data.append(('xgboost_model.pkl', 'XGBoost',
+                                     XGBClassifier(eval_metric='logloss', random_state=42, scale_pos_weight=xgb_weight)))
+            
+            from sklearn.neural_network import MLPClassifier
+            models_data.append(('mlp_model.pkl', 'MLP', MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=1000, random_state=42)))
+
             self.feature_names = features
             self._feature_hash = self._hash_features(features)
             joblib.dump(features, os.path.join(self.script_dir, 'feature_names.pkl'))
 
             for pkl, name, model_obj in models_data:
                 target_path = os.path.join(self.script_dir, pkl)
-                
-                # CLINICAL SYNC: Train the model (overwriting existing artifacts if needed)
                 if status_callback:
-                    status_callback(f"Training {name} (Please wait)…", "orange")
+                    status_callback(f"Training {name}…", "orange")
                 
                 model_obj.fit(X_train, y_train)
                 joblib.dump(model_obj, target_path)
-                log.info("Trained and saved artifact: %s", name)
 
             self.reset_analytics()
-            return True, "Training process finished."
+            return True, "Ensemble calibration successful."
         except Exception as e:
             log.error("Training failed: %s", e)
             return False, f"Training failed: {str(e)}"
@@ -483,7 +499,44 @@ class ModelManager:
         """Auto-label and prepare feature vector based on UI settings."""
         df = df.copy()
         
-        # CLINICAL LABEL SYNC: Search for existing ground truth (e.g. Target, Class, cancer_risk_class)
+        # ── Step 1: Tactical Feature Selection ──
+        forbidden = [
+            "sample_id", "patient_id", "cancer_risk_class", "prediction", "risk", 
+            "is_simulated", "timestamp", "date", "id", "unnamed", "target"
+        ]
+        
+        # Determine X_cols for both training and clustering
+        if self.feature_names:
+            X_cols = []
+            available = [str(c).lower() for c in df.columns]
+            for f in self.feature_names:
+                f_low = str(f).lower()
+                if f_low in available:
+                    idx = available.index(f_low)
+                    X_cols.append(df.columns[idx])
+                else:
+                    matches = [c for c in df.columns if f_low in str(c).lower()]
+                    if matches: X_cols.append(matches[0])
+                    else:
+                        df[f] = 0.0
+                        X_cols.append(f)
+        else:
+            standard_patterns = ['concentration', 'peak', 'psa', 'afp', 'ca125']
+            selected_cols = []
+            for pat in standard_patterns:
+                matches = [c for c in df.columns if pat.lower() in str(c).lower()]
+                selected_cols.extend(matches)
+            
+            X_cols = [c for c in selected_cols if not any(f in str(c).lower() for f in forbidden)]
+            
+            # Fallback for generic numeric datasets
+            if not X_cols:
+                all_num = df.select_dtypes(include=[np.number]).columns.tolist()
+                X_cols = [c for c in all_num if not any(f in str(c).lower() for f in forbidden)]
+            
+            X_cols = sorted(list(set(X_cols)))
+
+        # ── Step 2: Clinical Label Discovery ──
         label_target = None
         for col in df.columns:
             c_low = str(col).lower().replace("_", "").replace(" ", "")
@@ -492,16 +545,11 @@ class ModelManager:
                 break
         
         if label_target:
-            # Normalize the label column name for the rest of the pipeline
             y_raw = df[label_target]
-            
-            # CLINICAL TARGET ENCODER: Ensure POSITIVE/MALIGNANT explicitly maps to 1
-            if y_raw.dtype == object or y_raw.dtype == str:
-                log.info("Clinical Context: Encoding categorical labels for training...")
+            if y_raw.dtype == object or y_raw.dtype == str or len(np.unique(y_raw.dropna())) > 2:
                 y_mapped = []
                 for val in y_raw:
                     v_low = str(val).lower().strip()
-                    # Fuzzy match for Positive/Cancer indicators
                     if any(term in v_low for term in ['pos', 'malig', 'canc', 'sick', 'true', '1']):
                         y_mapped.append(1)
                     else:
@@ -509,74 +557,40 @@ class ModelManager:
                 df["cancer_risk_class"] = y_mapped
             else:
                 df["cancer_risk_class"] = y_raw.fillna(0).astype(int)
-                
-            log.info("Clinical Sync: Using biologically-mapped labels from '%s'", label_target)
         else:
-            # We must use numeric columns for K-Means to find the biology
-            numeric_data = df.select_dtypes(include=[np.number])
+            # BIOLOGICAL CLUSTERING: Only use clean X_cols features.
+            clustering_data = df[X_cols].copy()
+            if clustering_data.isnull().any().any():
+                clustering_data = clustering_data.fillna(clustering_data.mean())
             
-            # Clinical Auto-Heal: Always fill NaNs for clustering to prevent crash
-            if numeric_data.isnull().any().any():
-                numeric_data = numeric_data.fillna(numeric_data.mean())
+            if clustering_data.empty:
+                df["cancer_risk_class"] = 0
+            else:
+                from sklearn.preprocessing import StandardScaler
+                from sklearn.cluster import KMeans
+                c_scaled = StandardScaler().fit_transform(clustering_data)
+                kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
+                clusters = kmeans.fit_predict(c_scaled)
                 
-            kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
-            clusters = kmeans.fit_predict(numeric_data)
-            
-            # BIOLOGICAL ALIGNMENT: Ensure '1' is the 'High Biomarker/High Risk' group.
-            # We look for 'PSA', 'AFP', or any clinical column to decide center mass.
-            ref_col = None
-            for c in numeric_data.columns:
-                if any(p in str(c).lower() for p in ['psa', 'afp', 'concentration', 'peak']):
-                    ref_col = c
-                    break
-            
-            if ref_col is not None:
-                # Calculate mean concentration per cluster
-                c0_mean = numeric_data.loc[clusters == 0, ref_col].mean()
-                c1_mean = numeric_data.loc[clusters == 1, ref_col].mean()
-                
-                if c0_mean > c1_mean:
-                    # Flip: Map 0->1 and 1->0 so higher clinical marker = Class 1
-                    log.info("Clinical Alignment: Flipped clusters to ensure 1=Malignant (High Signal).")
-                    clusters = 1 - clusters
-            
-            df["cancer_risk_class"] = clusters
-            log.info("Clinical Context: Generating biologically-aligned clusters (K-Means).")
-
-        # ── Step 2: Feature Selection & De-Spooking ──
-        # (Standard biomarker discovery remains unchanged) ...
-        standard_patterns = ['concentration', 'peak', 'psa', 'afp', 'ca125']
-        selected_cols = []
-        for pat in standard_patterns:
-            matches = [c for c in df.columns if pat.lower() in str(c).lower()]
-            selected_cols.extend(matches)
-        
-        # Deduplicate and Clean (Exclude ID/Target/Metadata Leakage)
-        forbidden = [
-            "sample_id", "patient_id", "cancer_risk_class", "prediction", "risk", 
-            "is_simulated", "timestamp", "date", "id", "unnamed", "target"
-        ]
-        
-        # Professional Filter: Ensure features are strictly clinical
-        X_cols = []
-        for c in selected_cols:
-            c_low = str(c).lower()
-            if not any(f in c_low for f in forbidden):
-                X_cols.append(c)
-        X_cols = sorted(list(set(X_cols)))
-
-        # Dynamic Fallback
-        if not X_cols:
-            all_num = df.select_dtypes(include=[np.number]).columns.tolist()
-            X_cols = [c for c in all_num if not any(f in str(c).lower() for f in forbidden)]
+                # Align higher biomarker values to Class 1
+                ref_col = X_cols[0] if X_cols else None
+                for c in X_cols:
+                    if any(p in str(c).lower() for p in ['psa', 'afp', 'concentration']):
+                        ref_col = c; break
+                if ref_col:
+                    m0, m1 = df.loc[clusters == 0, ref_col].mean(), df.loc[clusters == 1, ref_col].mean()
+                    if m0 > m1: clusters = 1 - clusters
+                df["cancer_risk_class"] = clusters
 
         X = df[X_cols]
         y = df["cancer_risk_class"]
         
-        # ── Step 3: APPLY MODAL-BASED PROCESSING ─────────────
-        X = X.copy()
+        # Ensure column order consistency
+        if self.feature_names:
+            X = X.reindex(columns=self.feature_names, fill_value=0.0)
         
-        # A. Outlier Clipping (Only if enabled in Modal)
+        # ── Step 3: CLINICAL DATA REFINEMENT ──
+        X = X.copy()
         if outlier_removal:
             for col in X.columns:
                 if X[col].dtype in [np.float64, np.float32, np.int64]:
@@ -585,21 +599,13 @@ class ModelManager:
                     if IQR > 0:
                         lower, upper = Q1 - 3.0 * IQR, Q3 + 3.0 * IQR
                         X[col] = X[col].clip(lower=lower, upper=upper)
-            log.info("Clinical Context: Outlier removal applied via UI choice.")
-        else:
-            log.info("Clinical Context: Training on RAW dataset (Outlier removal skipped).")
 
-        # B. Clinical Scaling (Only if enabled in Modal)
         if scaling_enabled:
             for col in X.columns:
                 mean, std = X[col].mean(), X[col].std()
-                if std != 0:
-                    X[col] = (X[col] - mean) / std
-            log.info("Clinical Context: Z-Score scaling applied via UI choice.")
+                if std != 0: X[col] = (X[col] - mean) / std
             
-        # Final Safeguard: Auto-impute remaining NaNs
-        X = X.fillna(X.mean())
-
+        X = X.fillna(0.0)
         return X, y
 
     def _load_training_data(self, data_path, validation_split=0.2, outlier_removal=True, scaling_enabled=True):
@@ -622,7 +628,9 @@ class ModelManager:
     def get_raw_training_set(self, data_path):
         """Returns full (X, y) without train/test split (utilizes memory cache)."""
         if not data_path or not os.path.exists(data_path):
-            raise FileNotFoundError(f"Dataset missing at {data_path}")
+             # Strategic Fallback: Return empty tensors for uncalibrated state
+             import pandas as pd
+             return pd.DataFrame(), pd.Series()
             
         ap = os.path.abspath(data_path)
         if self.cached_train_df is None or self._cached_data_path != ap:
@@ -1058,6 +1066,9 @@ class ModelManager:
         Accuracy, F1, Precision, Recall, Specificity, CV Mean +/- Std.
         Ranked by F1-Score - the most meaningful metric for imbalanced cancer data.
         """
+        if not data_path or not os.path.exists(data_path):
+             return [] # Empty cohort metrics when dataset is missing
+
         from sklearn.metrics import (
             accuracy_score, f1_score, precision_score,
             recall_score, confusion_matrix
