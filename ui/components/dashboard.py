@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QFrame, QProgressBar, QScrollArea, QLayout)
+                              QFrame, QProgressBar, QScrollArea, QLayout, QTextEdit)
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QFont
 
@@ -104,10 +104,13 @@ class Dashboard(QWidget):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setStyleSheet("background: transparent;")
         
-        self.narrative_label = QLabel("Awaiting clinical data upload...")
-        self.narrative_label.setWordWrap(True)
-        self.narrative_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        self.narrative_label.setStyleSheet("font-size: 15px; color: #E4E4E7; line-height: 1.6;")
+        self.narrative_label = QTextEdit()
+        self.narrative_label.setReadOnly(True)
+        self.narrative_label.setFrameStyle(QFrame.NoFrame)
+        # Clinical Portability: Click/Select allowed for copying results
+        self.narrative_label.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
+        self.narrative_label.setStyleSheet("font-size: 15px; color: #E4E4E7; background: transparent; padding: 0;")
+        self.narrative_label.setHtml("<span style='color:#71717A;'>Awaiting clinical data upload...</span>")
         
         scroll.setWidget(self.narrative_label)
         reason_layout.addWidget(scroll)
@@ -141,15 +144,35 @@ class Dashboard(QWidget):
     def update_metrics(self, confidence=0, risk=0, triage="—", consensus="—"):
         c_val = f"{confidence:.1%}" if isinstance(confidence, float) else str(confidence) + "%"
         r_val = f"{risk:.1%}" if isinstance(risk, float) else str(risk) + "%"
-        self.card_conf.update_value(c_val, confidence if isinstance(confidence, (int, float)) else 0, "#3B82F6")
+        self.card_conf.update_value(c_val, confidence*100 if isinstance(confidence, float) else confidence, "#3B82F6")
         risk_color = "#EF4444" if risk > 0.7 else "#F59E0B" if risk > 0.3 else "#10B981"
-        self.card_risk.update_value(r_val, risk if isinstance(risk, (int, float)) else 0, risk_color)
+        self.card_risk.update_value(r_val, risk*100 if isinstance(risk, float) else risk, risk_color)
         self.card_triage.update_value(triage)
         self.card_consensus.update_value(consensus)
 
-    def update_narrative(self, html_text):
-        """Injects dynamic forensic reasoning directly into the dashboard HUD."""
-        self.narrative_label.setText(html_text)
+    def reset_dashboard(self):
+        """Clinical Purification: Zero-out all neural metrics."""
+        self.card_conf.update_value("—", 0)
+        self.card_risk.update_value("—", 0)
+        self.card_triage.update_value("—")
+        self.card_consensus.update_value("—")
+        self.narrative_label.setHtml("<span style='color:#71717A;'>Awaiting clinical data upload...</span>")
+
+    def update_narrative(self, html_text, val_ratio=0.2, test_ratio=0.8):
+        """Injects dynamic forensic reasoning with data allocation footer (Selectable)."""
+        allocation_footer = f"""
+        <br><br><table width='100%' style='border-top: 1px solid #27272A; margin-top: 15px;'>
+            <tr>
+                <td style='color: #71717A; font-size: 11px; padding-top: 10px;'>
+                    <b>COHORT CALIBRATION:</b> {val_ratio:.1%} (INTERNAL)
+                </td>
+                <td align='right' style='color: #71717A; font-size: 11px; padding-top: 10px;'>
+                    <b>BLIND-TEST ALLOCATION:</b> {test_ratio:.1%} (EXTERNAL)
+                </td>
+            </tr>
+        </table>
+        """
+        self.narrative_label.setHtml(f"<div style='line-height: 1.6;'>{html_text}</div>" + allocation_footer)
 
     def update_data_info(self, rows=0, cols=0, samples=0):
         self.lbl_data_info.setText(f"Master DB: {rows} Records | Features: {cols} | Samples: {samples}")

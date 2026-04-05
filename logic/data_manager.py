@@ -45,6 +45,20 @@ class DataManager:
             pass
         return self.ensure_default_dataset()
 
+    def purge_registry(self):
+        """Secure Clinical Flush: Erase all session memory and persistent data paths."""
+        self.data_path = None
+        self.uploaded_df = None
+        self.master_df = None
+        if os.path.exists(self._config_path):
+            try: os.remove(self._config_path)
+            except: pass
+        # Also definitely try to remove any prospective CSV logs to ensure total purification
+        audit_path = os.path.join(self.user_data_dir, 'prospective_audit_log.csv')
+        if os.path.exists(audit_path):
+            try: os.remove(audit_path)
+            except: pass
+
     def ensure_default_dataset(self):
         """Fallback to the clinical gold-standard dataset if no user data is loaded."""
         # Try a few common relative locations for the clinical set

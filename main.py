@@ -29,6 +29,28 @@ from ui.modals.VisualizationModal import VisualizationModal
 from ui.modals.SettingsDialog import SettingsDialog
 
 
+def _handle_theme_change(self, theme):
+        self.mc.settings_manager.set('theme', theme)
+        self._apply_styles()
+        self.update_status(f"Theme Synced: {theme.upper()}", "green")
+
+# ── Step 2: Global Telemetry Hub (Robust Diagnostic Routing) ──
+class GlobalLoggingHandler(logging.Handler):
+    def __init__(self, callback):
+        super().__init__()
+        self.callback = callback
+        self.setFormatter(logging.Formatter('%(name)s: %(message)s'))
+
+    def emit(self, record):
+        msg = self.format(record)
+        color = "gray"
+        if record.levelno >= logging.ERROR: color = "#EF4444"
+        elif record.levelno >= logging.WARNING: color = "#F59E0B"
+        elif record.levelno >= logging.INFO: color = "#3B82F6"
+        
+        # Safe thread-jump for UI updates
+        QTimer.singleShot(0, lambda: self.callback(msg, color))
+
 class ClinicalApp(QMainWindow):
     """Primary Clinical Forensic Dashboard (PySide6 Edition)."""
     
@@ -48,6 +70,13 @@ class ClinicalApp(QMainWindow):
         self._setup_ui()
         self._apply_styles()
         self._connect_signals()
+
+        # ── Global Diagnostic Hook ──
+        # This makes the console "Global" — any error in ANY file shows here.
+        handler = GlobalLoggingHandler(self.console.log)
+        logging.getLogger().addHandler(handler)
+        logging.getLogger().setLevel(logging.INFO)
+        logging.info("Platform Intelligence: Global Telemetry Secured.")
         
         # ── Step 3: Session Restore (Auto-load last dataset) ──
         self.mc.restore_session()
@@ -118,10 +147,33 @@ class ClinicalApp(QMainWindow):
         self.main_layout.addWidget(self.control_panel)
 
         # 4. Global Status Footer
-        self.setStatusBar(QStatusBar())
+        status_bar = QStatusBar()
+        self.setStatusBar(status_bar)
+        
+        # 🔗 Clinical Logo Integration
+        self.footer_logo = QLabel()
+        candidates = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png"),
+            os.path.join(os.getcwd(), "logo.png"),
+            "logo.png"
+        ]
+        
+        logo_path = None
+        for c in candidates:
+            if os.path.exists(c):
+                logo_path = c
+                break
+
+        if logo_path:
+            pix = QPixmap(logo_path).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.footer_logo.setPixmap(pix)
+            self.footer_logo.setContentsMargins(15, 0, 8, 0)
+            status_bar.addPermanentWidget(self.footer_logo)
+            
+        # ⚡ Systems Connectivity Legend
         self.ui_status = QLabel("Ready")
-        self.ui_status.setStyleSheet("color: #71717A; font-size: 11px;")
-        self.statusBar().addPermanentWidget(self.ui_status)
+        self.ui_status.setStyleSheet("color: #71717A; font-size: 11px; padding-right: 15px;")
+        status_bar.addPermanentWidget(self.ui_status)
 
         # 6. Neural MenuBar
         self._setup_menubar()
@@ -151,6 +203,8 @@ class ClinicalApp(QMainWindow):
         self.mc.audit_finished.connect(self._on_forensic_audit_ready)
         self.mc.prediction_finished.connect(self._on_prediction_finished)
         self.mc.counterfactual_ready.connect(self._on_counterfactual_ready)
+        self.mc.system_purged.connect(self.tab_dashboard.reset_dashboard)
+        self.mc.system_purged.connect(lambda: self.tab_leaderboard.update_leaderboard([]))
 
         # ── UI Command Signals ──
         self.sidebar.tab_changed.connect(self._on_nav_requested)
@@ -202,16 +256,15 @@ class ClinicalApp(QMainWindow):
         self.tabs.setCurrentWidget(self.tab_analysis)
         self.tab_dashboard.update_metrics(confidence=results['confidence'], risk=results['risk_avg'], triage=results['triage'], consensus=results['consensus'])
         
-        # Inject Cohort Audit Narrative
-        narrative = f"""
-        <b style='color:#3B82F6;'>[SYSTEM AUDIT COMPLETE]</b><br><br>
-        The AI Committee has successfully audited the clinical cohort.<br><br>
-        <b>Volume:</b> {results['triage']}<br>
-        <b>Risk Quotient:</b> {results['risk_avg']:.1%}<br>
-        <b>Consensus Validation:</b> {results['consensus']}<br><br>
-        <i>Action:</i> Refer to the Performance Analysis hub for the deep metric breakdown.
-        """
-        self.tab_dashboard.update_narrative(narrative)
+        # Strategic Calibration Insight
+        v_split = self.mc.settings_manager.get('validation_split', 0.2)
+        t_split = 1.0 - v_split
+        
+        self.tab_dashboard.update_narrative(
+            narrative, 
+            val_ratio=v_split, 
+            test_ratio=t_split
+        )
         
         self.tab_leaderboard.update_leaderboard(results['leaderboard'])
         self.banner.notify("COHORT FORENSIC AUDIT GENERATED 📂", "#10B981")
@@ -295,7 +348,8 @@ class ClinicalApp(QMainWindow):
             # Sync with Mission Controller's Settings Hub
             self.ai_modal = AIChatModal(
                 parent=self, 
-                settings_manager=self.mc.settings_manager
+                settings_manager=self.mc.settings_manager,
+                clinical_context={'leaderboard': self.mc.model_manager.get_model_leaderboard(self.mc.last_dataset_path)}
             )
         self.ai_modal.show()
         self.ai_modal.raise_()

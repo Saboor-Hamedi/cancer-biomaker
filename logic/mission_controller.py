@@ -36,6 +36,7 @@ class MissionController(QObject):
     prediction_finished = Signal(object, object)
     counterfactual_ready = Signal(object)
     session_restored = Signal(object)
+    system_purged = Signal() # 🧪 Strategic Signal for UI purification
 
     def __init__(self, user_data_path: str):
         """
@@ -115,7 +116,12 @@ class MissionController(QObject):
 
     def _handle_prediction_ready(self, result: Dict, row_context: Any) -> None:
         """Process AI deliberation results and secure forensic audit trail."""
-        if not result: return
+        if not result:
+            self.log_emitted.emit("AI MISSION FAILED: Committee could not reach consensus. Ensure models are trained.", "red")
+            self.notification.emit("DIAGNOSIS FAILED ⚠️ - Models might be uncalibrated.", "#EF4444")
+            self.status_changed.emit("Analysis Failed", "red")
+            self.prediction_finished.emit((0, 0, 0), row_context) # Unlock UI
+            return
         
         # 1. Secure Forensic Log Entry
         patient_id = str(row_context.get('patient_id', row_context.get('ID', 'RECORD_X')))
@@ -203,8 +209,10 @@ class MissionController(QObject):
             Initial success of mission launch.
         """
         ds_path = dataset_path or self.last_dataset_path
-        if not ds_path or not os.path.exists(ds_path):
-            self.notification.emit("DATASET REQUIRED ⚠️ - Upload data before training.", "#EF4444")
+        # 🛡️ FATAL GUARD: Prevent ensemble deliberation on empty data (Prevents SegFault)
+        if not ds_path or not os.path.exists(ds_path) or self.data_manager.uploaded_df is None:
+            self.notification.emit("DATASET REQUIRED ⚠️ - Upload clinical data before training.", "#EF4444")
+            self.log_emitted.emit("TRAIN ABORTED: No active cohort in memory.", "red")
             return False
 
         # 1. Strategic Pre-Flight Validation
@@ -303,13 +311,13 @@ class MissionController(QObject):
             self.last_dataset_path = ""
             self.settings_manager.set('last_dataset_path', "")
             
-            # Wipe model artifacts
-            models_dir = os.path.join(self.user_data_path, "views", "models")
-            if os.path.exists(models_dir):
-                import shutil
-                shutil.rmtree(models_dir)
-                os.makedirs(models_dir)
+            # Wipe model artifacts and clear analytics cache
+            self.model_manager.delete_all_models()
             
+            # 🧼 Secure Clinical Wipe: Purge local database and session registries
+            self.data_manager.purge_registry()
+            
+            self.system_purged.emit() # 🧬 Trigger Global UI Reset
             self.log_emitted.emit("SYSTEM PURIFIED: All clinical and algorithmic state wiped.", "green")
             self.notification.emit("FACTORY RESET COMPLETE — SYSTEM PURIFIED 🧼", "#EF4444")
             self.status_changed.emit("System Purified — Ready for new cohort.", "green")

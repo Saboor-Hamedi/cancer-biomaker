@@ -54,7 +54,9 @@ class DeepSeekClient(LLMProvider):
                 if chunk.choices and chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
         except Exception as e:
-            yield f"DeepSeek Stream Error: {str(e)}"
+            import logging
+            logging.error(f"DeepSeek Provider Fail: {str(e)}")
+            yield f"\n[CLINICAL CONNECTION ERROR: {str(e)}]"
 
     def get_model_info(self) -> str:
         """Returns metadata about the current instance."""

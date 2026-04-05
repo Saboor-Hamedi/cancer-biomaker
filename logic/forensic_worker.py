@@ -59,8 +59,9 @@ class ForensicWorker(QThread):
             else:
                 consensus_score = f"{avg_models_agreed:.1f}/4"
                 
-            # Secretly write true risks back into the dataframe row loop below
+            # 🧬 Secretly write true risks & predictions back into the dataframe for mapping
             df["RISK"] = risks
+            df["PREDICTION"] = preds
             
         except Exception as e:
             # Fallback if no models are trained yet
@@ -283,6 +284,7 @@ class ForensicWorker(QThread):
             'risk_avg': risk_avg,
             'confidence': lb[0].get('accuracy', 0.942) if lb else 0.0,
             'triage': f"{symptomatic_count} POSITIVE",
-            'consensus': consensus_score
+            'consensus': consensus_score,
+            'data': df # 🧬 Attach processed cohort for similarity mapping
         }
         self.finished.emit(results)

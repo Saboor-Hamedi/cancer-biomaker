@@ -464,6 +464,10 @@ class ModelManager:
                 log.info("Clinical Context: Resetting feature schema for new training session.")
                 self.feature_names = None
 
+            # 🛡️ Strategic Pre-Load Guard: Ensure dataframe exists before split
+            if self.cached_train_df is None and not os.path.exists(data_path):
+                 return False, "Clinical Ingress Fail: No cohort found to calibrate."
+
             X_train, X_test, y_train, y_test, features = self._load_training_data(
                 data_path, 
                 validation_split=validation_split,
@@ -694,6 +698,10 @@ class ModelManager:
             outlier_removal=outlier_removal, 
             scaling_enabled=scaling_enabled
         )
+        # 🛡️ FATAL GUARD: Prevent ensemble deliberation on null or mono-class data (SegFault Fix)
+        if X.empty or len(np.unique(y)) < 2:
+            raise ValueError("Clinical Diversity Failure: Dataset must contain both Benign and Malignant samples (min 2 of each).")
+            
         return (*train_test_split(X, y, test_size=validation_split, random_state=42, stratify=y), X.columns.tolist())
 
     def get_raw_training_set(self, data_path):

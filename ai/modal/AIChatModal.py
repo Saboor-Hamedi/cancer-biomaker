@@ -49,7 +49,10 @@ class AIChatModal(QDialog):
         self.ai_clients = {}
         self.stop_requested = False
         self.current_full_response = ""
-        self.SYSTEM_PROMPT = ""
+        self.stream_cursor = None # Fixed: Clinical Cursor tracker
+        
+        # 🛡️ FATAL GUARD: Pre-initialize systemic context to ensure AI response
+        self.update_context(self.clinical_context)
         
         self._setup_ui()
         
@@ -98,6 +101,8 @@ class AIChatModal(QDialog):
         self.key_entry.setEchoMode(QLineEdit.Password)
         self.key_entry.setFixedWidth(240)
         self.key_entry.setFixedHeight(35)
+        self.key_entry.textChanged.connect(self._on_key_changed)
+        self.key_entry.installEventFilter(self) # Install interceptor for key entry
         h_layout.addWidget(self.key_entry)
 
         self.main_layout.addWidget(self.header)
@@ -105,6 +110,7 @@ class AIChatModal(QDialog):
         # ── 2. Chat Display (Forensic Feed) ──
         self.chat_display = QTextEdit()
         self.chat_display.setReadOnly(True)
+        self.chat_display.document().setDocumentMargin(0) # 🛡️ Alignment Hardening: Zero cumulative indentation
         self.chat_display.setObjectName("AssistantChatFeed")
         self.main_layout.addWidget(self.chat_display)
 
@@ -125,21 +131,18 @@ class AIChatModal(QDialog):
         
         self.export_btn = QPushButton(" 📁 EXPORT RESEARCH NOTE")
         self.export_btn.setFixedHeight(40)
+        self.export_btn.setAutoDefault(False) # Disable accidental Enter-trigger
+        self.export_btn.setDefault(False)
         self.export_btn.clicked.connect(self._handle_export)
         btn_row.addWidget(self.export_btn)
         
         btn_row.addStretch()
 
-        self.stop_btn = QPushButton("STOP")
-        self.stop_btn.setEnabled(False)
-        self.stop_btn.setFixedHeight(40)
-        self.stop_btn.setStyleSheet("QPushButton:enabled { background-color: #EF4444; color: white; border: none; border-radius: 8px; font-weight: bold; }")
-        self.stop_btn.clicked.connect(self._handle_stop)
-        btn_row.addWidget(self.stop_btn)
-
-        self.send_btn = QPushButton("EXECUTE ANALYSIS")
+        self.send_btn = QPushButton("SEND")
         self.send_btn.setFixedHeight(40)
         self.send_btn.setObjectName("PrimaryBtn")
+        self.send_btn.setAutoDefault(False)
+        self.send_btn.setDefault(False)
         self.send_btn.clicked.connect(self._handle_send)
         btn_row.addWidget(self.send_btn)
 
@@ -148,15 +151,18 @@ class AIChatModal(QDialog):
         
     def eventFilter(self, obj, event):
         """Tactical Event Interceptor: Handle clinical hotkeys."""
-        if obj is self.user_input and event.type() == QEvent.Type.KeyPress:
+        if event.type() == QEvent.Type.KeyPress:
             if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
-                if event.modifiers() & Qt.ShiftModifier:
-                    # Allow manual new line on Shift+Enter
-                    return False
-                else:
-                    # Execute send on naked Enter
-                    self._handle_send()
-                    return True
+                # ── Case A: Hitting Enter in API Key Field ──
+                if obj is self.key_entry:
+                    self.user_input.setFocus() # Jump to prompt field
+                    return True # Stop the event here
+                
+                # ── Case B: Hitting Enter in Prompt Field ──
+                if obj is self.user_input:
+                    if not (event.modifiers() & Qt.ShiftModifier):
+                        self._handle_send()
+                        return True
         return super().eventFilter(obj, event)
 
     def apply_theme(self, p):
@@ -221,21 +227,43 @@ class AIChatModal(QDialog):
         """
 
     def _load_saved_keys(self):
-        """Clinical Token Retrieval Engine."""
+        """Clinical Token Retrieval Engine & Provider Restoration."""
         if self.settings_manager:
+            # First, restore the last used provider from the vault
+            last_p = self.settings_manager.last_ai_provider
+            if last_p:
+                index = self.provider_menu.findText(last_p)
+                if index >= 0:
+                    self.provider_menu.setCurrentIndex(index)
+
             p = self.provider_menu.currentText()
             # Surgical restoration of the ai_keys ingestion
             keys = getattr(self.settings_manager, 'ai_keys', {})
             self.key_entry.setText(keys.get(p, ""))
 
     def _on_provider_change(self, provider):
+        """Sync provider selection to clinical persistence vault."""
+        if self.settings_manager:
+            self.settings_manager.set_last_ai_provider(provider)
         self._load_saved_keys()
 
+    def _on_key_changed(self, key):
+        """Tactical Persistence: Lock the API key into the clinical vault instantly."""
+        if self.settings_manager:
+            provider = self.provider_menu.currentText()
+            # This calls settings_manager.set_ai_key which handles the JSON write
+            self.settings_manager.set_ai_key(provider, key.strip())
+
     def _handle_send(self):
+        # ── Toggle Logic: One Button, Two Missions ──
+        if self.send_btn.text() == "STOP":
+            self._handle_stop()
+            return
+
         prompt = self.user_input.toPlainText().strip()
         if not prompt: return
         
-        provider = self.provider_menu.currentText()
+        provider = str(self.provider_menu.currentText()).lower().strip()
         api_key = self.key_entry.text().strip()
         
         if not api_key:
@@ -243,66 +271,110 @@ class AIChatModal(QDialog):
             return
             
         self.user_input.clear()
+        self.user_input.setReadOnly(True) # 🛡️ Clinical Lock: Prevent dual-mission collision
         self._append_message("RESEARCHER", prompt, is_ai=False)
         
-        self.stop_btn.setEnabled(True)
+        # UI Transformation: Enter 'Active Mission' Mode
+        self.send_btn.setText("STOP")
+        self.send_btn.setStyleSheet("QPushButton { background-color: #EF4444; color: white; border: none; border-radius: 8px; font-weight: bold; }")
+        
         self.current_full_response = ""
         self.stop_requested = False
+        self.stream_active = True # Track mission state
         
         threading.Thread(target=self._fetch_ai_stream, args=(provider, api_key, prompt), daemon=True).start()
 
     def _append_message(self, sender, text, is_ai=True):
+        emoji = "🤖" if is_ai else "🧬"
         color = "#10B981" if is_ai else "#3B82F6"
+        bg = "#18181B" if is_ai else "#09090B"
+        
+        # 🧪 Surgical HTML Insertion: Resets layout flow to fix the 'Staircase Indent' bug
         html = f"""
-        <div style="margin-bottom: 35px;">
-            <b style="color: {color}; font-size: 11px; letter-spacing: 2px;">{sender}</b>
-            <div style="color: #E4E4E7; margin-top: 8px;">{text.replace('\n', '<br>')}</div>
+        <div style="clear: both; width: 100%; margin-bottom: 25px;">
+            <div style="padding: 12px; background-color: {bg}; border-radius: 12px; border: 1px solid #27272A; display: inline-block; min-width: 60%; max-width: 95%;">
+                <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 16px; margin-right: 10px;">{emoji}</span>
+                    <b style="color: {color}; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; font-family: 'Inter', sans-serif;">{sender}</b>
+                </div>
+                <div style="color: #E4E4E7; font-size: 14px; line-height: 1.6; margin-left: 28px;">
+                    {text.replace('\n', '<br>')}
+                </div>
+            </div>
         </div>
         """
-        self.chat_display.append(html)
+        # Ensure clinician can visualize the conversation history horizontally aligned
+        self.chat_display.moveCursor(QTextCursor.End)
+        self.chat_display.insertHtml(html)
         self.chat_display.moveCursor(QTextCursor.End)
 
     def _fetch_ai_stream(self, provider, api_key, prompt):
         """Multi-AI Strategic Deliberation Engine."""
         try:
-            # Thread-safe UI update to clear sending state
-            QTimer.singleShot(0, lambda: self.send_btn.setText("PROCESSING AI MISSION..."))
-            
-            client = MultiAIManager.create_client(provider, api_key)
-            if not client: raise ValueError("Interface Error")
+            # 🧬 Identity Hardening: Provider was sometimes case-mismatched
+            client = MultiAIManager.create_client(provider.lower(), api_key)
+            if not client: 
+                raise ValueError(f"AI Infrastructure Fail: Could not resolve '{provider}' interface.")
             
             QTimer.singleShot(0, self.prepare_stream)
             
+            # Explicit Stream Consumption
             for chunk in client.generate_stream(prompt, system_instruction=self.SYSTEM_PROMPT):
                 if self.stop_requested: break
-                QTimer.singleShot(0, lambda c=chunk: self._on_chunk_received(c))
+                if chunk:
+                    # FIXED: Variable binding in lambda to ensure chunks arrive in UI
+                    QTimer.singleShot(0, lambda c=chunk: self._on_chunk_received(c))
                 
             QTimer.singleShot(0, self.finalize_stream)
         except Exception as e:
             QTimer.singleShot(0, lambda: self._handle_error(str(e)))
 
     def prepare_stream(self):
-        color = "#10B981"
-        self.chat_display.append(f'<b style="color: {color}; font-size: 11px; letter-spacing: 2px;">AI ASSISTANT</b><br>')
+        # Professional Emoji-Header for Streaming (Surgical HTML Insertion)
+        html = f"""
+        <div style="margin-bottom: 20px; padding: 10px; background-color: #18181B; border-radius: 12px; border: 1px solid #27272A;">
+            <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                <span style="font-size: 16px; margin-right: 8px;">🤖</span>
+                <b style="color: #10B981; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;">AI ASSISTANT</b>
+            </div>
+            <div id="ai_content" style="color: #E4E4E7; font-size: 14px; line-height: 1.5; margin-left: 28px;">
+        """
+        self.chat_display.append(html)
         self.stream_cursor = self.chat_display.textCursor()
         self.stream_cursor.movePosition(QTextCursor.End)
 
     def _on_chunk_received(self, chunk):
+        if not chunk or self.stream_cursor is None: return
         self.current_full_response += chunk
+        # 🧪 Thread-Safe Atomic Insertion
         self.stream_cursor.insertText(chunk)
         self.chat_display.moveCursor(QTextCursor.End)
 
     def finalize_stream(self):
-        self.chat_display.append("<br>")
+        if not hasattr(self, 'stream_active') or not self.stream_active:
+            return
+
+        # Securely close the high-fidelity clinical bubble
+        if self.stream_cursor:
+            self.stream_cursor.insertHtml("</div></div>")
+        
+        if not self.current_full_response.strip():
+             if self.stream_cursor:
+                 self.stream_cursor.insertText("No response received from clinical provider.")
+        
+        # UI Transformation: Back to 'Ready' Mode
+        self.user_input.setReadOnly(False)
+        self.user_input.setFocus()
         self.send_btn.setEnabled(True)
-        self.send_btn.setText("EXECUTE ANALYSIS")
-        self.stop_btn.setEnabled(False)
+        self.send_btn.setText("SEND")
+        self.apply_theme(Styles.PALETTES[self.settings_manager.get('theme', 'pure_dark')])
+        self.stop_requested = False
+        self.stream_active = False
+        self.stream_cursor = None
 
     def _handle_error(self, msg):
         self._append_message("SYSTEM FAIL", msg, is_ai=False)
-        self.send_btn.setEnabled(True)
-        self.send_btn.setText("EXECUTE ANALYSIS")
-        self.stop_btn.setEnabled(False)
+        self.finalize_stream()
 
     def _handle_stop(self):
         self.stop_requested = True
