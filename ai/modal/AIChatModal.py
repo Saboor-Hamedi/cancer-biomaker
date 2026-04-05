@@ -1,4 +1,5 @@
 import threading
+import markdown
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, 
                                QLineEdit, QPushButton, QLabel, QFrame, 
                                QComboBox, QMessageBox, QFileDialog)
@@ -76,6 +77,7 @@ class AIChatModal(QDialog):
         self.provider_menu.addItems(["DeepSeek", "Gemini", "OpenAI", "Anthropic", "Ollama"])
         self.provider_menu.setFixedWidth(140)
         self.provider_menu.setFixedHeight(35)
+        self.provider_menu.currentTextChanged.connect(self._on_provider_changed)
         top_row.addWidget(self.provider_menu)
         h_layout.addLayout(top_row)
         
@@ -126,6 +128,8 @@ class AIChatModal(QDialog):
 
         f_layout.addLayout(btn_row)
         self.main_layout.addWidget(self.footer)
+        
+        self._load_provider_settings()
 
     def apply_theme(self, palette):
         self.setStyleSheet(f"""
@@ -151,6 +155,29 @@ class AIChatModal(QDialog):
                     self._handle_send()
                     return True
         return super().eventFilter(obj, event)
+
+    def _load_provider_settings(self):
+        if not self.settings_manager: return
+        saved_provider = self.settings_manager.last_ai_provider
+        idx = self.provider_menu.findText(saved_provider)
+        if idx >= 0:
+            self.provider_menu.setCurrentIndex(idx)
+        self._load_provider_key()
+
+    def _load_provider_key(self):
+        if not self.settings_manager: return
+        provider = self.provider_menu.currentText()
+        keys = self.settings_manager.ai_keys
+        key = keys.get(provider, "")
+        
+        self.key_entry.blockSignals(True)
+        self.key_entry.setText(key)
+        self.key_entry.blockSignals(False)
+
+    def _on_provider_changed(self, provider):
+        if self.settings_manager:
+            self.settings_manager.set_last_ai_provider(provider)
+            self._load_provider_key()
 
     def _on_key_changed(self, key):
         if self.settings_manager:
@@ -196,6 +223,14 @@ class AIChatModal(QDialog):
             color = "#3B82F6"
             bg = "#09090B" if is_dark else "#FFFFFF"
             
+        if is_ai and text:
+            try:
+                formatted_text = markdown.markdown(text, extensions=['fenced_code', 'tables'])
+            except:
+                formatted_text = text.replace('\\n', '<br>')
+        else:
+            formatted_text = text.replace('\\n', '<br>')
+            
         msg_html = f"""
         <div style="margin: 0; padding: 0; clear: both; width: 100%;">
             <div style="margin-bottom: 25px; padding: 15px; background-color: {bg}; border-radius: 12px; border: 1px solid #27272A; display: inline-block; width: 85%;">
@@ -204,7 +239,7 @@ class AIChatModal(QDialog):
                     <b style="color: {color}; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;">{sender}</b>
                 </div>
                 <div style="color: {'#E4E4E7' if is_dark else '#0F172A'}; font-size: 14px; line-height: 1.6; margin-left: 28px;">
-                    {text.replace('\\n', '<br>')}
+                    {formatted_text}
                 </div>
             </div>
         </div>
