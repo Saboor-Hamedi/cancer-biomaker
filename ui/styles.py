@@ -53,6 +53,10 @@ class Styles:
             border-right: 1px solid {p['border']};
         }}
 
+        QLabel {{
+            background-color: transparent;
+        }}
+
         QLabel#SidebarTitle {{
             color: {p['accent']};
             font-size: 16px;

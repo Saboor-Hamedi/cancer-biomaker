@@ -21,7 +21,13 @@ class VisualizationModal(QDialog):
         self.chart_type = chart_type
         self.data = data
         self.is_light = is_light
-        
+
+        # ── 🏗️ Window Architecture ──
+        # Enable industrial-grade window controls (Close, Minimize, Maximize)
+        self.setWindowFlags(self.windowFlags() | 
+                            Qt.WindowMinimizeButtonHint | 
+                            Qt.WindowMaximizeButtonHint | 
+                            Qt.WindowCloseButtonHint)
         # ── Dynamic Clinical Palette ──
         self._bg      = "#F8FAFC" if is_light else "#000000"
         self._bg2     = "#FFFFFF" if is_light else "#09090B"
@@ -112,11 +118,79 @@ class VisualizationModal(QDialog):
             "Bars":               self._plot_bars,
             "Electrochemical Wave": self._plot_wave,
             "Radar":              self._plot_radar,
+            "Calibration":        self._plot_calibration,
         }
         fn = dispatch.get(self.chart_type, self._plot_placeholder)
         fn()
         self.figure.tight_layout(pad=2.5)
         self.canvas.draw()
+        
+    def _plot_calibration(self):
+        """Electroanalytical Calibration Curves pulling native cohort correlations."""
+        ax = self.figure.add_subplot(111)
+        self._style_ax(ax, "BIOMARKER CALIBRATION CURVES", "Concentration (pg/mL or U/mL)", "Peak Current Response (µA)")
+        
+        df = self.data
+        
+        # We define our target pairs to map Concentration (X) against Peak Height (Y)
+        biomarkers = [
+            ("PSA", "PSA CONCENTRATION", "PSA PEAK HEIGHT", 2.4, 1.2, self._blue),
+            ("AFP", "AFP CONCENTRATION", "AFP PEAK HEIGHT", 3.8, 0.5, self._green),
+            ("CA125", "CA125 CONCENTRATION", "CA125 PEAK HEIGHT", 1.9, 2.1, self._amber)
+        ]
+        
+        has_real_data = False
+        if df is not None and not df.empty:
+            cols_upper = {str(c).upper().replace(" ", ""): c for c in df.columns}
+        else:
+            cols_upper = {}
+
+        for name, conc_key, peak_key, default_m, default_b, color in biomarkers:
+            conc_col = next((cols_upper[k] for k in cols_upper if conc_key.replace(" ", "") in k), None)
+            peak_col = next((cols_upper[k] for k in cols_upper if peak_key.replace(" ", "") in k), None)
+            
+            if conc_col and peak_col:
+                has_real_data = True
+                
+                # Extract clean numerical arrays, absolute value for Peak Height (current)
+                x_vals = pd.to_numeric(df[conc_col], errors='coerce').dropna()
+                y_vals = pd.to_numeric(df[peak_col], errors='coerce').dropna().abs()
+                
+                # Align intersecting indexes
+                common_idx = x_vals.index.intersection(y_vals.index)
+                x_real = x_vals[common_idx]
+                y_real = y_vals[common_idx]
+                
+                if len(x_real) > 1:
+                    # Calculate real regression slope (Current = m * Conc + b)
+                    m, b = np.polyfit(x_real, y_real, 1)
+                    
+                    # Plot real scatter points
+                    ax.scatter(x_real, y_real, color=color, alpha=0.6, s=40, edgecolors=self._bg)
+                    
+                    # Compute regression line range
+                    v_conc = np.linspace(x_real.min(), x_real.max(), 100)
+                    i_resp = (m * v_conc) + b
+                    
+                    ax.plot(v_conc, i_resp, color=color, linewidth=3, label=f'{name} (Slope: {m:.2f})')
+                    ax.fill_between(v_conc, i_resp - (y_real.std() * 0.2), i_resp + (y_real.std() * 0.2), color=color, alpha=0.1)
+                    continue
+
+            # Fallback Synthetic Mathematics if Columns are Missing
+            v_conc = np.linspace(0.1, 8.0, 100)
+            i_resp = (default_m * v_conc) + default_b
+            ax.plot(v_conc, i_resp, color=color, linewidth=2, linestyle='--', label=f'{name} [Simulated]')
+            
+            rng = np.random.default_rng(len(name))
+            scatter_x = np.random.uniform(0.5, 7.5, 15)
+            scatter_y = (default_m * scatter_x) + default_b + rng.normal(0, 0.4, 15)
+            ax.scatter(scatter_x, scatter_y, color=color, alpha=0.3, s=20, edgecolors=self._bg)
+
+        if has_real_data:
+            ax.set_title("BIOMARKER CALIBRATION CURVES (DERIVED FROM COHORT DATA)", color=self._text, fontsize=12, fontweight='bold', pad=15)
+            
+        ax.legend(loc='upper left', facecolor=self._bg, edgecolor=self._border, labelcolor=self._text)
+        ax.grid(axis='both', linestyle='--', alpha=0.2, color=self._muted)
         
     def _plot_radar(self):
         """Clinical Radar Chart: Multi-dimensional AI Evaluation."""
@@ -503,10 +577,20 @@ class VisualizationModal(QDialog):
                     perplex = min(30, len(num_df) - 1)
                     embedding = TSNE(n_components=2, perplexity=perplex, random_state=42, init='pca', learning_rate='auto').fit_transform(X_scaled)
                     
-                    # Extract labels
+                    # ── Strategic Label Discovery ──
+                    # We look for the diagnosis ground truth to color-code the similarity map
                     cols = [c.lower() for c in df.columns]
-                    pred_col = next((df.columns[i] for i, c in enumerate(cols) if "prediction" in c or "class" in c), None)
-                    labels = df.loc[num_df.index, pred_col].values if pred_col else np.zeros(len(embedding))
+                    target_keywords = ["prediction", "cancer", "class", "risk", "diagnosis", "result"]
+                    pred_col = None
+                    for kw in target_keywords:
+                        pred_col = next((df.columns[i] for i, c in enumerate(cols) if kw in c), None)
+                        if pred_col: break
+                    
+                    if pred_col:
+                        labels = df.loc[num_df.index, pred_col].values
+                    else:
+                        # Fallback: All Benign if no diagnosis column found
+                        labels = np.zeros(len(embedding))
                 except Exception as e:
                     # Strategic Fallback: If t-SNE fails (e.g. singular matrix), we use the synthetic generator
                     embedding = None
@@ -521,21 +605,24 @@ class VisualizationModal(QDialog):
             embedding = np.vstack([c1, c2])
             labels = np.array([0]*120 + [1]*80)
 
-        # Robust label mapping for scatter
+        # ── High-Fidelity Clinical Label Mapping ──
         unique_labels = np.unique(labels)
-        colors = [self._green, self._red, self._blue, self._amber, self._purple]
         
-        for i, cls_label in enumerate(unique_labels):
+        for cls_label in unique_labels:
             mask = (labels == cls_label)
-            if mask.any():
-                color = colors[i % len(colors)]
-                try: 
-                    is_pos = float(cls_label) > 0.5 
-                    lbl_text = "MALIGNANT" if is_pos else "BENIGN"
-                except: lbl_text = str(cls_label).upper()
-                
-                ax.scatter(embedding[mask, 0], embedding[mask, 1],
-                           c=color, alpha=0.8, edgecolors=self._bg, linewidths=0.5, s=55, label=lbl_text)
+            if not mask.any(): continue
+            
+            # Clinical Logic: 1/Pos = Red, 0/Neg = Green
+            try:
+                is_pos = float(cls_label) > 0.5
+                color = self._red if is_pos else self._green
+                lbl_text = "MALIGNANT" if is_pos else "BENIGN"
+            except:
+                color = self._blue
+                lbl_text = str(cls_label).upper()
+            
+            ax.scatter(embedding[mask, 0], embedding[mask, 1],
+                       c=color, alpha=0.8, edgecolors=self._bg, linewidths=0.5, s=65, label=lbl_text)
 
         # Force axis display even if empty
         ax.set_xlim(embedding[:,0].min()-1, embedding[:,0].max()+1)

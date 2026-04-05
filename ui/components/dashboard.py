@@ -147,6 +147,10 @@ class Dashboard(QWidget):
         self.card_triage.update_value(triage)
         self.card_consensus.update_value(consensus)
 
+    def update_narrative(self, html_text):
+        """Injects dynamic forensic reasoning directly into the dashboard HUD."""
+        self.narrative_label.setText(html_text)
+
     def update_data_info(self, rows=0, cols=0, samples=0):
         self.lbl_data_info.setText(f"Master DB: {rows} Records | Features: {cols} | Samples: {samples}")
 

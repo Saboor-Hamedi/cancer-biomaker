@@ -112,10 +112,16 @@ class UpdateManager(QObject):
                     self.latest_release = data
                     
                     assets = data.get('assets', [])
-                    for asset in assets:
-                        if asset.get('name', '').endswith('.exe'):
-                            self.download_url = asset.get('browser_download_url')
-                            break
+                    # Strategic Multi-Tier Asset Discovery
+                    exe_asset = next((a for a in assets if a.get('name', '').endswith('.exe')), None)
+                    zip_asset = next((a for a in assets if a.get('name', '').endswith('.zip')), None)
+
+                    if exe_asset:
+                        self.download_url = exe_asset.get('browser_download_url')
+                    elif zip_asset:
+                        self.download_url = zip_asset.get('browser_download_url')
+                    else:
+                        self.download_url = None
 
                     if self._is_newer(tag_name, self.current_version):
                         if silent and self._is_skipped(tag_name):
@@ -200,7 +206,9 @@ class UpdateManager(QObject):
         def _download_thread():
             try:
                 tag_name = self.latest_release.get('tag_name', 'latest')
-                temp_file = os.path.join(self.update_dir, f"Update_{tag_name}.exe")
+                # Dynamic Extension Matching
+                ext = ".exe" if self.download_url.lower().endswith(".exe") else ".zip"
+                temp_file = os.path.join(self.update_dir, f"Update_{tag_name}{ext}")
                 
                 req = urllib.request.Request(str(self.download_url), headers={'User-Agent': 'Cancer-Detection-App'})
                 with urllib.request.urlopen(req) as response:
@@ -237,8 +245,16 @@ class UpdateManager(QObject):
 
     def _install_and_restart(self, temp_file):
         try:
-            subprocess.Popen([temp_file, "/SILENT", "/SP-"], shell=True) 
-            QApplication.quit()
+            if temp_file.lower().endswith(".exe"):
+                # Professional Silent Installation
+                subprocess.Popen([temp_file, "/SILENT", "/SP-"], shell=True) 
+                QApplication.quit()
+            else:
+                # Portable ZIP Fallback: Reveal in Explorer for manual extraction
+                import os
+                os.startfile(os.path.dirname(temp_file))
+                QMessageBox.information(self.parent_win, "Portable Update Ready", 
+                    "This version was released as a Portable ZIP.\n\nThe update folder has been opened. Please extract the contents to your app directory to finish the update.")
         except Exception as e:
             QMessageBox.critical(self.parent_win, "Installation Error", f"Could not launch installer: {e}")
 

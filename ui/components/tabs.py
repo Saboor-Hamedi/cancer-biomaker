@@ -549,13 +549,13 @@ class AnalysisTab(QWidget):
         
         self.report_view = QTextEdit()
         self.report_view.setReadOnly(True)
-        self.report_view.setStyleSheet("QTextEdit { border: 1px solid #27272A; border-radius: 0px; padding: 25px; font-size: 14px; line-height: 1.6; }")
+        self.report_view.setStyleSheet("QTextEdit { border: 1px solid #27272A; border-radius: 0px; padding: 25px; font-size: 14px; line-height: 1.6; selection-background-color: #3B82F6; selection-color: #FFFFFF; }")
         content_layout.addWidget(self.report_view)
         layout.addWidget(content)
 
     def apply_theme(self, p):
         if hasattr(self, 'header'): self.header.apply_theme(p)
-        self.report_view.setStyleSheet(f"QTextEdit {{ background-color: {p['card_bg']}; color: {p['text_main']}; border: 1px solid {p['border']}; border-radius: 0px; padding: 25px; font-size: 14px; line-height: 1.6; }}")
+        self.report_view.setStyleSheet(f"QTextEdit {{ background-color: {p['card_bg']}; color: {p['text_main']}; border: 1px solid {p['border']}; border-radius: 0px; padding: 25px; font-size: 14px; line-height: 1.6; selection-background-color: #3B82F6; selection-color: #FFFFFF; }}")
 
     def display_report(self, html):
         self.report_view.setHtml(html)

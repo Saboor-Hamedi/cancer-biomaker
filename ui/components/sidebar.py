@@ -62,18 +62,9 @@ class Sidebar(QFrame):
         self.btn_chat = self._create_mission_btn(" AI RESEARCH CHAT", "🤖", "#10B981")
         self.btn_chat.clicked.connect(self.chat_requested.emit)
         
-        self._layout.addSpacing(30)
-        
-        # ── Secondary Actions ──
         # ⚙️ Mission: System Settings
-        self.btn_settings = QPushButton(" ⚙️  SYSTEM SETTINGS")
-        self.btn_settings.setFixedHeight(45)
-        self.btn_settings.setStyleSheet("""
-            QPushButton { background-color: transparent; color: #A1A1AA; border: none; border-radius: 8px; font-weight: bold; font-size: 11px; text-align: left; padding-left: 15px; }
-            QPushButton:hover { background-color: rgba(255, 255, 255, 0.05); color: #FFFFFF; }
-        """)
+        self.btn_settings = self._create_mission_btn(" SYSTEM SETTINGS", "⚙️", "#A1A1AA")
         self.btn_settings.clicked.connect(self.settings_requested.emit)
-        self._layout.addWidget(self.btn_settings)
         
         self._layout.addStretch()
 

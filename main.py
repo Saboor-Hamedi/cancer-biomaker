@@ -201,6 +201,18 @@ class ClinicalApp(QMainWindow):
         self.tab_analysis.display_report(results['report'])
         self.tabs.setCurrentWidget(self.tab_analysis)
         self.tab_dashboard.update_metrics(confidence=results['confidence'], risk=results['risk_avg'], triage=results['triage'], consensus=results['consensus'])
+        
+        # Inject Cohort Audit Narrative
+        narrative = f"""
+        <b style='color:#3B82F6;'>[SYSTEM AUDIT COMPLETE]</b><br><br>
+        The AI Committee has successfully audited the clinical cohort.<br><br>
+        <b>Volume:</b> {results['triage']}<br>
+        <b>Risk Quotient:</b> {results['risk_avg']:.1%}<br>
+        <b>Consensus Validation:</b> {results['consensus']}<br><br>
+        <i>Action:</i> Refer to the Performance Analysis hub for the deep metric breakdown.
+        """
+        self.tab_dashboard.update_narrative(narrative)
+        
         self.tab_leaderboard.update_leaderboard(results['leaderboard'])
         self.banner.notify("COHORT FORENSIC AUDIT GENERATED 📂", "#10B981")
 
@@ -228,6 +240,17 @@ class ClinicalApp(QMainWindow):
             </div>
         </div>"""
         self.tab_analysis.display_report(report)
+        
+        # Sync Narrative back to Dashboard HUD
+        dash_narrative = f"""
+        <b style='color:#10B981;'>[SINGLE PATIENT PREDICTION FIRED]</b><br><br>
+        The committee successfully analyzed real-time patient biomarker logic.<br><br>
+        <b>Decision:</b> <span style='color: {"#EF4444" if pred == 1 else "#10B981"};'>{consensus}</span><br>
+        <b>Severity Index:</b> {risk:.1%}<br>
+        <b>Recommended Triage:</b> {triage}<br><br>
+        <i>Note:</i> Continue screening subsequent patients or run a full cohort audit.
+        """
+        self.tab_dashboard.update_narrative(dash_narrative)
 
     def _on_counterfactual_ready(self, cf_result):
         if cf_result:
@@ -311,6 +334,7 @@ class ClinicalApp(QMainWindow):
         analysis_menu.addAction("KDE Biomarker Distribution", lambda: self._handle_viz("KDE Distribution"))
         analysis_menu.addAction("Biomarker Correlation Heatmap", lambda: self._handle_viz("Heatmap"))
         analysis_menu.addAction("Electrochemical Biosensor Wave", lambda: self._handle_viz("Electrochemical Wave"))
+        analysis_menu.addAction("Biomarker Calibration Curve", lambda: self._handle_viz("Calibration"))
         analysis_menu.addAction("t-SNE Patient Dimensionality Reduction", lambda: self._handle_viz("t-SNE"))
         analysis_menu.addSeparator()
         analysis_menu.addAction("Committee ROC-AUC Curves", lambda: self._handle_viz("ROC"))

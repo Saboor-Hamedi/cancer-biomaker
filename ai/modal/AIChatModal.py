@@ -6,7 +6,7 @@ from datetime import datetime
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, 
                              QLineEdit, QPushButton, QLabel, QComboBox, 
                              QFrame, QScrollArea, QSizePolicy, QFileDialog, QMessageBox)
-from PySide6.QtCore import Qt, Signal, QTimer, QPoint
+from PySide6.QtCore import Qt, Signal, QTimer, QPoint, QEvent
 from PySide6.QtGui import QFont, QColor, QTextCursor, QIcon
 from ui.styles import Styles
 
@@ -116,8 +116,9 @@ class AIChatModal(QDialog):
         f_layout.setContentsMargins(35, 20, 35, 20)
 
         self.user_input = QTextEdit()
-        self.user_input.setPlaceholderText("Describe clinical context or ask for forensic analysis...")
+        self.user_input.setPlaceholderText("Describe clinical context or ask for forensic analysis... (Enter to Send, Shift+Enter for New Line)")
         self.user_input.setObjectName("AssistantInputField")
+        self.user_input.installEventFilter(self) # Install tactical event interceptor
         f_layout.addWidget(self.user_input)
 
         btn_row = QHBoxLayout()
@@ -132,6 +133,7 @@ class AIChatModal(QDialog):
         self.stop_btn = QPushButton("STOP")
         self.stop_btn.setEnabled(False)
         self.stop_btn.setFixedHeight(40)
+        self.stop_btn.setStyleSheet("QPushButton:enabled { background-color: #EF4444; color: white; border: none; border-radius: 8px; font-weight: bold; }")
         self.stop_btn.clicked.connect(self._handle_stop)
         btn_row.addWidget(self.stop_btn)
 
@@ -143,6 +145,19 @@ class AIChatModal(QDialog):
 
         f_layout.addLayout(btn_row)
         self.main_layout.addWidget(self.footer)
+        
+    def eventFilter(self, obj, event):
+        """Tactical Event Interceptor: Handle clinical hotkeys."""
+        if obj is self.user_input and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+                if event.modifiers() & Qt.ShiftModifier:
+                    # Allow manual new line on Shift+Enter
+                    return False
+                else:
+                    # Execute send on naked Enter
+                    self._handle_send()
+                    return True
+        return super().eventFilter(obj, event)
 
     def apply_theme(self, p):
         """High-fidelity clinical theme synchronization."""
@@ -210,7 +225,7 @@ class AIChatModal(QDialog):
         if self.settings_manager:
             p = self.provider_menu.currentText()
             # Surgical restoration of the ai_keys ingestion
-            keys = self.settings_manager.ai_keys
+            keys = getattr(self.settings_manager, 'ai_keys', {})
             self.key_entry.setText(keys.get(p, ""))
 
     def _on_provider_change(self, provider):
@@ -230,7 +245,6 @@ class AIChatModal(QDialog):
         self.user_input.clear()
         self._append_message("RESEARCHER", prompt, is_ai=False)
         
-        self.send_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
         self.current_full_response = ""
         self.stop_requested = False
@@ -251,6 +265,9 @@ class AIChatModal(QDialog):
     def _fetch_ai_stream(self, provider, api_key, prompt):
         """Multi-AI Strategic Deliberation Engine."""
         try:
+            # Thread-safe UI update to clear sending state
+            QTimer.singleShot(0, lambda: self.send_btn.setText("PROCESSING AI MISSION..."))
+            
             client = MultiAIManager.create_client(provider, api_key)
             if not client: raise ValueError("Interface Error")
             
@@ -278,15 +295,18 @@ class AIChatModal(QDialog):
     def finalize_stream(self):
         self.chat_display.append("<br>")
         self.send_btn.setEnabled(True)
+        self.send_btn.setText("EXECUTE ANALYSIS")
         self.stop_btn.setEnabled(False)
 
     def _handle_error(self, msg):
         self._append_message("SYSTEM FAIL", msg, is_ai=False)
         self.send_btn.setEnabled(True)
+        self.send_btn.setText("EXECUTE ANALYSIS")
         self.stop_btn.setEnabled(False)
 
     def _handle_stop(self):
         self.stop_requested = True
+        self.finalize_stream()
 
     def _handle_export(self):
         path, _ = QFileDialog.getSaveFileName(self, "Export Research Note", "", "Markdown Files (*.md)")
