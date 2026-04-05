@@ -576,14 +576,34 @@ class VisualizationModal(QDialog):
                 try:
                     X_scaled = StandardScaler().fit_transform(num_df)
                     
-                    # Discover Labels
+                    # ── AI-INTEGRATED LABEL DISCOVERY PROTOCOL ──
                     cols_low = [c.lower() for c in df.columns]
-                    pred_col = next((df.columns[i] for i, c in enumerate(cols_low) if any(k in c for k in ["target", "diag", "pred", "class", "risk"])), None)
+                    labels = None
                     
-                    if pred_col:
-                        labels = self._parse_binary_column(df.loc[num_df.index, pred_col])
-                    else:
-                        labels = np.zeros(len(num_df))
+                    # 1. PRIORITY A: CLINICAL GROUND TRUTH (The "0 and 1" column)
+                    truth_col = next((df.columns[i] for i, c in enumerate(cols_low) if any(k in c for k in ["target", "ground", "diag", "actual"])), None)
+                    if truth_col:
+                        temp_labels = self._parse_binary_column(df.loc[num_df.index, truth_col])
+                        if len(np.unique(temp_labels)) > 1:
+                            labels = temp_labels
+                            print(f"[AI VIZ] Using Ground Truth: {truth_col}")
+                    
+                    # 2. PRIORITY B: AI COMMITTEE CONSENSUS (Live Model Decisions)
+                    if labels is None:
+                        pred_col = next((df.columns[i] for i, c in enumerate(cols_low) if any(k in c for k in ["pred", "class", "risk"])), None)
+                        if pred_col:
+                            temp_labels = self._parse_binary_column(df.loc[num_df.index, pred_col])
+                            if len(np.unique(temp_labels)) > 1:
+                                labels = temp_labels
+                                print(f"[AI VIZ] Using Committee Predictions: {pred_col}")
+
+                    # 3. PRIORITY C: UNSUPERVISED CONSENSUS (K-Means Fallback)
+                    # This ensures bipartite clusters even for unlabeled research datasets
+                    if labels is None:
+                        from sklearn.cluster import KMeans
+                        print("[AI VIZ] Missing or uniform ground truth. Executing K-Means Cluster Analysis...")
+                        kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
+                        labels = kmeans.fit_predict(X_scaled)
                         
                     # 🚀 MULTI-LAYOUT ENGINE: Compute 3 different t-SNE projections for clinical validation
                     for p_val in [10, 30, 50]:

@@ -253,7 +253,6 @@ class AIChatModal(QDialog):
             client = MultiAIManager.create_client(provider.lower(), api_key)
             if not client: raise ValueError("AI Infrastructure Fail.")
             
-            print(f"\\n[AI DEBUG] MISSION LAUNCH: {provider}...")
             self.stream_started_signal.emit()
             
             system_msg = self.SYSTEM_PROMPT
@@ -266,13 +265,10 @@ class AIChatModal(QDialog):
             for chunk in client.generate_stream(prompt, system_instruction=system_msg):
                 if self.stop_requested: break
                 if chunk:
-                    print(chunk, end="", flush=True)
                     self.stream_chunk_signal.emit(chunk)
                 
-            print("\\n[AI DEBUG] MISSION SUCCESS.")
             self.stream_finished_signal.emit()
         except Exception as e:
-            print(f"\\n[AI DEBUG] MISSION FAILURE: {str(e)}")
             self.stream_error_signal.emit(str(e))
 
     def prepare_stream(self):
