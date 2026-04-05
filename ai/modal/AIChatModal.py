@@ -256,7 +256,14 @@ class AIChatModal(QDialog):
             print(f"\\n[AI DEBUG] MISSION LAUNCH: {provider}...")
             self.stream_started_signal.emit()
             
-            for chunk in client.generate_stream(prompt, system_instruction=self.SYSTEM_PROMPT):
+            system_msg = self.SYSTEM_PROMPT
+            if getattr(self, 'clinical_context', None):
+                system_msg += "\\n\\n--- CLINICAL CONTEXT FOR CURRENT SESSION ---\\n"
+                for k, v in self.clinical_context.items():
+                    if v:
+                        system_msg += f"\\n>>> {k.replace('_', ' ').upper()}:\\n{v}\\n"
+            
+            for chunk in client.generate_stream(prompt, system_instruction=system_msg):
                 if self.stop_requested: break
                 if chunk:
                     print(chunk, end="", flush=True)

@@ -349,14 +349,27 @@ class ClinicalApp(QMainWindow):
 
     def _on_show_ai_chat(self):
         """Strategic AI Research Consultation Hub."""
-        if not self.ai_modal:
-            # Sync with Mission Controller's Settings Hub (Safe Handshake)
-            ctx = {}
-            try:
-                lb = self.mc.model_manager.get_model_leaderboard(self.mc.last_dataset_path)
-                ctx = {'leaderboard': lb}
-            except: pass
+        ctx = {}
+        try:
+            lb = self.mc.model_manager.get_model_leaderboard(self.mc.last_dataset_path)
+            ctx['Algorithm_Rankings'] = str(lb)
+        except: pass
+        
+        try:
+            df = self.mc.data_manager.uploaded_df
+            if df is not None and not df.empty:
+                ctx['Raw_Data_Base_and_Clinical_Audit'] = f"Dataset size: {df.shape[0]} rows, {df.shape[1]} columns.\\nSample Data:\\n{df.head(10).to_string()}"
+            else:
+                ctx['Raw_Data_Base_and_Clinical_Audit'] = "No dataset currently loaded."
+        except: pass
+        
+        try:
+            analysis_text = self.tab_analysis.report_view.toPlainText()
+            if analysis_text.strip():
+                ctx['Performance_Analysis'] = analysis_text.strip()
+        except: pass
 
+        if not self.ai_modal:
             self.ai_modal = AIChatModal(
                 parent=self, 
                 settings_manager=self.mc.settings_manager,
@@ -365,6 +378,8 @@ class ClinicalApp(QMainWindow):
             # 🛡️ Theme Hardening: Force systemic skinning upon creation
             theme = self.mc.settings_manager.get('theme', 'pure_dark')
             self.ai_modal.apply_theme(Styles.PALETTES[theme])
+        else:
+            self.ai_modal.clinical_context = ctx
 
         self.ai_modal.show()
         self.ai_modal.raise_()
@@ -412,6 +427,13 @@ class ClinicalApp(QMainWindow):
         analysis_menu.addAction("Precision-Recall Analysis", lambda: self._handle_viz("PR Curve"))
         analysis_menu.addAction("AI Confusion Matrix", lambda: self._handle_viz("Confusion Matrix"))
         analysis_menu.addAction("Ensemble Reliability Calibration", lambda: self._handle_viz("Reliability"))
+        analysis_menu.addSeparator()
+        analysis_menu.addAction("XAI SHAP Feature Importance (Beeswarm)", lambda: self._handle_viz("SHAP Beeswarm"))
+        analysis_menu.addAction("XAI Partial Dependence Plot (PDP)", lambda: self._handle_viz("PDP"))
+        analysis_menu.addAction("XAI SHAP Waterfall (Individual Explainer)", lambda: self._handle_viz("SHAP Force"))
+        analysis_menu.addAction("XAI Counterfactual Pathway (What-If)", lambda: self._handle_viz("Counterfactual"))
+        analysis_menu.addAction("Longitudinal Patient Trajectory", lambda: self._handle_viz("Trajectory"))
+        analysis_menu.addAction("Clinical Decision Boundary Map", lambda: self._handle_viz("Decision Boundary"))
         
         theme_menu = menubar.addMenu("&Theme")
         theme_menu.addAction("Pure Dark (MissionControl)", lambda: self._handle_theme_change("pure_dark"))
