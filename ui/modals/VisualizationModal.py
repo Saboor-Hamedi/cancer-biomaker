@@ -305,15 +305,13 @@ class VisualizationModal(QDialog):
         for text in legend.get_texts(): text.set_color(self._text)
         ax.grid(axis='y', linestyle='--', alpha=0.2, color=self._muted)
 
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # ① KDE Distribution — the "3-wave" biomarker chart
-    # ─────────────────────────────────────────────────────────────────────────
     def _plot_kde(self):
-        """Kernel Density Estimation curves for PSA, AFP, CA125 (benign vs malignant)."""
+        """Kernel Density Estimation curves for PSA, AFP, CA125 (Multi-Panel Diagnostic View)."""
+        from scipy.stats import gaussian_kde
+        import matplotlib.gridspec as gridspec
         df = self.data
 
-        # Build realistic synthetic data if no real data is passed
+        # Fallback for uncalibrated state
         if df is None or not isinstance(df, pd.DataFrame) or df.empty:
             rng = np.random.default_rng(42)
             n = 400
@@ -324,7 +322,6 @@ class VisualizationModal(QDialog):
                 "Prediction":     [0]*(n//2) + [1]*(n//2),
             })
 
-        # Detect column names case-insensitively
         col_map = {c.lower().replace(" ", "_"): c for c in df.columns}
         markers = []
         for key, label, color in [
@@ -332,68 +329,51 @@ class VisualizationModal(QDialog):
             ("afp_pg_per_ml",  "AFP (pg/ml)",   self._green),
             ("ca125_u_per_ml", "CA125 (U/ml)",  self._purple),
         ]:
-            if key in col_map:
-                markers.append((col_map[key], label, color))
+            if key in col_map: markers.append((col_map[key], label, color))
 
-        pred_col = col_map.get("prediction")
+        pred_col = None
+        for kw in ["prediction", "cancer_risk_class", "target", "class"]:
+            if col_map.get(kw): 
+                pred_col = col_map[kw]
+                break
 
-        gs = gridspec.GridSpec(1, len(markers) if markers else 1, figure=self.figure,
-                               wspace=0.35)
-
-        colors_class = {0: self._green, 1: self._red}
-        labels_class = {0: "BENIGN", 1: "MALIGNANT"}
-
+        gs = gridspec.GridSpec(1, len(markers) if markers else 1, figure=self.figure, wspace=0.35)
+        
         for idx, (col, label, wave_color) in enumerate(markers):
             ax = self.figure.add_subplot(gs[idx])
-            self._style_ax(ax, title=label, xlabel="Concentration", ylabel="Density" if idx == 0 else "")
-
+            self._style_ax(ax, title=label, xlabel="Concentration", ylabel="Clinical Density" if idx == 0 else "")
+            
             vals = pd.to_numeric(df[col], errors="coerce").dropna()
-
-            if pred_col and pred_col in df.columns:
-                # Split by class → two filled KDE waves
+            if vals.empty: continue
+            
+            if pred_col:
                 for cls in [0, 1]:
-                    subset = pd.to_numeric(
-                        df.loc[df[pred_col].astype(str).str.strip().isin(
-                            [str(cls), "NEGATIVE" if cls == 0 else "POSITIVE",
-                             "BENIGN" if cls == 0 else "MALIGNANT"]
-                        ), col], errors="coerce"
-                    ).dropna()
-                    if len(subset) < 5:
-                        continue
+                    subset = pd.to_numeric(df[df[pred_col] == cls][col], errors="coerce").dropna()
+                    if len(subset) < 5: continue
                     kde = gaussian_kde(subset, bw_method=0.35)
                     x = np.linspace(vals.min(), vals.max(), 300)
                     y = kde(x)
-                    c = self._green if cls == 0 else self._red
-                    ax.plot(x, y, color=c, linewidth=2.5, label=labels_class[cls])
+                    # Class Colors: 0/NEG = Red, 1/POS = Blue
+                    c = self._red if cls == 0 else self._blue
+                    ax.plot(x, y, color=c, linewidth=2.5, label="POSITIVE" if cls == 1 else "NEGATIVE")
                     ax.fill_between(x, y, alpha=0.15, color=c)
             else:
-                # Single KDE for entire cohort
                 kde = gaussian_kde(vals, bw_method=0.35)
                 x = np.linspace(vals.min(), vals.max(), 300)
                 y = kde(x)
-                ax.plot(x, y, color=wave_color, linewidth=3)
+                ax.plot(x, y, color=wave_color, linewidth=3, label="Total Cohort")
                 ax.fill_between(x, y, alpha=0.2, color=wave_color)
 
-            # Peak marker
-            x_full = np.linspace(vals.min(), vals.max(), 300)
-            y_full = gaussian_kde(vals, bw_method=0.35)(x_full)
-            peak_x = x_full[np.argmax(y_full)]
-            ax.axvline(peak_x, color=wave_color, linestyle="--", alpha=0.5, linewidth=1)
-            ax.text(peak_x, ax.get_ylim()[1] * 0.95 if ax.get_ylim()[1] > 0 else 0.1,
-                    f"peak\n{peak_x:.2f}", color=wave_color,
-                    fontsize=7, ha="center", va="top")
+            if not vals.empty:
+                 kde_full = gaussian_kde(vals, bw_method=0.35)
+                 x_full = np.linspace(vals.min(), vals.max(), 300)
+                 y_full = kde_full(x_full)
+                 peak_x = x_full[np.argmax(y_full)]
+                 ax.axvline(peak_x, color=wave_color, linestyle="--", alpha=0.5, linewidth=1)
+            
+            ax.legend(fontsize=8, facecolor=self._bg2, edgecolor=self._border, labelcolor=self._text)
 
-            if pred_col:
-                ax.legend(fontsize=8, facecolor=self._bg2, edgecolor=self._border,
-                          labelcolor=self._text, loc="upper right")
-
-        if not markers:
-            ax = self.figure.add_subplot(111)
-            self._style_ax(ax)
-            ax.text(0.5, 0.5, "No biomarker columns found in dataset.",
-                    color=self._muted, ha="center", va="center", transform=ax.transAxes)
-
-        self.figure.suptitle("BIOMARKER KDE DISTRIBUTION — COHORT ANALYSIS",
+        self.figure.suptitle("CLINICAL BIOMARKER DISTRIBUTIONS — COHORT AUDIT", 
                              color=self._text, fontsize=13, fontweight="bold", y=1.01)
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -578,18 +558,27 @@ class VisualizationModal(QDialog):
                     embedding = TSNE(n_components=2, perplexity=perplex, random_state=42, init='pca', learning_rate='auto').fit_transform(X_scaled)
                     
                     # ── Strategic Label Discovery ──
-                    # We look for the diagnosis ground truth to color-code the similarity map
-                    cols = [c.lower() for c in df.columns]
-                    target_keywords = ["prediction", "cancer", "class", "risk", "diagnosis", "result"]
+                    # We search the high-fidelity cohort for the most accurate class labels
                     pred_col = None
-                    for kw in target_keywords:
-                        pred_col = next((df.columns[i] for i, c in enumerate(cols) if kw in c), None)
-                        if pred_col: break
+                    cols_low = [c.lower() for c in df.columns]
+                    
+                    # 1. Primary: Dashboard's standardized class (Calculated by DataManager)
+                    if "cancer_risk_class" in cols_low:
+                        pred_col = df.columns[cols_low.index("cancer_risk_class")]
+                    # 2. Secondary: Live Prediction context
+                    elif "prediction" in cols_low:
+                        pred_col = df.columns[cols_low.index("prediction")]
+                    # 3. Tertiary: Native dataset labels (Fuzzy matching)
+                    else:
+                        target_keywords = ["cancer", "class", "risk", "diagnosis", "result", "target", "detected"]
+                        for kw in target_keywords:
+                            pred_col = next((df.columns[i] for i, c in enumerate(cols_low) if kw in c), None)
+                            if pred_col: break
                     
                     if pred_col:
                         labels = df.loc[num_df.index, pred_col].values
                     else:
-                        # Fallback: All Benign if no diagnosis column found
+                        # Fallback: All Negative if no diagnosis column found
                         labels = np.zeros(len(embedding))
                 except Exception as e:
                     # Strategic Fallback: If t-SNE fails (e.g. singular matrix), we use the synthetic generator
@@ -612,14 +601,17 @@ class VisualizationModal(QDialog):
             mask = (labels == cls_label)
             if not mask.any(): continue
             
-            # Clinical Logic: 1/Pos = Red, 0/Neg = Green
+            # Clinical Logic: 1/Pos = Red, 0/Neg = Blue
             try:
-                is_pos = float(cls_label) > 0.5
-                color = self._red if is_pos else self._green
-                lbl_text = "MALIGNANT" if is_pos else "BENIGN"
+                # Precise numeric/boolean mapping for clinical classes
+                val = str(cls_label).lower().strip()
+                is_pos = (float(cls_label) > 0.5) if val.replace('.','',1).isdigit() else any(t in val for t in ['pos', 'mal', 'sick', 'detected', 'high'])
+                # Strategic Color Inversion: NEGATIVE = Red, POSITIVE = Blue
+                color = self._blue if is_pos else self._red
+                lbl_text = "POSITIVE" if is_pos else "NEGATIVE"
             except:
-                color = self._blue
-                lbl_text = str(cls_label).upper()
+                color = self._muted
+                lbl_text = f"COHORT {cls_label}"
             
             ax.scatter(embedding[mask, 0], embedding[mask, 1],
                        c=color, alpha=0.8, edgecolors=self._bg, linewidths=0.5, s=65, label=lbl_text)

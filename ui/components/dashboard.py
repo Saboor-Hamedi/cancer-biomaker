@@ -163,16 +163,16 @@ class Dashboard(QWidget):
         allocation_footer = f"""
         <br><br><table width='100%' style='border-top: 1px solid #27272A; margin-top: 15px;'>
             <tr>
-                <td style='color: #71717A; font-size: 11px; padding-top: 10px;'>
-                    <b>COHORT CALIBRATION:</b> {val_ratio:.1%} (INTERNAL)
+                <td style='color: #71717A; font-size: 11px; padding-top: 12px; font-family: "Inter", sans-serif; letter-spacing: 0.5px;'>
+                    <b>🧬 COHORT CALIBRATION:</b> {val_ratio:.1%} (INTERNAL)
                 </td>
-                <td align='right' style='color: #71717A; font-size: 11px; padding-top: 10px;'>
-                    <b>BLIND-TEST ALLOCATION:</b> {test_ratio:.1%} (EXTERNAL)
+                <td align='right' style='color: #71717A; font-size: 11px; padding-top: 12px; font-family: "Inter", sans-serif; letter-spacing: 0.5px;'>
+                    <b>🔍 BLIND-TEST ALLOCATION:</b> {test_ratio:.1%} (EXTERNAL)
                 </td>
             </tr>
         </table>
         """
-        self.narrative_label.setHtml(f"<div style='line-height: 1.6;'>{html_text}</div>" + allocation_footer)
+        self.narrative_label.setHtml(f"<div style='line-height: 1.6; font-family: \"Inter\", sans-serif; color: #E4E4E7;'>{html_text}</div>" + allocation_footer)
 
     def update_data_info(self, rows=0, cols=0, samples=0):
         self.lbl_data_info.setText(f"Master DB: {rows} Records | Features: {cols} | Samples: {samples}")

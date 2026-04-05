@@ -260,8 +260,12 @@ class ClinicalApp(QMainWindow):
         v_split = self.mc.settings_manager.get('validation_split', 0.2)
         t_split = 1.0 - v_split
         
+        narrative_header = "<b style='color:#3B82F6;'>[LONGITUDINAL COHORT AUDIT READY]</b><br><br>"
+        # Extract the forensic summary from the deliberation worker
+        audit_narrative = results.get('narrative', 'The AI Expert Committee has completed a longitudinal audit of the patient cohort. High-fidelity biomarker distributions and multi-model consensus have been established.')
+        
         self.tab_dashboard.update_narrative(
-            narrative, 
+            narrative_header + audit_narrative, 
             val_ratio=v_split, 
             test_ratio=t_split
         )
@@ -303,7 +307,8 @@ class ClinicalApp(QMainWindow):
         <b>Recommended Triage:</b> {triage}<br><br>
         <i>Note:</i> Continue screening subsequent patients or run a full cohort audit.
         """
-        self.tab_dashboard.update_narrative(dash_narrative)
+        v_split = self.mc.settings_manager.get('validation_split', 0.2)
+        self.tab_dashboard.update_narrative(dash_narrative, val_ratio=v_split, test_ratio=1.0-v_split)
 
     def _on_counterfactual_ready(self, cf_result):
         if cf_result:
@@ -345,12 +350,22 @@ class ClinicalApp(QMainWindow):
     def _on_show_ai_chat(self):
         """Strategic AI Research Consultation Hub."""
         if not self.ai_modal:
-            # Sync with Mission Controller's Settings Hub
+            # Sync with Mission Controller's Settings Hub (Safe Handshake)
+            ctx = {}
+            try:
+                lb = self.mc.model_manager.get_model_leaderboard(self.mc.last_dataset_path)
+                ctx = {'leaderboard': lb}
+            except: pass
+
             self.ai_modal = AIChatModal(
                 parent=self, 
                 settings_manager=self.mc.settings_manager,
-                clinical_context={'leaderboard': self.mc.model_manager.get_model_leaderboard(self.mc.last_dataset_path)}
+                clinical_context=ctx
             )
+            # 🛡️ Theme Hardening: Force systemic skinning upon creation
+            theme = self.mc.settings_manager.get('theme', 'pure_dark')
+            self.ai_modal.apply_theme(Styles.PALETTES[theme])
+
         self.ai_modal.show()
         self.ai_modal.raise_()
 

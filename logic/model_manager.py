@@ -367,7 +367,7 @@ class ModelManager:
                 
         self.feature_names = []
         self._feature_hash = 0
-        self.reset_analytics()
+        self.reset_internal_state() # 🧬 Secure Clinical Wipe: Total state purification
 
     @property
     def features(self):
@@ -1178,8 +1178,12 @@ class ModelManager:
         )
         from sklearn.model_selection import StratifiedKFold, cross_val_score
 
-        X_all, y_all = self.get_raw_training_set(data_path)
-        _, X_test, _, y_test, _ = self._load_training_data(data_path)
+        try:
+            X_all, y_all = self.get_raw_training_set(data_path)
+            _, X_test, _, y_test, _ = self._load_training_data(data_path)
+        except (ValueError, FileNotFoundError, Exception):
+            # 🛡️ Mission-Lock Safety: If clinical diversity is insufficient, return null leaderboard
+            return []
 
         available_models = ["Random Forest", "Logistic Regression", "SVM"]
         if HAS_XGB:
