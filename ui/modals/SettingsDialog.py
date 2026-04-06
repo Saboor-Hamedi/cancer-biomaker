@@ -107,7 +107,7 @@ class SettingsDialog(QDialog):
         self.val_ratio_spin.setRange(0.1, 0.5)
         self.val_ratio_spin.setSingleStep(0.05)
         self.val_ratio_spin.setFixedHeight(45)
-        self.val_ratio_spin.setValue(self.sm.get('val_ratio', 0.2))
+        self.val_ratio_spin.setValue(self.sm.get('validation_split', 0.2))
         cal_layout.addRow(lbl_ratio, self.val_ratio_spin)
         
         lbl_skin = QLabel("MISSION INTERFACE SKIN:")
@@ -216,6 +216,6 @@ class SettingsDialog(QDialog):
         return {
             'outlier_removal': self.outlier_toggle.isChecked(),
             'scaling_enabled': self.scaling_toggle.isChecked(),
-            'val_ratio': self.val_ratio_spin.value(),
+            'validation_split': self.val_ratio_spin.value(),
             'theme': self.theme_combo.currentText()
         }
