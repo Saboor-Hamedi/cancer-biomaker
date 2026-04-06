@@ -291,6 +291,7 @@ class ModelManager:
         self._feature_hash   = self._hash_features(self.feature_names)
         self.cached_train_df = None
         self._cached_data_path = None # item #11: Track source for caching
+        self.validation_split = 0.2 # Preservation of calibration settings
 
         self.analytics_cache = {
             'calibration': {}, 'learning': {}, 'metrics': {},
@@ -468,9 +469,12 @@ class ModelManager:
             if self.cached_train_df is None and not os.path.exists(data_path):
                  return False, "Clinical Ingress Fail: No cohort found to calibrate."
 
+            # Persist split for future analytical consistency
+            self.validation_split = validation_split
+
             X_train, X_test, y_train, y_test, features = self._load_training_data(
                 data_path, 
-                validation_split=validation_split,
+                validation_split=self.validation_split,
                 outlier_removal=outlier_removal,
                 scaling_enabled=scaling_enabled
             )
@@ -683,8 +687,11 @@ class ModelManager:
         X = X.fillna(0.0)
         return X, y
 
-    def _load_training_data(self, data_path, validation_split=0.2, outlier_removal=True, scaling_enabled=True):
+    def _load_training_data(self, data_path, validation_split=None, outlier_removal=True, scaling_enabled=True):
         """Standardized data loader — utilizes memory cache to avoid expensive Excel I/O."""
+        if validation_split is None:
+            validation_split = self.validation_split
+            
         if not data_path or not os.path.exists(data_path):
             raise FileNotFoundError(f"Dataset not found at:\n{data_path}\nPlease upload data first.")
             
@@ -1180,7 +1187,8 @@ class ModelManager:
 
         try:
             X_all, y_all = self.get_raw_training_set(data_path)
-            _, X_test, _, y_test, _ = self._load_training_data(data_path)
+            # Evaluate using the currently active validation split calibration
+            _, X_test, _, y_test, _ = self._load_training_data(data_path, validation_split=self.validation_split)
         except (ValueError, FileNotFoundError, Exception):
             # 🛡️ Mission-Lock Safety: If clinical diversity is insufficient, return null leaderboard
             return []
