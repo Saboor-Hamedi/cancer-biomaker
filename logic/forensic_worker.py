@@ -44,9 +44,18 @@ class ForensicWorker(QThread):
         risk_avg = 0.0
         consensus_score = "0/4"
         
+        # 🧬 INITIALIZE CLINICAL BUFFERS: Prevent UnboundLocalError during fallback
+        preds = np.zeros(total_records)
+        confs = np.zeros(total_records)
+        risks = np.zeros(total_records)
+        
         try:
             # Physically run the dataset through the live AI models to get TRUE dynamic metrics
-            preds, confs, risks = self.mm.predict_ensemble(df, is_single=False)
+            res_preds, res_confs, res_risks = self.mm.predict_ensemble(df, is_single=False)
+            preds = np.array(res_preds)
+            confs = np.array(res_confs)
+            risks = np.array(res_risks)
+            
             symptomatic_count = int(np.sum(preds == 1))
             risk_avg = float(np.mean(risks))
             

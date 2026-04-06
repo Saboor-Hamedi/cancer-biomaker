@@ -15,6 +15,7 @@ APP_VERSION = "1.0.4"
 
 # ── Step 1: Industrial Analytical Architecture ──
 from logic.mission_controller import MissionController
+from utils.report_engine import ExecutiveReportEngine
 
 # UI Imports (Professional Class Names)
 from ui.styles import Styles
@@ -67,6 +68,9 @@ class ClinicalApp(QMainWindow):
         self.mc = MissionController(self.user_data_path)
         
         # ── Step 2: Main Layout Setup ──
+        # Clinical Report Engine
+        self.report_engine = ExecutiveReportEngine(self)
+        
         self._setup_ui()
         self._apply_styles()
         self._connect_signals()
@@ -347,6 +351,53 @@ class ClinicalApp(QMainWindow):
         if path:
             self.mc.handle_ingestion(path)
 
+    def _handle_export_dossier(self):
+        """Strategic Export: Assemble the industrial-grade clinical report."""
+        if not self.mc.last_dataset_path or self.mc.data_manager.uploaded_df is None:
+            QMessageBox.warning(self, "Export Failed", "MISSION ABORTED: No clinical cohort is currently in the active buffer.\n\nPlease upload a dataset and run a 'Forensic Audit' before generating a dossier.")
+            return
+
+        df = self.mc.data_manager.uploaded_df
+        if 'Risk_Score' not in df.columns:
+            QMessageBox.warning(self, "Export Failed", "INCOMPLETE ANALYSIS: Global Forensic Audit has not been executed.\n\nPlease click the 'Run Forensic Audit' button first to calculate patient risk levels.")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(self, "EXPORT EXECUTIVE DOSSIER", "Clinical_Forensic_Dossier_v1.0.4.pdf", "PDF Files (*.pdf)")
+        if not path: return
+
+        try:
+            # 1. Gather Metadata for Report (with numeric safety)
+            leaderboard = self.mc.model_manager.get_model_leaderboard(self.mc.last_dataset_path)
+            
+            # 🧪 NUMERIC FORCE: Ensure stats are computed safely
+            scores = pd.to_numeric(df['Risk_Score'], errors='coerce').fillna(0.0)
+            risk_avg = scores.mean()
+            
+            preds = pd.to_numeric(df['Prediction'], errors='coerce').fillna(0)
+            high_risk_count = (preds == 1).sum()
+            
+            v_split = self.mc.settings_manager.get('validation_split', 0.2)
+            
+            summary = {
+                'Total_Patients': len(df),
+                'Avg_Risk': float(risk_avg),
+                'High_Risk_Count': int(high_risk_count),
+                'Threshold': f"{v_split:.0%} Calibrated"
+            }
+            
+            # 2. Trigger Document Synthesis
+            success, msg = self.report_engine.generate_dossier(path, summary, leaderboard)
+            
+            if success:
+                self.update_status(f"Dossier Exported: {os.path.basename(path)}", "green")
+                QMessageBox.information(self, "Dossier Compiled 🛡️", f"Executive Medical Dossier saved successfully:\n\n{path}")
+            else:
+                QMessageBox.critical(self, "Export Error", f"Failed to compile PDF: {msg}")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", f"Clinical engine failure during synthesis: {str(e)}")
+            self.console.log(f"Export Error: {str(e)}", "red")
+
     def _on_show_ai_chat(self):
         """Strategic AI Research Consultation Hub."""
         ctx = {}
@@ -358,7 +409,7 @@ class ClinicalApp(QMainWindow):
         try:
             df = self.mc.data_manager.uploaded_df
             if df is not None and not df.empty:
-                ctx['Raw_Data_Base_and_Clinical_Audit'] = f"Dataset size: {df.shape[0]} rows, {df.shape[1]} columns.\\nSample Data:\\n{df.head(10).to_string()}"
+                ctx['Raw_Data_Base_and_Clinical_Audit'] = f"Dataset size: {df.shape[0]} rows, {df.shape[1]} columns.\nSample Data:\n{df.head(10).to_string()}"
             else:
                 ctx['Raw_Data_Base_and_Clinical_Audit'] = "No dataset currently loaded."
         except: pass
@@ -370,6 +421,7 @@ class ClinicalApp(QMainWindow):
         except: pass
 
         if not self.ai_modal:
+            from ai.modal.AIChatModal import AIChatModal # Lazy load for startup speed
             self.ai_modal = AIChatModal(
                 parent=self, 
                 settings_manager=self.mc.settings_manager,
@@ -411,6 +463,8 @@ class ClinicalApp(QMainWindow):
         menubar = self.menuBar()
         file_menu = menubar.addMenu("&File")
         file_menu.addAction("Reset Session", self._handle_purge, "Ctrl+Shift+Delete")
+        file_menu.addSeparator()
+        file_menu.addAction("Export Executive Dossier", self._handle_export_dossier, "Ctrl+E")
         file_menu.addSeparator()
         file_menu.addAction("Exit", self.close)
 

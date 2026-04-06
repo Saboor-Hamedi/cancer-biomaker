@@ -97,6 +97,7 @@ def build():
 
     # HIDDEN IMPORTS: These are often missed by PyInstaller's analyzer
     hidden_imports = [
+        'PySide6.QtPrintSupport',
         'openpyxl',
         'sklearn.utils._typedefs',
         'sklearn.neighbors._typedefs',
