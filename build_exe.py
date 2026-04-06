@@ -117,7 +117,7 @@ def build():
     # This is critical for XGBoost and PyTorch which have hidden DLLs
     from PyInstaller.utils.hooks import collect_all
     
-    packages_to_collect = ['torch', 'torch_geometric', 'xgboost', 'shap', 'sklearn', 'umap', 'matplotlib', 'numpy']
+    packages_to_collect = ['PySide6', 'torch', 'torch_geometric', 'xgboost', 'shap', 'sklearn', 'umap', 'matplotlib', 'numpy']
     for pkg in packages_to_collect:
         datas, binaries, hiddenimports = collect_all(pkg)
         for d in datas:
@@ -146,7 +146,7 @@ def build():
     # Aggressive collection of optional submodules by the torch/geometric libraries can cause issues.
     excludes = [
     'django', 'IPython', 'notebook', 'jedi', 'sphinx', 'pytest', 
-    'PySide6', 'PyQt5', 'PyQt6', 'nbformat', 'nbconvert',
+    'PyQt5', 'PyQt6', 'nbformat', 'nbconvert',
     'tensorboard', 'torch.distributed', 'torch.nn.modules.export', 'torch.testing',
     'matplotlib.tests', 'numpy.tests', 'expecttest', 'hypothesis',
     'onnxscript', 'onnx', 'opt_einsum', 'triton', 'IPython.kernel', 'cupy',
