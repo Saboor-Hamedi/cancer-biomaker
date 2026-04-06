@@ -325,6 +325,10 @@ class ModelManager:
         self._cached_data_path = None
         self.scaling_stats = {}
         self.rf_model = self.lr_model = self.svm_model = self.xgb_model = self.gnn_model = self.mlp_model = None
+        
+        # Aggressive memory reclamation
+        import gc
+        gc.collect()
 
     def reset_analytics(self):
         """Clears all cached analytical results and unloads in-memory models."""

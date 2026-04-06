@@ -675,8 +675,16 @@ class ModelController:
             self.model_manager.delete_all_models()
             
             # 2. Reset Data Manager state
-            self.data_manager.uploaded_df = None
-            self.data_manager.data_path = None
+            if self.data_manager.uploaded_df is not None:
+                # 🧪 TOTAL CLINICAL PURGE: Remove prediction indicators from the dataset
+                for col in ['Prediction', 'Risk_Score', 'Confidence', 'Consensus_Count', 'Risk']:
+                    if col in self.data_manager.uploaded_df.columns:
+                        self.data_manager.uploaded_df.drop(columns=[col], inplace=True)
+                # Fallback for dynamic/fuzzy matched columns
+                cols_to_drop = [c for c in self.data_manager.uploaded_df.columns if any(k in str(c).lower() for k in ['prediction', 'risk_score', 'confidence_zone'])]
+                if cols_to_drop:
+                    self.data_manager.uploaded_df.drop(columns=cols_to_drop, inplace=True)
+
             self.data_manager.prediction_results = None
 
             # 3. Purge Clinical Vault (SQLite)
