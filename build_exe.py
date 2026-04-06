@@ -73,7 +73,6 @@ def build():
         f"handlers{sep}handlers",
         f"logic{sep}logic",
         f"ui{sep}ui",
-        f"utils{sep}utils",
         f"views{sep}views",
         # Explicitly make sure models are included if they exist
         f"views/models{sep}views/models",
@@ -98,6 +97,7 @@ def build():
     # HIDDEN IMPORTS: These are often missed by PyInstaller's analyzer
     hidden_imports = [
         'PySide6.QtPrintSupport',
+        'utils.report_engine',
         'openpyxl',
         'sklearn.utils._typedefs',
         'sklearn.neighbors._typedefs',

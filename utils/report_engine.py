@@ -31,67 +31,74 @@ class ExecutiveReportEngine:
         printer.setPageOrientation(QPageLayout.Orientation.Portrait)
         printer.setFullPage(True)
         
+        print(f"🚀 INITIALIZING DOSSIER GENERATION: {os.path.basename(output_path)}")
         painter = QPainter()
-        if not painter.begin(printer):
-            return False, "Failed to initiate PDF Painter Engine."
+        try:
+            if not painter.begin(printer):
+                return False, "Failed to initiate PDF Painter Engine."
 
-        # Setup Page Metrics
-        rect = painter.viewport()
-        w, h = rect.width(), rect.height()
-        margin_x = int(w * 0.05)
-        margin_y = int(h * 0.05)
-        content_w = w - (2 * margin_x)
-        
-        # ─── PAGE 1: EXECUTIVE SUMMARY ───
-        self._draw_header(painter, w, margin_x, margin_y, data_summary)
-        
-        current_y = margin_y + 1400 # Spacing after header
-        
-        # 1. Forensic Metadata
-        current_y = self._draw_section_title(painter, "I. CLINICAL AUDIT OVERVIEW", margin_x, current_y)
-        current_y = self._draw_summary_grid(painter, data_summary, margin_x, current_y, content_w)
-        
-        # 2. Algorithm Leaderboard
-        current_y += 400
-        current_y = self._draw_section_title(painter, "II. ALGORITHM RANKING & SENSITIVITY", margin_x, current_y)
-        current_y = self._draw_leaderboard_table(painter, leaderboard, margin_x, current_y, content_w)
-        
-        # 3. High-Risk Confirmation
-        current_y += 400
-        current_y = self._draw_section_title(painter, "III. COMMITTEE CONSENSUS LOG", margin_x, current_y)
-        summary_text = (
-            f"Threshold Detection: The clinical forensic committee calibrated a total of {data_summary.get('Total_Patients', 0)} "
-            f"patient records. A detected cohort of {data_summary.get('High_Risk_Count', 0)} individuals showed high biomarker "
-            f"variance consistent with malignant patterns."
-        )
-        current_y = self._draw_wrapped_text(painter, summary_text, margin_x, current_y, content_w)
+            # Setup Page Metrics
+            rect = painter.viewport()
+            w, h = rect.width(), rect.height()
+            margin_x = int(w * 0.05)
+            margin_y = int(h * 0.05)
+            content_w = w - (2 * margin_x)
+            
+            # ─── PAGE 1: EXECUTIVE SUMMARY ───
+            print(f"  └── Rendering Executive Page Header...")
+            self._draw_header(painter, w, margin_x, margin_y, data_summary)
+            
+            current_y = margin_y + 1400 
+            
+            print(f"  └── Computing Metadata Grids...")
+            current_y = self._draw_section_title(painter, "I. CLINICAL AUDIT OVERVIEW", margin_x, current_y)
+            current_y = self._draw_summary_grid(painter, data_summary, margin_x, current_y, content_w)
+            
+            print(f"  └── Building Algorithm Leaderboard...")
+            current_y += 400
+            current_y = self._draw_section_title(painter, "II. ALGORITHM RANKING & SENSITIVITY", margin_x, current_y)
+            current_y = self._draw_leaderboard_table(painter, leaderboard, margin_x, current_y, content_w)
+            
+            print(f"  └── Syncing Committee Consensus...")
+            current_y += 400
+            current_y = self._draw_section_title(painter, "III. COMMITTEE CONSENSUS LOG", margin_x, current_y)
+            summary_text = (
+                f"Threshold Detection: The clinical forensic committee calibrated a total of {data_summary.get('Total_Patients', 0)} "
+                f"patient records. A detected cohort of {data_summary.get('High_Risk_Count', 0)} individuals showed high biomarker "
+                f"variance consistent with malignant patterns."
+            )
+            current_y = self._draw_wrapped_text(painter, summary_text, margin_x, current_y, content_w)
 
-        # ─── PAGE 2: FORENSIC VISUALIZATIONS (If charts provided) ───
-        if charts:
-            printer.newPage()
-            current_y = margin_y
-            current_y = self._draw_section_title(painter, "IV. BIOMARKER SPATIAL DISTRIBUTION & XAI", margin_x, current_y)
-            
-            # Draw charts in a 2x2 grid or similar
-            chart_h = int(h * 0.3)
-            chart_w = int(content_w * 0.48)
-            
-            items = list(charts.items())[:4] # Take top 4 charts
-            for i, (name, img_data) in enumerate(items):
-                row = i // 2
-                col = i % 2
-                px = margin_x + (col * (chart_w + int(content_w * 0.04)))
-                py = current_y + (row * (chart_h + 200))
+            # ─── PAGE 2: FORENSIC VISUALIZATIONS (If charts provided) ───
+            if charts:
+                print(f"  └── Orchestrating Forensic Multi-Page Visuals...")
+                printer.newPage()
+                current_y = margin_y
+                current_y = self._draw_section_title(painter, "IV. BIOMARKER SPATIAL DISTRIBUTION & XAI", margin_x, current_y)
                 
-                self._draw_chart_frame(painter, name, img_data, px, py, chart_w, chart_h)
+                chart_h = int(h * 0.3)
+                chart_w = int(content_w * 0.48)
+                
+                items = list(charts.items())[:4]
+                for i, (name, img_data) in enumerate(items):
+                    row = i // 2
+                    col = i % 2
+                    px = margin_x + (col * (chart_w + int(content_w * 0.04)))
+                    py = current_y + (row * (chart_h + 200))
+                    self._draw_chart_frame(painter, name, img_data, px, py, chart_w, chart_h)
 
-        # ─── FOOTER & SIGN-OFF (Global) ───
-        self._draw_footer(painter, w, h, margin_x, margin_y)
-        
-        painter.end()
+            # ─── FOOTER & SIGN-OFF (Global) ───
+            print(f"  └── Finalizing Executive Sign-off...")
+            self._draw_footer(painter, w, h, margin_x, margin_y)
+            
+        finally:
+            # 🛡️ SYSTEM PURGE: Ensure the paint device is released even on failure
+            print(f"🏁 Dossier Engine Deactivated. Releasing QPaintDevice.")
+            if painter.isActive():
+                painter.end()
+                
         return True, f"Dossier successfully compiled: {output_path}"
 
-    def _draw_header(self, painter, w, mx, my, summary):
         # 1. Indigo Branding - Clinical Intelligence Badge
         self._indigo = QColor("#4F46E5")
         painter.setBrush(self._indigo)
@@ -100,7 +107,8 @@ class ExecutiveReportEngine:
         painter.drawRoundedRect(logo_rect, 100, 100)
         
         painter.setPen(Qt.white)
-        painter.setFont(QFont("Arial", 16, QFont.Bold))
+        f_logo = QFont("Arial", 16, QFont.Bold)
+        painter.setFont(f_logo)
         painter.drawText(logo_rect, Qt.AlignCenter, "XAI")
         
         # 2. Primary Narrative Executive Title
@@ -134,7 +142,9 @@ class ExecutiveReportEngine:
         painter.drawLine(mx, my + 800, w - mx, my + 800)
         
         # 5. Strategic Calibration Note
-        painter.setFont(QFont("Arial", 9, QFont.Italic))
+        f_note = QFont("Arial", 9)
+        f_note.setItalic(True)
+        painter.setFont(f_note)
         painter.setPen(self._muted)
         painter.drawText(mx, my + 1050, w - (2*mx), 200, Qt.AlignRight, "SECURE V1.2.0 | CLINICAL AUDIT PROTOCOL: ACTIVE")
         
@@ -226,6 +236,11 @@ class ExecutiveReportEngine:
             
             cy += row_h
             
+        # ─── FOOTER & SIGN-OFF (Global) ───
+        f_footer = QFont("Arial", 8)
+        f_footer.setItalic(True)
+        painter.setFont(f_footer)
+        self._draw_footer(painter, w, h, margin_x, margin_y)
         return cy + 200
 
     def _draw_wrapped_text(self, painter, text, x, y, width):
