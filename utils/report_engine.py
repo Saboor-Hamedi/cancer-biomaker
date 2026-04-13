@@ -99,6 +99,7 @@ class ExecutiveReportEngine:
                 
         return True, f"Dossier successfully compiled: {output_path}"
 
+    def _draw_header(self, painter, w, mx, my, summary):
         # 1. Indigo Branding - Clinical Intelligence Badge
         self._indigo = QColor("#4F46E5")
         painter.setBrush(self._indigo)
@@ -236,11 +237,8 @@ class ExecutiveReportEngine:
             
             cy += row_h
             
-        # ─── FOOTER & SIGN-OFF (Global) ───
-        f_footer = QFont("Arial", 8)
-        f_footer.setItalic(True)
-        painter.setFont(f_footer)
-        self._draw_footer(painter, w, h, margin_x, margin_y)
+            cy += row_h
+            
         return cy + 200
 
     def _draw_wrapped_text(self, painter, text, x, y, width):
