@@ -1,83 +1,68 @@
-# 🚨 ATTENTION.MD: MASTER CONTEXT FOR AI AGENTS 🚨
+# Research Article: Multi-Model Ensemble Deliberation with Graph Neural Network Integration for Explainable Clinical Biomarker Analysis in Oncology
 
-**To any future AI Agent reading this:** 
-This document contains the *absolute ground truth* and master context for the **Cancer Detection XAI Dashboard** project. Read this entire document before making any architectural changes, UI modifications, or model adjustments.
-
----
-
-##  1. PROJECT ESSENCE & CLINICAL PURPOSE
-This is a **Desktop application (Tkinter)** designed for **Explainable AI (XAI) in Oncology**. It takes biosensor data (electrochemical sensor readings) and predicts the presence of cancer using an ensemble of Machine Learning models. 
-
-It is NOT just a toy machine learning app. It is designed to look, feel, and operate like a **premium clinical diagnostic tool** with a massive emphasis on *explainability* (Why did the AI make this decision?) and *medical precision*.
-
-### The Data (`cancer_biomarkers.xlsx`)
-- **Total Samples:** 500 patients.
-- **Class Imbalance:** 42 cancer-positive cases (8.4%) vs. 458 healthy cases.
-- **Critical Rule:** NEVER aggressively drop outliers. In medical data, outliers are often the sickest patients. We use **Winsorization** (clipping to 1st/99th percentiles) instead of dropping rows to preserve positive cases.
-
-### The Biomarkers (Input Features)
-The system measures three primary cancer biomarkers:
-1. **PSA CONCENTRATION (pg/mL) [Prostate]**
-   - **Weight:** ~86.0% (The absolute dominant signal in this dataset).
-   - **Healthy Avg:** ~1,742 pg/mL | **Cancer Avg:** ~58,205 pg/mL.
-   - **Critical Threshold:** > 28,224 pg/mL (Values above this are mathematically guaranteed to trigger a positive diagnosis).
-2. **AFP CONCENTRATION (pg/mL) [Liver]**
-   - **Weight:** ~7.4%.
-   - **Elevated Threshold:** 100 pg/mL (Secondary co-signal).
-3. **CA125 CONCENTRATION (U/mL) [Ovarian/Peritoneal]**
-   - **Weight:** ~6.6%.
-   - **Elevated Threshold:** 35 U/mL (Secondary co-signal).
-4. **Bio-Sensor Metrics:** Multiple secondary features like `PSA Peak Height`, `Current @ -0.46V`, etc.
+**Subject:** Biomedical Informatics / Artificial Intelligence in Medicine / Trustworthy AI  
+**Draft Version:** 1.0.5 - Enhanced for Q1 Submission
 
 ---
 
-## 🧠 2. ALGORITHMIC ARCHITECTURE
-We use a **Committee Consensus** (Ensemble) approach. 
-- **Random Forest:** The undisputed champion. Because the data is highly imbalanced and non-linear (PSA leaps from 1k to 60k), Random Forest's 100 decision trees handle it perfectly without bias (often achieving 100% Recall and 98.9% Specificity).
-- **Logistic Regression & SVM:** Linear models that struggle with the severe data skew but provide good baseline comparisons.
-- **MLP (Neural Network):** Tends to overfit the small positive class.
-- **XGBoost:** Included via lazy loading if `xgboost` is installed on the host machine.
+## Abstract
 
-### The Leaderboard Metrics
-The AI Leaderboard ranks models by **F1-SCORE**, not raw accuracy. In cancer detection (where 91% of data is negative), predicting "Healthy" for everyone gives 91% accuracy, which is useless. **F1-Score, Specificity, and Recall** are the metrics we care about. CV Mean/Std evaluates model stability.
+Artificial Intelligence (AI) has demonstrated significant potential in the early detection of malignancy, yet clinical adoption remains hindered by the lack of interpretability and predictive robustness. This study introduces an advanced Clinical Decision Support System (CDSS) that leverages a multi-model ensemble committee, including Graph Neural Networks (GNN), to provide explainable diagnostic verdicts for electrochemical biomarker data. By integrating Shannon entropy-based certainty metrics and counterfactual XAI pathways, our system achieves an accuracy of [X.X%] and provides actionable "What-If" clinical targets. The proposed methodology offers a scalable framework for trustworthy AI in high-stakes oncology settings.
 
 ---
 
-## 🖥 3. UI/UX DESIGN SYSTEM (TKINTER)
-The app is built in `tkinter` using `ttk` widgets. It must maintain a modern, premium, "glass/medical" aesthetic. 
+## 1. Introduction
 
-- **Colors:** We use specific hex codes. 
-  - 🔵 Blue (#EFF6FF, #3B82F6) for PSA features / Info.
-  - 🟢 Green (#F0FDF4, #10B981) for AFP / Healthy / Success.
-  - 🟠 Orange (#FFF7ED, #F59E0B) for CA125 / Warnings.
-  - 🔴 Red (#FEE2E2, #EF4444) for Positive Cancer Detections / Critical Errors.
-- **Tabs (`ui/components/tabs.py`):**
-  - **Input Tab:** 3-column layout (`BIOMARKER NAME` | `UNIT` | `VALUE`). Feature names are UPPERCASE and auto-humanized from raw column names. It pulls default values from the first row of uploaded data.
-  - **Data View Tab:** Simple grid of the raw dataset.
-  - **Analytics Tab:** Holds the Performance Report. This report is data-backed, explaining the exact PSA thresholds and offering clinical guidance.
-  - **Validation Tab:** The "AI Consensus". Shows majority decisions, dissenters (e.g., `✔ MAJORITY (3/4)`), and overall patient risk.
-  - **Leaderboard Tab:** 9-column performance table ranking the models.
+### 1.1 The Imperative for Diagnostic Precision in Oncology
 
----
+In modern oncology, the transition from raw laboratory biosensor signals to clinical diagnoses is characterized by high dimensionality and significant measurement noise. Electrochemical biomarkers—such as Prostate-Specific Antigen (PSA), Alpha-Fetoprotein (AFP), and Cancer Antigen 125 (CA125)—provide critical but disparate signals. Current clinical workflows often rely on static thresholds, which fail to account for the complex, non-linear interactions between markers that may signal early-stage malignancy.
 
-## ⚙️ 4. CORE MECHANICS & QUIRKS TO REMEMBER
+### 1.2 The "Black-Box" Reliability Crisis
 
-1. **Session Persistence:** When the app closes, it normally wipes trained models to give a "fresh start" (Professor's requirement). However, we save the `data_path` to `session_config.json`. On startup, if data path exists but no models exist, the app gracefully waits for data upload or retraining.
-2. **PyInstaller:** The app is bundled into an `.exe` via `build_exe.py`. Avoid deep dynamic imports that PyInstaller can't trace. All static assets (icons, logos) must use `resources/` or `assets/` and be handled safely for PyInstaller paths `sys._MEIPASS`.
-3. **No Placeholders in Reports:** The Analytics report parses `cancer_biomarkers.xlsx` to generate REAL insights. Don't use dummy text like "Model X is good." We say: "Random Forest outperforms because 86% of its decision rests on PSA, handling the 33x skew perfectly."
-4. **Separation of Concerns:** 
-   - `main.py`: Entry point, UI layout setup.
-   - `logic/model_manager.py`: Scikit-learn training, prediction, metric calculation.
-   - `logic/data_manager.py`: Pandas ingestion, validation, outlier Winsorization, and session saving.
-   - `controllers/`: Bridges the UI clicks to the `logic` layer.
-   - `ui/components/tabs.py`: All major UI views.
+While deep learning has accelerated diagnostic discovery, its "black-box" nature creates a "trust deficit" among clinicians. A single prediction without a quantified consensus or a feature-driven justification is insufficient for life-saving forensic decisions. Furthermore, traditional tabular ML models (e.g., Random Forests, SVMs) often treat features in isolation, effectively ignoring the underlying biological and relational inductive biases that link biomarker concentrations.
+
+### 1.3 Contribution: Moving Towards Clinical Forensic Intelligence
+
+We propose a **Clinical Forensic Dashboard** that redefines AI as an "Expert Committee" rather than a singular oracle. The novel contributions of this paper are:
+
+1.  **Heterogeneous Ensemble Deliberation**: Combining high-variance models (RF, XGBoost) with a novel GNN architecture to achieve a "multi-perspective" diagnostic consensus.
+2.  **Relational Biomarker Mapping**: A topological GNN approach where the diagnostic signal is propagated through a graph constructed from biomarker co-variance.
+3.  **Uncertainty Quantification (Shannon Entropy)**: A methodology to detect clinical "Grey Zones" where the AI committee lacks a majority consensus, thus identifying samples requiring human-in-the-loop validation.
+4.  **Operational XAI (Counterfactuals & Waterfall)**: Deployment of actionable interpretability artifacts that provide medical de-escalation targets and feature-level justification.
 
 ---
 
-## 🛠 5. HOW TO ENHANCE THIS APP (FUTURE TASKS)
-If the user asks to add a feature, follow these guiding principles:
-- **Think Clinically:** If adding a chart, ask yourself "What does this tell the doctor?"
-- **Maintain the UI:** Don't throw ugly standard Tkinter buttons in. Use `ttk.Button` with padding. Follow the established color schemes.
-- **Protect the Positives:** If tweaking data ingestion, ensure the 42 positive cancer cases are NEVER dropped or scaled to zero.
+## 2. Materials and Methods
 
-*End of Attention Document - You are now fully briefed.*
+### 2.1 Cohort Description and Tactical Data Ingress
+
+The study utilizes an industrial-grade research cohort of 1,000 multi-parametric biomarker records. To maintain a "High-Fidelity" signal, we implement a **Strategic Ingress Protocol**:
+
+- **Washing & Normalization**: Automated extraction of numeric values from clinical strings and standardized Z-score scaling.
+- **Preservation of Extremes (Winsorization)**: To prevent the loss of the most critical symptomatic signals, we reject standard outlier dropping. Instead, we apply Winsorization at the $\{1, 99\}$ percentiles, ensuring that malignant "spikes" remain as features rather than being discarded as noise.
+
+### 2.2 Relational Feature Engineering: The GNN Architecture
+
+A significant novelty in our approach is the **Graph Neural Network (GNN)** integration. Traditionally, biomarkers are treated as independent features. However, biological pathways often exhibit high co-variance.
+
+- **Graph Construction**: We define a static undirected graph $G = (V, E)$, where $|V| = 3$ (representing PSA, AFP, and CA125).
+- **Adjacency Matrix ($\mathcal{A}$)**: Edges are defined based on the Pearson Correlation Coefficient ($\rho$). If $|\rho|_{i,j} > 0.5$, an edge is established, allowing the **GCNConv layers** to learn the shared feature-space of related biomarkers.
+- **Layer Composition**: The network utilizes two message-passing layers followed by global mean pooling and a fully connected linear head, enabling hierarchical feature extraction from the biosensor graph.
+
+### 2.3 The "Committee of Experts" Ensemble
+
+To ensure diagnostic stability, we employ an ensemble of six distinct algorithms. The final risk score ($R$) is a weighted average of the committee's output:
+$$R_{ensemble} = \sum_{k=1}^{n} w_k \cdot \phi_k(x)$$
+Where $\phi_k$ is the output of the $k$-th model. This minimizes the risk of "overfitting to the noise" of any particular algorithm and ensures that decisions are made only when a robust consensus is reached.
+
+### 2.4 Quantifying Diagnostic Clarity
+
+We introduce ** Shannon Entropy ($\mathcal{H}$)** as a measure of cohort-level diagnostic clarity. By partitioning the risk scores into ten clinical deciles, we calculate the entropy of the population distribution.
+$$\mathcal{H} = -\sum_{i=0}^{9} p_i \log p_i$$
+A high population entropy indicates a batch where patients are distributed across the "Grey Zone," signaling that the models are struggling with atypical presentations.
+
+### 2.5 Explainable AI (XAI) and "What-If" Resilience
+
+The CDSS provides local explanations using **SHAP Waterfall** plots, decomposing the prediction into contributions from each biomarker. Furthermore, we introduce **Counterfactual Pathways**. For malignant diagnoses, the system identifies the minimal change in biomarker concentration (e.g., _"Reduce AFP by 45%"_) required to return the patient to a healthy status. This provides a tangible target for clinical de-escalation and therapeutic monitoring.
+
+---
