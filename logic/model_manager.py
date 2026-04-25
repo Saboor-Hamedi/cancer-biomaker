@@ -289,6 +289,8 @@ class ModelManager:
         self.mlp_model = None
         self.xgb_model = None
         self.gnn_model = None
+        self.external_models = {} # 🧪 NEW: Registry for research models (name -> path)
+        self._loaded_external_models = {} # Cache for actual model objects
 
         self.feature_names   = self._load_feature_names()
         self.scaling_stats   = self._load_scaling_stats()
@@ -327,6 +329,8 @@ class ModelManager:
                 except: pass
 
         log.info("Clinical Model Manager: Internal state purified.")
+        self.external_models = {}
+        self._loaded_external_models = {}
         self.cached_train_df = None
         self._cached_data_path = None
         self.scaling_stats = {}
@@ -612,9 +616,20 @@ class ModelManager:
         # Matching analysis.ipynb: PSA > 4000 pg/mL is the ground truth
         psa_col = None
         for col in df.columns:
-            if 'psa' in str(col).lower():
+            c_low = str(col).lower()
+            if 'psa' in c_low and not any(k in c_low for k in ['ratio', 'percent', 'free']):
                 psa_col = col
+                log.info(f"Clinical Hub: Mapping primary biomarker signal to '{col}'")
                 break
+        
+        if psa_col is None:
+             # Fallback to other high-impact markers if PSA is missing
+             for col in df.columns:
+                 c_low = str(col).lower()
+                 if any(k in c_low for k in ['afp', 'cea', 'ca125']):
+                     psa_col = col
+                     log.info(f"Clinical Hub: No PSA found. Mapping fallback biomarker to '{col}'")
+                     break
         
         if psa_col is not None:
             log.info(f"Applying Clinical Cutoff: {psa_col} > 4000 for High Risk")
@@ -631,10 +646,13 @@ class ModelManager:
             if label_target:
                 df["cancer_risk_class"] = df[label_target].astype(int)
             else:
+                # FINAL FALLBACK: If no labels or markers, the dataset is unusable for training
+                log.warning("Clinical Hub: No diagnostic markers or target labels found in dataset.")
                 df["cancer_risk_class"] = 0
 
         X = df[X_cols]
         y = df["cancer_risk_class"]
+        log.info(f"Clinical Hub: Final distribution - {len(y[y==1])} Malignant, {len(y[y==0])} Benign")
 
         # Ensure column order consistency
         if self.feature_names:
@@ -656,23 +674,23 @@ class ModelManager:
         # Apply log1p to handle wide concentration ranges (matching analysis.ipynb)
         for col in X.columns:
             if X[col].dtype in [np.float64, np.float32, np.int64]:
-                X[col] = np.log1p(X[col])
+                # 🛡️ Numerical Safety: Ensure no negative values before log transform
+                X[col] = np.log1p(X[col].clip(lower=0))
 
-            # Use RobustScaler (matches notebook) - more robust to outliers than StandardScaler
-            from sklearn.preprocessing import RobustScaler
-            if self.scaler is None:
+        # ── Step 5: ROBUST SCALING ──
+        from sklearn.preprocessing import RobustScaler
+        if self.scaler is None:
+            self.scaler = RobustScaler()
+            X_scaled = self.scaler.fit_transform(X)
+        else:
+            try:
+                X_scaled = self.scaler.transform(X)
+            except:
+                # Fallback if scaler was not fitted or dimensions mismatch
                 self.scaler = RobustScaler()
                 X_scaled = self.scaler.fit_transform(X)
-            else:
-                try:
-                    X_scaled = self.scaler.transform(X)
-                except:
-                    # Fallback if scaler was not fitted or dimensions mismatch
-                    self.scaler = RobustScaler()
-                    X_scaled = self.scaler.fit_transform(X)
 
-            X = pd.DataFrame(X_scaled, columns=X.columns, index=X.index)
-
+        X = pd.DataFrame(X_scaled, columns=X.columns, index=X.index)
         X = X.fillna(0.0)
         return X, y
 
@@ -997,6 +1015,17 @@ class ModelManager:
 
     # ── Model Loading ──────────────────────────────────────────────────────────
 
+    def register_external_model(self, name, path):
+        """Strategic Registration: Link a research model from an external directory."""
+        if os.path.exists(path):
+            self.external_models[name] = path
+            # Force reload if already in memory
+            if name in self._loaded_external_models:
+                del self._loaded_external_models[name]
+            log.info(f"Registered External Model: {name} at {path}")
+            return True
+        return False
+
     def load_model(self, model_name):
         """Load a model by name, using in-memory cache to avoid repeated disk reads."""
         if "AI Ensemble" in model_name:
@@ -1015,6 +1044,16 @@ class ModelManager:
             "GNN Model":           ('gnn_model', 'gnn_model.pkl')
         }
         if model_name not in _map:
+            # Check if it's an external registered model
+            if model_name in self.external_models:
+                if model_name not in self._loaded_external_models:
+                    path = self.external_models[model_name]
+                    try:
+                        self._loaded_external_models[model_name] = joblib.load(path)
+                    except Exception as e:
+                        log.error(f"Failed to load external model {model_name}: {e}")
+                        return None
+                return self._loaded_external_models[model_name]
             return None
         attr, fname = _map[model_name]
         try:
@@ -1137,6 +1176,9 @@ class ModelManager:
         available_models = ["Random Forest", "Logistic Regression", "SVM"]
         if HAS_XGB: available_models.append("XGBoost")
         else:       available_models.append("MLP")
+        
+        # 🛡️ RESEARCH BRIDGE: Include all registered research models in the deliberation
+        available_models.extend(self.external_models.keys())
 
         all_preds = []
         all_probs = []

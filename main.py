@@ -209,7 +209,7 @@ class ClinicalApp(QMainWindow):
         self.mc.counterfactual_ready.connect(self._on_counterfactual_ready)
         self.mc.system_purged.connect(self.tab_dashboard.reset_dashboard)
         self.mc.system_purged.connect(lambda: self.tab_leaderboard.update_leaderboard([]))
-        self.mc.system_purged.connect(lambda: self.control_panel.refresh_models(os.path.join(self.user_data_path, "views", "models")))
+        self.mc.system_purged.connect(self._refresh_model_sidebar)
 
         # ── UI Command Signals ──
         self.sidebar.tab_changed.connect(self._on_nav_requested)
@@ -219,6 +219,7 @@ class ClinicalApp(QMainWindow):
         
         self.control_panel.upload_requested.connect(self._handle_upload)
         self.control_panel.train_requested.connect(self._handle_train)
+        self.control_panel.import_requested.connect(self._handle_import)
         self.control_panel.purge_requested.connect(self._handle_purge)
 
         
@@ -237,7 +238,7 @@ class ClinicalApp(QMainWindow):
         if not feats:
             feats = [c for c in df.select_dtypes(include=['number']).columns if 'id' not in str(c).lower()]
         self.tab_input.refresh_features(feats)
-        self.control_panel.refresh_models(os.path.join(self.user_data_path, "views", "models"))
+        self._refresh_model_sidebar()
 
     def _on_train_finished(self, result):
         success, msg = result
@@ -250,7 +251,7 @@ class ClinicalApp(QMainWindow):
             
             lb = self.mc.model_manager.get_model_leaderboard(self.mc.last_dataset_path)
             self.tab_leaderboard.update_leaderboard(lb)
-            self.control_panel.refresh_models(os.path.join(self.user_data_path, "views", "models"))
+            self._refresh_model_sidebar()
             self.banner.notify("AI COMMITTEE SYNCED & VERIFIED 🧬", "#10B981")
             self.update_status("Mission Calibrated", "green")
         else:
@@ -291,7 +292,6 @@ class ClinicalApp(QMainWindow):
         self.tab_dashboard.update_metrics(confidence=conf, risk=risk, triage=triage, consensus=consensus)
         self.tab_input.update_results(consensus, risk)
         self.banner.notify(f"DIAGNOSTIC CONSENSUS: {consensus} ({risk:.1%})", "#3B82F6" if pred == 0 else "#EF4444")
-        
         # Show Detailed Report in Analysis Tab
         theme = self.mc.settings_manager.get('theme', 'pure_dark')
         is_light = (theme == 'pure_light')
@@ -322,6 +322,21 @@ class ClinicalApp(QMainWindow):
     def _on_counterfactual_ready(self, cf_result):
         if cf_result:
             self.console.log("XAI: Counterfactual generation finalized.", "blue")
+
+    def _refresh_model_sidebar(self):
+        """Unified refresh for internal and research model registries."""
+        models_path = os.path.join(self.user_data_path, "views", "models")
+        self.control_panel.refresh_models(models_path)
+        self.control_panel.refresh_external_models(self.mc.model_manager.external_models)
+
+    def _handle_import(self):
+        """Invoke File Picker for Research Model (.pkl) Ingestion (Multi-select enabled)."""
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Import Research Models", "", "Pickle Models (*.pkl)"
+        )
+        if paths:
+            for path in paths:
+                self.mc.register_research_model(path)
 
     # ── UI Handle Redirects ──
 

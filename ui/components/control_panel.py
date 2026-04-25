@@ -12,6 +12,7 @@ class ControlPanel(QFrame):
     train_requested = Signal()
     audit_requested = Signal()
     purge_requested = Signal()
+    import_requested = Signal() # 🧪 NEW: Research Bridge Signal
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -26,7 +27,7 @@ class ControlPanel(QFrame):
 
         # ── 1. Committee Status HUD (Top) ──
         self.status_hud = QFrame()
-        self.status_hud.setFixedHeight(140)
+        self.status_hud.setFixedHeight(280)
         self.status_hud.setObjectName("StatusHUD")
         sh_layout = QVBoxLayout(self.status_hud)
         sh_layout.setContentsMargins(15, 15, 15, 15)
@@ -50,6 +51,7 @@ class ControlPanel(QFrame):
 
         self.btn_upload = self._create_action_btn(" IMPORT CLINICAL COHORT", "📁", self.upload_requested)
         self.btn_train = self._create_action_btn(" Train AI Model", "🧠", self.train_requested)
+        self.btn_import = self._create_action_btn(" Import Research Model", "🧬", self.import_requested)
         self.btn_purge = self._create_action_btn(" Delete AI Model", "🧼", self.purge_requested)
         
         layout.addStretch()
@@ -97,8 +99,17 @@ class ControlPanel(QFrame):
                 name = m.replace(".pkl", "").upper()
                 item = QListWidgetItem(f" 🗸  {name}")
                 item.setForeground(QColor("#10B981"))
-                item.setFont(QFont("Segoe UI", 10, QFont.Bold))
+                item.setFont(QFont("Segoe UI", 8, QFont.Bold))
                 self.models_list.addItem(item)
+
+    def refresh_external_models(self, external_models):
+        """Display registered research models with a distinct forensic signature."""
+        for name in external_models:
+            item = QListWidgetItem(f" ⌬  {name}")
+            item.setForeground(QColor("#3B82F6")) # Research Blue
+            item.setFont(QFont("Segoe UI", 8, QFont.Bold))
+            item.setToolTip(f"External Research Model: {external_models[name]}")
+            self.models_list.addItem(item)
 
     def apply_theme(self, p):
         txt = p['text_main']

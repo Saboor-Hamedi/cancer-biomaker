@@ -145,6 +145,23 @@ class MissionController(QObject):
         self._active_tasks.clear()
         self.log_emitted.emit("MISSION CONTROL: All active background deliberations aborted.", "red")
 
+    def register_research_model(self, path: str) -> None:
+        """Link an external research model (.pkl) into the AI Committee."""
+        name = os.path.basename(path).replace(".pkl", "").replace("_model", "").upper()
+        # Ensure name doesn't collide with internal models
+        if name in ["XGBOOST", "SVM", "RANDOM FOREST", "MLP", "GNN", "LOGISTIC REGRESSION"]:
+            name = f"RESEARCH_{name}"
+        
+        success = self.model_manager.register_external_model(name, path)
+        if success:
+            self.log_emitted.emit(f"RESEARCH BRIDGE: Registered external model '{name}' successfully.", "green")
+            self.notification.emit(f"RESEARCH MODEL SYNCED: {name} 🧬", "#10B981")
+            # Notify UI to refresh model lists
+            self.system_purged.emit() 
+        else:
+            self.log_emitted.emit(f"RESEARCH BRIDGE FAILED: Could not link model at {path}.", "red")
+            self.notification.emit("MODEL IMPORT FAILED ⚠️", "#EF4444")
+
     # ── Clinical Workflows (Refactored for Task Registry) ──
 
     def restore_session(self) -> bool:
