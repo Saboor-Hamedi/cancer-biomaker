@@ -228,7 +228,14 @@ class MissionController(QObject):
         self.last_dataset_path = ds_path
         self.status_changed.emit("Synchronizing AI Decision Committee...", "orange")
         
+        # 🧪 CLINCAL SYNC: Pass dynamic settings from the vault to the training engine
+        v_split = self.settings_manager.get('validation_split', 0.25)
+        outlier_on = self.settings_manager.get('outlier_removal', True)
+        scale_on = self.settings_manager.get('scaling_enabled', True)
+
         worker = ModelWorker("train", self.model_manager, data=ds_path)
+        worker.set_params(v_split=v_split, outlier_removal=outlier_on, scaling_enabled=scale_on)
+        
         self._register_mission("calibration", worker)
         worker.status.connect(self.log_emitted)
         worker.finished.connect(self.training_finished)

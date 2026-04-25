@@ -13,4 +13,5 @@ settings_config.json
 session_config.json
 .gitignore
 cachedir/
+
 analysis/

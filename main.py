@@ -209,6 +209,7 @@ class ClinicalApp(QMainWindow):
         self.mc.counterfactual_ready.connect(self._on_counterfactual_ready)
         self.mc.system_purged.connect(self.tab_dashboard.reset_dashboard)
         self.mc.system_purged.connect(lambda: self.tab_leaderboard.update_leaderboard([]))
+        self.mc.system_purged.connect(lambda: self.control_panel.refresh_models(os.path.join(self.user_data_path, "views", "models")))
 
         # ── UI Command Signals ──
         self.sidebar.tab_changed.connect(self._on_nav_requested)
@@ -256,6 +257,10 @@ class ClinicalApp(QMainWindow):
             self.update_status(f"Training Failed: {msg}", "red")
 
     def _on_forensic_audit_ready(self, results):
+        # 🧬 STRATEGIC DATA PERSISTENCE: Save enriched data (RISK/PREDICTION) back to manager
+        if 'data' in results:
+            self.mc.data_manager.uploaded_df = results['data']
+            
         self.tab_analysis.display_report(results['report'])
         self.tabs.setCurrentWidget(self.tab_analysis)
         self.tab_dashboard.update_metrics(confidence=results['confidence'], risk=results['risk_avg'], triage=results['triage'], consensus=results['consensus'])
@@ -488,6 +493,10 @@ class ClinicalApp(QMainWindow):
         analysis_menu.addAction("XAI Counterfactual Pathway (What-If)", lambda: self._handle_viz("Counterfactual"))
         analysis_menu.addAction("Longitudinal Patient Trajectory", lambda: self._handle_viz("Trajectory"))
         analysis_menu.addAction("Clinical Decision Boundary Map", lambda: self._handle_viz("Decision Boundary"))
+        analysis_menu.addSeparator()
+        analysis_menu.addAction("Advanced: Confidence Distribution", lambda: self._handle_viz("Confidence Distribution"))
+        analysis_menu.addAction("Advanced: Risk Stratification Path", lambda: self._handle_viz("Risk Trajectory"))
+        analysis_menu.addAction("Advanced: Committee Leaderboard", lambda: self._handle_viz("Leaderboard"))
         
         theme_menu = menubar.addMenu("&Theme")
         theme_menu.addAction("Pure Dark (MissionControl)", lambda: self._handle_theme_change("pure_dark"))

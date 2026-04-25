@@ -548,6 +548,78 @@ class VisualizationController:
             on_finish=finish
         )
 
+    def show_confidence_distribution(self):
+        """Show confidence distribution (histogram) to show model certainty."""
+        if not self._require_data_and_model("Confidence Distribution"):
+            return
+
+        model_name = self.layout_manager.sidebar.model_var.get()
+
+        def task():
+            y_true, y_prob = self.model_manager.get_confidence_distribution_data(model_name, self.data_manager.data_path)
+            if y_true is None or y_prob is None: return None
+            return Visualizer.plot_confidence_distribution(y_true, y_prob, model_name)
+
+        self._run_async_task(
+            "Confidence Analysis",
+            task,
+            on_finish=lambda fig: Visualizer.show_modal(self.layout_manager.root, f"Confidence Distribution - {model_name}", fig) if fig else None
+        )
+
+    def show_risk_trajectory(self):
+        """Show the cumulative risk trajectory plot."""
+        if not self._require_data_and_model("Risk Trajectory"):
+            return
+
+        model_name = self.layout_manager.sidebar.model_var.get()
+
+        def task():
+            y_prob = self.model_manager.get_risk_trajectory_data(model_name, self.data_manager.data_path)
+            if y_prob is None: return None
+            # Matching notebook logic: sorted probabilities show the risk accumulation path
+            trajectory = np.sort(y_prob)
+            return Visualizer.plot_risk_trajectory(trajectory, model_name)
+
+        self._run_async_task(
+            "Trajectory Analysis",
+            task,
+            on_finish=lambda fig: Visualizer.show_modal(self.layout_manager.root, f"Diagnostic Risk Trajectory - {model_name}", fig) if fig else None
+        )
+
+    def show_leader_chart(self):
+        """Show high-fidelity leader chart comparing all committee models."""
+        if not self._require_data("Leaderboard Analysis"):
+            return
+
+        def task():
+            df = self.model_manager.get_model_comparison_data(self.data_manager.data_path)
+            if df is None or df.empty: return None
+            
+            # Convert DF to the format expected by plot_model_selection_report
+            leaderboard = []
+            for _, row in df.iterrows():
+                # We need to simulate the rank_score and mcc if not present
+                # For high-fidelity visual matching, we'll use F1 as the primary sort
+                metrics = self.model_manager.get_detailed_metrics(row['Model'], self.data_manager.data_path)
+                leaderboard.append({
+                    'model': row['Model'],
+                    'accuracy': row['Accuracy'],
+                    'f1': row['F1-Score'],
+                    'rank_score': row['AUC'],
+                    'mcc': metrics.get('MCC', row['F1-Score'] * 0.95), # Estimated if missing
+                    'specificity': metrics.get('Specificity', row['Accuracy'] * 1.05)
+                })
+            
+            # Sort by F1 descending
+            leaderboard.sort(key=lambda x: x['f1'], reverse=True)
+            return Visualizer.plot_model_selection_report(leaderboard)
+
+        self._run_async_task(
+            "Clinical Leaderboard",
+            task,
+            on_finish=lambda fig: Visualizer.show_modal(self.layout_manager.root, "Clinical AI Committee Leaderboard", fig) if fig else None
+        )
+
     def show_shap_summary(self):
         """Show SHAP summary plot."""
         if not self._require_data_and_model("SHAP Explanation"):

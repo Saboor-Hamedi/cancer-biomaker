@@ -11,6 +11,11 @@ class ModelWorker(QThread):
         self.mm = model_manager
         self.data = data
         self._is_cancelled = False
+        self.params = {}
+
+    def set_params(self, **kwargs):
+        """Inject clinical mission parameters."""
+        self.params.update(kwargs)
 
     def abort(self):
         """Strategic AI Mission Abort Command."""
@@ -22,11 +27,19 @@ class ModelWorker(QThread):
             if self.task_type == "train":
                 self.status.emit("Initiating Clinical AI Calibration...", "orange")
                 path_to_train = str(self.data)
-                # Corrected: Accept both message and color from the backend callback
+                
+                # Dynamic Hyperparameter Injection
+                v_split = self.params.get('v_split', 0.25)
+                outlier_on = self.params.get('outlier_removal', True)
+                scale_on = self.params.get('scaling_enabled', True)
+
                 success, msg = self.mm.check_and_train_models(
                     path_to_train, 
                     lambda m, c: self.status.emit(m, c), 
-                    force=True
+                    force=True,
+                    validation_split=v_split,
+                    outlier_removal=outlier_on,
+                    scaling_enabled=scale_on
                 )
                 self.finished.emit((success, msg))
             elif self.task_type == "predict":

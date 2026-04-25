@@ -1104,16 +1104,34 @@ class Visualizer:
         import matplotlib.pyplot as plt
         import seaborn as sns
         from matplotlib.figure import Figure
-        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-        from scipy import stats
-        fig = Figure(figsize=(9, 7))
-        ax = fig.add_subplot(111)
-        ax.scatter(data['x'], data['y'], c=data['labels'], cmap='coolwarm', alpha=0.6, edgecolors='w')
-        ax.set_title('Patient similarity Map (t-SNE)', fontsize=STYLE_CONFIG['title_size'], fontweight='bold')
+        from matplotlib.lines import Line2D
+
+        fig = Figure(figsize=(9, 7), facecolor=DESIGN_PALETTE['bg'])
+        ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
+        
+        # Mapping labels to clinical colors from DESIGN_PALETTE
+        # 1: Malignant (Danger), 0: Benign (Success)
+        colors = [DESIGN_PALETTE['danger'] if l == 1 else DESIGN_PALETTE['success'] for l in data['labels']]
+        
+        ax.scatter(data['x'], data['y'], c=colors, s=100, alpha=0.8, edgecolors='w', linewidth=1)
+        
+        ax.set_title('Patient Similarity Map (t-SNE)', fontsize=STYLE_CONFIG['title_size'], 
+                     fontweight='bold', pad=25, fontfamily=STYLE_CONFIG['font_family'], color=DESIGN_PALETTE['text'])
+        
+        # Custom legend for clinical clarity
+        legend_elements = [
+            Line2D([0], [0], marker='o', color='w', label='Malignant', markerfacecolor=DESIGN_PALETTE['danger'], markersize=10),
+            Line2D([0], [0], marker='o', color='w', label='Benign', markerfacecolor=DESIGN_PALETTE['success'], markersize=10)
+        ]
+        ax.legend(handles=legend_elements, loc='best', frameon=False, prop={'family': STYLE_CONFIG['font_family']})
+        
+        ax.set_xlabel('t-SNE dimension 1', fontsize=STYLE_CONFIG['label_size'])
+        ax.set_ylabel('t-SNE dimension 2', fontsize=STYLE_CONFIG['label_size'])
+        ax.grid(True, linestyle='--', alpha=0.2)
         
         Visualizer._add_explanatory_note(fig, "Topological Cluster Map", 
             "Compresses multi-dimensional clinical data into a 2D proximity map. "
-            "Shared colors identify patient clusters with high clinical similarity.")
+            "Patients clustered together share similar biological profiles, aiding in cohort analysis.")
 
         fig.tight_layout(rect=[0, 0.08, 1, 0.95], pad=3.0)
         return fig
@@ -1869,4 +1887,68 @@ class Visualizer:
             "Dimension audit across 500 patients. All models show high clinical maturity thresholds.")
 
         fig.tight_layout(rect=[0, 0.10, 1, 0.94], w_pad=1.0)
+        return fig
+
+    @staticmethod
+    def plot_confidence_distribution(y_true, y_probs, model_name):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.figure import Figure
+        
+        fig = Figure(figsize=(9, 6), facecolor=DESIGN_PALETTE['bg'])
+        ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
+        
+        malignant_probs = y_probs[y_true == 1]
+        benign_probs = y_probs[y_true == 0]
+        
+        sns.histplot(malignant_probs, bins=20, kde=True, color=DESIGN_PALETTE['danger'], 
+                     label='Malignant', alpha=0.5, ax=ax, element="step")
+        sns.histplot(benign_probs, bins=20, kde=True, color=DESIGN_PALETTE['success'], 
+                     label='Benign', alpha=0.5, ax=ax, element="step")
+        
+        ax.set_title(f'Model Confidence Distribution — {model_name}', fontsize=STYLE_CONFIG['title_size'], 
+                     fontweight='bold', pad=25, fontfamily=STYLE_CONFIG['font_family'], color=DESIGN_PALETTE['text'])
+        ax.set_xlabel('Predicted Probability of Malignancy', fontsize=STYLE_CONFIG['label_size'])
+        ax.set_ylabel('Density of Cases', fontsize=STYLE_CONFIG['label_size'])
+        ax.legend(frameon=False)
+        ax.grid(True, alpha=0.2, linestyle='--')
+        
+        Visualizer._add_explanatory_note(fig, "Confidence Calibration", 
+            "Visualizes how decisively the model separates classes. High 'peaks' at 0 and 1 indicate "
+            "strong diagnostic certainty, while overlap in the center suggests borderline clinical cases.")
+            
+        fig.tight_layout(rect=[0, 0.08, 1, 0.95], pad=3.0)
+        return fig
+
+    @staticmethod
+    def plot_risk_trajectory(cumulative_risk, model_name):
+        import matplotlib.pyplot as plt
+        from matplotlib.figure import Figure
+        
+        fig = Figure(figsize=(9, 6), facecolor=DESIGN_PALETTE['bg'])
+        ax = fig.add_subplot(111, facecolor=DESIGN_PALETTE['bg'])
+        
+        x = np.arange(len(cumulative_risk))
+        
+        # Risk Zones
+        ax.fill_between(x, 0, 0.3, color=DESIGN_PALETTE['success'], alpha=0.15, label='Low Risk Zone')
+        ax.fill_between(x, 0.3, 0.7, color=DESIGN_PALETTE['warning'], alpha=0.15, label='Medium Risk Zone')
+        ax.fill_between(x, 0.7, 1.0, color=DESIGN_PALETTE['danger'], alpha=0.15, label='High Risk Zone')
+        
+        # Trajectory Line
+        ax.plot(x, cumulative_risk, color=DESIGN_PALETTE['primary'], linewidth=3, label='Patient Risk Path')
+        
+        ax.set_title(f'Risk Stratification Trajectory — {model_name}', fontsize=STYLE_CONFIG['title_size'], 
+                     fontweight='bold', pad=25, fontfamily=STYLE_CONFIG['font_family'], color=DESIGN_PALETTE['text'])
+        ax.set_xlabel('Diagnostic Sequence / Step', fontsize=STYLE_CONFIG['label_size'])
+        ax.set_ylabel('Cumulative Risk Probability', fontsize=STYLE_CONFIG['label_size'])
+        ax.set_ylim(0, 1.05)
+        ax.legend(loc='upper left', frameon=False, fontsize=9)
+        ax.grid(True, alpha=0.2, linestyle='--')
+        
+        Visualizer._add_explanatory_note(fig, "Dynamic Risk Assessment", 
+            "Tracks the accumulation of risk signals throughout the diagnostic process. "
+            "A steep upward trajectory indicates rapid evidence convergence toward a positive diagnosis.")
+            
+        fig.tight_layout(rect=[0, 0.08, 1, 0.95], pad=3.0)
         return fig

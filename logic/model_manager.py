@@ -81,13 +81,17 @@ class GNNClassifier:
             self.edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
 
     def _create_graph_data(self, X, y=None):
-        """Create PyG Data objects."""
+        """Create PyG Data objects matching the expanded feature structure of analysis.ipynb."""
         data_list = []
+        num_biomarkers = X.shape[1]
         for idx in X.index:
-            x = torch.tensor(X.loc[idx].values, dtype=torch.float).view(-1, 1)
+            # Match notebook: Expand full sample vector to each biomarker node
+            # shape: [num_biomarkers, num_biomarkers]
+            val_tensor = torch.tensor(X.loc[idx].values, dtype=torch.float).unsqueeze(0)
+            x = val_tensor.expand(num_biomarkers, -1)
+            
             data = Data(x=x, edge_index=self.edge_index)
             if y is not None:
-                # Use unsqueeze to ensure labels are treatable as 1D tensors during batching
                 data.y = torch.tensor(y.loc[idx], dtype=torch.long).unsqueeze(0)
             data_list.append(data)
         return data_list
@@ -275,8 +279,8 @@ class EnsembleProxy:
 
 class ModelManager:
     def __init__(self, script_dir):
-        # Models are now saved in views/models within the tkinter_ui directory
-        self.script_dir = os.path.join(script_dir, 'views', 'models')
+        # Models are now stored within the dedicated mission workspace
+        self.script_dir = os.path.join(script_dir, "views", "models")
         os.makedirs(self.script_dir, exist_ok=True)
 
         self.rf_model  = None
@@ -291,7 +295,8 @@ class ModelManager:
         self._feature_hash   = self._hash_features(self.feature_names)
         self.cached_train_df = None
         self._cached_data_path = None # item #11: Track source for caching
-        self.validation_split = 0.2 # Preservation of calibration settings
+        self.validation_split = 0.30 # Aligned with research notebook (75/25 split)
+        self.scaler = None # RobustScaler instance for feature scaling
 
         self.analytics_cache = {
             'calibration': {}, 'learning': {}, 'metrics': {},
@@ -302,6 +307,7 @@ class ModelManager:
 
     def reset_internal_state(self):
         """Strategic reset of all clinical memory and algorithmic benchmarks."""
+        self.reset_analytics() # Clear all performance caches
         self.rf_model = self.lr_model = self.svm_model = self.xgb_model = self.gnn_model = self.mlp_model = None
         self.feature_names = []
         self.scaling_stats = {}
@@ -363,6 +369,9 @@ class ModelManager:
                 pass
 
         # Also definitely remove feature names to force a fresh sync next time
+        self.feature_names = []
+        self._feature_hash = 0
+        self.reset_internal_state() # 🧬 Secure Clinical Wipe: Total state purification
         feature_path = os.path.join(self.script_dir, 'feature_names.pkl')
         if os.path.exists(feature_path):
             try:
@@ -490,9 +499,9 @@ class ModelManager:
             log.info("Training on %d features. Class distribution: %s", f_count, np.bincount(y_train))
 
             models_data = [
-                ('random_forest_model.pkl',  'Random Forest',       RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')),
-                ('logistic_regression_model.pkl',  'Logistic Regression',  LogisticRegression(random_state=42, max_iter=1000, class_weight='balanced')),
-                ('svm_model.pkl', 'SVM',                  SVC(probability=True, random_state=42, class_weight='balanced')),
+                ('random_forest_model.pkl',  'Random Forest',       RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced', max_depth=10, min_samples_split=5)),
+                ('logistic_regression_model.pkl',  'Logistic Regression',  LogisticRegression(random_state=42, max_iter=1000, class_weight='balanced', C=1.0)),
+                ('svm_model.pkl', 'SVM',                  SVC(kernel='rbf', probability=True, random_state=42, class_weight='balanced', C=1.0, gamma='scale')),
             ]
 
             # Mission Scoped Metrics Extraction
@@ -505,13 +514,14 @@ class ModelManager:
             if HAS_XGB:
                 from xgboost import XGBClassifier
                 models_data.append(('xgboost_model.pkl', 'XGBoost',
-                                     XGBClassifier(eval_metric='logloss', random_state=42, scale_pos_weight=xgb_weight)))
+                                     XGBClassifier(n_estimators=100, eval_metric='logloss', random_state=42, scale_pos_weight=xgb_weight, max_depth=6, learning_rate=0.1)))
 
             from sklearn.neural_network import MLPClassifier
             models_data.append(('mlp_model.pkl', 'MLP', MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=1000, random_state=42)))
 
             if HAS_TORCH:
-                models_data.append(('gnn_model.pkl', 'GNN', GNNClassifier(num_features=1)))
+                # Synchronize GNN input dimensions with biomarker count
+                models_data.append(('gnn_model.pkl', 'GNN', GNNClassifier(num_features=len(features))))
 
             self.feature_names = features
             self._feature_hash = self._hash_features(features)
@@ -564,7 +574,7 @@ class ModelManager:
         # ── Step 1: Tactical Feature Selection ──
         forbidden = [
             "sample_id", "patient_id", "cancer_risk_class", "prediction", "risk",
-            "is_simulated", "timestamp", "date", "id", "unnamed", "target"
+            "is_simulated", "timestamp", "date", "id", "unnamed", "target", "psa"
         ]
 
         # Determine X_cols for both training and clustering
@@ -598,58 +608,30 @@ class ModelManager:
 
             X_cols = sorted(list(set(X_cols)))
 
-        # ── Step 2: Clinical Label Discovery ──
-        label_target = None
+        # ── Step 2: Clinical Label Discovery (PSA > 4000 Cutoff) ──
+        # Matching analysis.ipynb: PSA > 4000 pg/mL is the ground truth
+        psa_col = None
         for col in df.columns:
-            c_low = str(col).lower().replace("_", "").replace(" ", "")
-            # Expanded keyword list for better clinical detection
-            if c_low in ["cancerriskclass", "target", "diagnosis", "class", "result", "outcome", "cancer", "detection", "verdict", "groundtruth"]:
-                label_target = col
+            if 'psa' in str(col).lower():
+                psa_col = col
                 break
-
-        if label_target:
-            y_raw = df[label_target]
-            # Handle object-based labels (M/B, Sick/Healthy)
-            if y_raw.dtype == object or y_raw.dtype == str or len(np.unique(y_raw.dropna())) > 2:
-                y_mapped = []
-                for val in y_raw:
-                    v_low = str(val).lower().strip()
-                    # Fuzzy clinical match
-                    if any(term in v_low for term in ['pos', 'malig', 'canc', 'sick', 'true', '1', 'detected', 'high']):
-                        y_mapped.append(1)
-                    else:
-                        y_mapped.append(0)
-                df["cancer_risk_class"] = y_mapped
-            else:
-                df["cancer_risk_class"] = y_raw.fillna(0).astype(int)
+        
+        if psa_col is not None:
+            log.info(f"Applying Clinical Cutoff: {psa_col} > 4000 for High Risk")
+            df["cancer_risk_class"] = (df[psa_col] > 4000).astype(int)
         else:
-            # BIOLOGICAL CLUSTERING: Final fallback for unlabelled datasets
-            clustering_data = df[X_cols].copy()
-            if clustering_data.isnull().any().any():
-                clustering_data = clustering_data.fillna(clustering_data.mean())
-
-            if clustering_data.empty:
-                # Absolute fallback: uniform labels (indicates bad feature selection)
-                df["cancer_risk_class"] = 0
+            # Fallback only if PSA is missing entirely
+            label_target = None
+            for col in df.columns:
+                c_low = str(col).lower().replace("_", "").replace(" ", "")
+                if c_low in ["cancerriskclass", "target", "diagnosis", "class", "result", "outcome"]:
+                    label_target = col
+                    break
+            
+            if label_target:
+                df["cancer_risk_class"] = df[label_target].astype(int)
             else:
-                from sklearn.cluster import KMeans
-                from sklearn.preprocessing import StandardScaler
-                try:
-                    c_scaled = StandardScaler().fit_transform(clustering_data)
-                    kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
-                    clusters = kmeans.fit_predict(c_scaled)
-
-                    # Align higher biomarker values to Class 1 (Malignant)
-                    ref_col = X_cols[0] if X_cols else None
-                    for c in X_cols:
-                        if any(p in str(c).lower() for p in ['psa', 'afp', 'concentration', 'biomarker']):
-                            ref_col = c; break
-                    if ref_col:
-                        m0, m1 = df.loc[clusters == 0, ref_col].mean(), df.loc[clusters == 1, ref_col].mean()
-                        if m0 > m1: clusters = 1 - clusters
-                    df["cancer_risk_class"] = clusters
-                except:
-                    df["cancer_risk_class"] = 0
+                df["cancer_risk_class"] = 0
 
         X = df[X_cols]
         y = df["cancer_risk_class"]
@@ -670,23 +652,26 @@ class ModelManager:
                         lower, upper = Q1 - 3.0 * IQR, Q3 + 3.0 * IQR
                         X[col] = X[col].clip(lower=lower, upper=upper)
 
-        if scaling_enabled:
-            for col in X.columns:
-                if X[col].dtype in [np.float64, np.float32, np.int64]:
-                    # Strategic Scaling Restoration:
-                    # If we have saved stats for this feature, use them (Enforces inference consistency)
-                    # If not (Training time), calculate and save them.
-                    if col in self.scaling_stats:
-                        mean, std = self.scaling_stats[col]
-                    else:
-                        mean, std = X[col].mean(), X[col].std()
-                        self.scaling_stats[col] = (float(mean), float(std))
+        # ── Step 4: LOG TRANSFORMATION (matching notebook approach) ──
+        # Apply log1p to handle wide concentration ranges (matching analysis.ipynb)
+        for col in X.columns:
+            if X[col].dtype in [np.float64, np.float32, np.int64]:
+                X[col] = np.log1p(X[col])
 
-                    # Numerical Stability: Only scale if there is meaningful variance
-                    if std > 1e-6:
-                        X[col] = (X[col] - mean) / std
-                    else:
-                        X[col] = 0.0 # Suppress static features
+            # Use RobustScaler (matches notebook) - more robust to outliers than StandardScaler
+            from sklearn.preprocessing import RobustScaler
+            if self.scaler is None:
+                self.scaler = RobustScaler()
+                X_scaled = self.scaler.fit_transform(X)
+            else:
+                try:
+                    X_scaled = self.scaler.transform(X)
+                except:
+                    # Fallback if scaler was not fitted or dimensions mismatch
+                    self.scaler = RobustScaler()
+                    X_scaled = self.scaler.fit_transform(X)
+
+            X = pd.DataFrame(X_scaled, columns=X.columns, index=X.index)
 
         X = X.fillna(0.0)
         return X, y
@@ -836,6 +821,77 @@ class ModelManager:
         res = {'scores': scores, 'mean': float(np.mean(scores)), 'std': float(np.std(scores))}
         self.analytics_cache['stability'][model_name] = res
         return res
+
+    def get_confidence_distribution_data(self, model_name, data_path):
+        """Prepare ground truth and probabilities for confidence distribution (cached)."""
+        if model_name in self.analytics_cache['metrics'] and 'y_test' in self.analytics_cache['metrics'][model_name]:
+            return self.analytics_cache['metrics'][model_name]['y_test'], self.analytics_cache['metrics'][model_name]['y_probs']
+
+        model = self.load_model(model_name)
+        if model is None:
+            return None, None
+
+        _, X_test, _, y_test, _ = self._load_training_data(data_path)
+        y_probs = model.predict_proba(X_test)[:, 1]
+        
+        # Cache results to avoid re-calculating
+        if model_name not in self.analytics_cache['metrics']:
+            self.analytics_cache['metrics'][model_name] = {}
+        self.analytics_cache['metrics'][model_name]['y_test'] = y_test
+        self.analytics_cache['metrics'][model_name]['y_probs'] = y_probs
+        
+        return y_test, y_probs
+
+    def get_risk_trajectory_data(self, model_name, data_path):
+        """Prepare probabilities for risk trajectory (cached)."""
+        # Reuse y_probs from metrics if available
+        if model_name in self.analytics_cache['metrics'] and 'y_probs' in self.analytics_cache['metrics'][model_name]:
+            return self.analytics_cache['metrics'][model_name]['y_probs']
+
+        model = self.load_model(model_name)
+        if model is None:
+            return None
+
+        _, X_test, _, y_test, _ = self._load_training_data(data_path)
+        y_probs = model.predict_proba(X_test)[:, 1]
+        
+        # Cache results
+        if model_name not in self.analytics_cache['metrics']:
+            self.analytics_cache['metrics'][model_name] = {}
+        self.analytics_cache['metrics'][model_name]['y_probs'] = y_probs
+        
+        return y_probs
+
+    def get_model_comparison_data(self, data_path):
+        """Extract key metrics for all models to populate the leader chart."""
+        available_models = ["Random Forest", "Logistic Regression", "SVM", "XGBoost", "MLP", "GNN"]
+        comparison_data = []
+        
+        for name in available_models:
+            metrics = self.get_detailed_metrics(name, data_path)
+            if metrics:
+                comparison_data.append({
+                    'Model': name,
+                    'Accuracy': metrics['Accuracy'],
+                    'F1-Score': metrics['F1-Score'],
+                    'AUC': metrics['AUC'],
+                    'Precision': metrics['Precision'],
+                    'Recall': metrics['Recall']
+                })
+        
+        # Add Ensemble metrics
+        ensemble_metrics = self.get_detailed_metrics("AI Ensemble", data_path)
+        if ensemble_metrics:
+            comparison_data.append({
+                'Model': 'AI Ensemble',
+                'Accuracy': ensemble_metrics['Accuracy'],
+                'F1-Score': ensemble_metrics['F1-Score'],
+                'AUC': ensemble_metrics['AUC'],
+                'Precision': ensemble_metrics['Precision'],
+                'Recall': ensemble_metrics['Recall']
+            })
+            
+        return pd.DataFrame(comparison_data)
 
     def get_tsne_data(self, data_path):
         """
@@ -1101,14 +1157,17 @@ class ModelManager:
                                         try: full_input[feat] = float(str(v).split()[0])
                                         except: pass
                                         break
-                            X_test = pd.DataFrame([full_input])[self.feature_names]
+                            X_test_raw = pd.DataFrame([full_input])[self.feature_names]
                         elif isinstance(X_input, pd.Series):
                             full_input = {feat: 0.0 for feat in self.feature_names}
                             for feat in self.feature_names:
                                 if feat in X_input: full_input[feat] = X_input[feat]
-                            X_test = pd.DataFrame([full_input])[self.feature_names]
+                            X_test_raw = pd.DataFrame([full_input])[self.feature_names]
                         else:
-                            X_test = pd.DataFrame([X_input]).reindex(columns=self.feature_names, fill_value=0.0)
+                            X_test_raw = pd.DataFrame([X_input]).reindex(columns=self.feature_names, fill_value=0.0)
+
+                        # CRITICAL FIX: Apply Preprocessing (Log + Robust Scaling) before ensemble inference
+                        X_test, _ = self._prepare_df(X_test_raw, outlier_removal=False, scaling_enabled=True)
 
                         pred = model.predict(X_test)[0]
                         prob = model.predict_proba(X_test)[0]
@@ -1117,7 +1176,10 @@ class ModelManager:
                         all_probs.append(prob)
                     else:
                         # 2. Batch Clinical Auditing Logic
-                        X_test = X_input[self.feature_names]
+                        X_test_raw = X_input[self.feature_names]
+                        # Apply Preprocessing
+                        X_test, _ = self._prepare_df(X_test_raw, outlier_removal=False, scaling_enabled=True)
+                        
                         pred = model.predict(X_test)
                         prob = model.predict_proba(X_test)
 
