@@ -1,7 +1,7 @@
 import importlib.util
+import io
 import logging
 import os
-import io
 import shutil
 
 import joblib
@@ -32,7 +32,7 @@ if HAS_TORCH:
         if hasattr(torch.serialization, 'add_safe_globals'):
              # We forward-declare/import inside if needed, or use the global class name.
              # But it's easier to just allowlist the module path or use weights_only=False later.
-             pass 
+             pass
     except: pass
 else:
     # Placeholder for torch_base used as a type hint
@@ -148,7 +148,7 @@ class GNNClassifier:
             # Restore model from byte stream
             buffer = io.BytesIO(state['model_stream'])
             try:
-                # [SECURITY SYNC]: PyTorch 2.6+ defaults to weights_only=True. 
+                # [SECURITY SYNC]: PyTorch 2.6+ defaults to weights_only=True.
                 # Since we are loading our own locally-persisted GNN objects, we explicitly
                 # set weights_only=False to allow restoring the full GNN class structure.
                 self.model = torch.load(buffer, map_location='cpu', weights_only=False)
@@ -164,7 +164,7 @@ class GNNClassifier:
         self.model.eval()
         if not isinstance(X, pd.DataFrame):
             X = pd.DataFrame(X, columns=self.feature_names)
-            
+
         test_data = self._create_graph_data(X)
         test_loader = DataLoader(test_data, batch_size=32, shuffle=False)
 
@@ -247,7 +247,7 @@ class EnsembleProxy:
                     importances.append(m.feature_importances_)
             except:
                 continue
-        
+
         if importances:
             return np.mean(importances, axis=0)
         # Uniform fallback if no importance sources found
@@ -311,21 +311,21 @@ class ModelManager:
             'calibration': {}, 'learning': {}, 'metrics': {},
             'stability': {}, 'tsne': None, 'pr_threshold': {}, 'shap': {}
         }
-        
+
         # Purge Persistent Artifacts
-        for f in ['feature_names.pkl', 'scaler_meta.pkl', 'random_forest_model.pkl', 
+        for f in ['feature_names.pkl', 'scaler_meta.pkl', 'random_forest_model.pkl',
                   'logistic_regression_model.pkl', 'svm_model.pkl', 'xgboost_model.pkl', 'mlp_model.pkl']:
             path = os.path.join(self.script_dir, f)
             if os.path.exists(path):
                 try: os.remove(path)
                 except: pass
-        
+
         log.info("Clinical Model Manager: Internal state purified.")
         self.cached_train_df = None
         self._cached_data_path = None
         self.scaling_stats = {}
         self.rf_model = self.lr_model = self.svm_model = self.xgb_model = self.gnn_model = self.mlp_model = None
-        
+
         # Aggressive memory reclamation
         import gc
         gc.collect()
@@ -351,7 +351,7 @@ class ModelManager:
                         os.remove(os.path.join(self.script_dir, filename))
                     except:
                         pass
-        
+
         # Cleanup XGBoost/Joblib cache as well
         # self.script_dir is tkinter_ui/views/models, so cachedir is at tkinter_ui/cachedir
         cachedir = os.path.abspath(os.path.join(self.script_dir, '..', '..', 'cachedir'))
@@ -361,7 +361,7 @@ class ModelManager:
                 log.info("Clinical cache (cachedir) cleared.")
             except:
                 pass
-        
+
         # Also definitely remove feature names to force a fresh sync next time
         feature_path = os.path.join(self.script_dir, 'feature_names.pkl')
         if os.path.exists(feature_path):
@@ -369,7 +369,7 @@ class ModelManager:
                 os.remove(feature_path)
             except:
                 pass
-                
+
         self.feature_names = []
         self._feature_hash = 0
         self.reset_internal_state() # 🧬 Secure Clinical Wipe: Total state purification
@@ -417,11 +417,11 @@ class ModelManager:
         """
         if not self.feature_names:
             return True, "No trained features to compare."
-            
+
         # Strip all numerical tags and spaces for a fuzzy match
         clean_data = [str(c).lower().strip() for c in data_columns if not any(f in str(c).lower() for f in ["sample_id", "cancer_risk_class", "prediction", "risk"])]
         clean_trained = [str(f).lower().strip() for f in self.feature_names]
-        
+
         # Check if they are subset/superset enough to proceed
         matches = [f for f in clean_trained if f in clean_data]
         if len(matches) < len(clean_trained) * 0.7:
@@ -438,12 +438,12 @@ class ModelManager:
         """Check if models exist. Trains ONLY if missing and data is available."""
         if not data_path:
             required_models = [
-                'random_forest_model.pkl', 'logistic_regression_model.pkl', 
+                'random_forest_model.pkl', 'logistic_regression_model.pkl',
                 'svm_model.pkl', 'mlp_model.pkl'
             ]
             if HAS_XGB:   required_models.append('xgboost_model.pkl')
             if HAS_TORCH: required_models.append('gnn_model.pkl')
-                
+
             models_exist = all(os.path.exists(os.path.join(self.script_dir, m)) for m in required_models)
             if models_exist and os.path.exists(os.path.join(self.script_dir, 'feature_names.pkl')):
                 return True, "Ensemble committee is fully calibrated and present."
@@ -477,7 +477,7 @@ class ModelManager:
             self.validation_split = validation_split
 
             X_train, X_test, y_train, y_test, features = self._load_training_data(
-                data_path, 
+                data_path,
                 validation_split=self.validation_split,
                 outlier_removal=outlier_removal,
                 scaling_enabled=scaling_enabled
@@ -494,11 +494,11 @@ class ModelManager:
                 ('logistic_regression_model.pkl',  'Logistic Regression',  LogisticRegression(random_state=42, max_iter=1000, class_weight='balanced')),
                 ('svm_model.pkl', 'SVM',                  SVC(probability=True, random_state=42, class_weight='balanced')),
             ]
-            
+
             # Mission Scoped Metrics Extraction
             counts = np.bincount(y_train)
             xgb_weight = counts[0] / counts[1] if len(counts) >= 2 and counts[1] > 0 else 1.0
-            
+
             if len(counts) >= 2 and (counts[0] < 5 or counts[1] < 5):
                 if status_callback: status_callback("Alert: Weak biological diversity detected.", "orange")
 
@@ -506,7 +506,7 @@ class ModelManager:
                 from xgboost import XGBClassifier
                 models_data.append(('xgboost_model.pkl', 'XGBoost',
                                      XGBClassifier(eval_metric='logloss', random_state=42, scale_pos_weight=xgb_weight)))
-            
+
             from sklearn.neural_network import MLPClassifier
             models_data.append(('mlp_model.pkl', 'MLP', MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=1000, random_state=42)))
 
@@ -521,7 +521,7 @@ class ModelManager:
                 target_path = os.path.join(self.script_dir, pkl)
                 if status_callback:
                     status_callback(f"Training {name}…", "orange")
-                
+
                 model_obj.fit(X_train, y_train)
                 joblib.dump(model_obj, target_path)
 
@@ -538,35 +538,35 @@ class ModelManager:
     # ── Data Preparation ────────────────────────────────────────────────────────
     def _read_excel_safe(self, data_path):
         """
-        Smart read from Excel: try 'Training_Data' first, fallback to the first
+        Smart read from Excel: try 'Target_Concentrations' first, fallback to the first
         available sheet.
         """
         try:
             # Attempt 1: Look for clinical standard sheet name
-            df = pd.read_excel(data_path, sheet_name='Training_Data')
+            df = pd.read_excel(data_path, sheet_name='Target_Concentrations')
         except ValueError:
             # Attempt 2: Auto-fallback to the first available sheet
             xl = pd.ExcelFile(data_path)
             sheets = xl.sheet_names
             if not sheets:
                 raise ValueError("The uploaded Excel file appears to be empty (no sheets found).")
-            
+
             first_sheet = sheets[0]
             df = pd.read_excel(data_path, sheet_name=first_sheet)
             log.info("Fallback: Loading model training data from sheet '%s'", first_sheet)
-            
+
         return df
 
     def _prepare_df(self, df, outlier_removal=True, scaling_enabled=True):
         """Auto-label and prepare feature vector based on UI settings."""
         df = df.copy()
-        
+
         # ── Step 1: Tactical Feature Selection ──
         forbidden = [
-            "sample_id", "patient_id", "cancer_risk_class", "prediction", "risk", 
+            "sample_id", "patient_id", "cancer_risk_class", "prediction", "risk",
             "is_simulated", "timestamp", "date", "id", "unnamed", "target"
         ]
-        
+
         # Determine X_cols for both training and clustering
         if self.feature_names:
             X_cols = []
@@ -588,14 +588,14 @@ class ModelManager:
             for pat in standard_patterns:
                 matches = [c for c in df.columns if pat.lower() in str(c).lower()]
                 selected_cols.extend(matches)
-            
+
             X_cols = [c for c in selected_cols if not any(f in str(c).lower() for f in forbidden)]
-            
+
             # Fallback for generic numeric datasets
             if not X_cols:
                 all_num = df.select_dtypes(include=[np.number]).columns.tolist()
                 X_cols = [c for c in all_num if not any(f in str(c).lower() for f in forbidden)]
-            
+
             X_cols = sorted(list(set(X_cols)))
 
         # ── Step 2: Clinical Label Discovery ──
@@ -606,7 +606,7 @@ class ModelManager:
             if c_low in ["cancerriskclass", "target", "diagnosis", "class", "result", "outcome", "cancer", "detection", "verdict", "groundtruth"]:
                 label_target = col
                 break
-        
+
         if label_target:
             y_raw = df[label_target]
             # Handle object-based labels (M/B, Sick/Healthy)
@@ -627,18 +627,18 @@ class ModelManager:
             clustering_data = df[X_cols].copy()
             if clustering_data.isnull().any().any():
                 clustering_data = clustering_data.fillna(clustering_data.mean())
-            
+
             if clustering_data.empty:
                 # Absolute fallback: uniform labels (indicates bad feature selection)
                 df["cancer_risk_class"] = 0
             else:
-                from sklearn.preprocessing import StandardScaler
                 from sklearn.cluster import KMeans
+                from sklearn.preprocessing import StandardScaler
                 try:
                     c_scaled = StandardScaler().fit_transform(clustering_data)
                     kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
                     clusters = kmeans.fit_predict(c_scaled)
-                    
+
                     # Align higher biomarker values to Class 1 (Malignant)
                     ref_col = X_cols[0] if X_cols else None
                     for c in X_cols:
@@ -653,11 +653,11 @@ class ModelManager:
 
         X = df[X_cols]
         y = df["cancer_risk_class"]
-        
+
         # Ensure column order consistency
         if self.feature_names:
             X = X.reindex(columns=self.feature_names, fill_value=0.0)
-        
+
         # ── Step 3: CLINICAL DATA REFINEMENT ──
         X = X.copy()
         if outlier_removal:
@@ -681,13 +681,13 @@ class ModelManager:
                     else:
                         mean, std = X[col].mean(), X[col].std()
                         self.scaling_stats[col] = (float(mean), float(std))
-                        
+
                     # Numerical Stability: Only scale if there is meaningful variance
                     if std > 1e-6:
                         X[col] = (X[col] - mean) / std
                     else:
                         X[col] = 0.0 # Suppress static features
-            
+
         X = X.fillna(0.0)
         return X, y
 
@@ -695,24 +695,24 @@ class ModelManager:
         """Standardized data loader — utilizes memory cache to avoid expensive Excel I/O."""
         if validation_split is None:
             validation_split = self.validation_split
-            
+
         if not data_path or not os.path.exists(data_path):
             raise FileNotFoundError(f"Dataset not found at:\n{data_path}\nPlease upload data first.")
-            
+
         ap = os.path.abspath(data_path)
         if self.cached_train_df is None or self._cached_data_path != ap:
             self.cached_train_df = self._read_excel_safe(data_path)
             self._cached_data_path = ap
 
         X, y = self._prepare_df(
-            self.cached_train_df, 
-            outlier_removal=outlier_removal, 
+            self.cached_train_df,
+            outlier_removal=outlier_removal,
             scaling_enabled=scaling_enabled
         )
         # 🛡️ FATAL GUARD: Prevent ensemble deliberation on null or mono-class data (SegFault Fix)
         if X.empty or len(np.unique(y)) < 2:
             raise ValueError("Clinical Diversity Failure: Dataset must contain both Benign and Malignant samples (min 2 of each).")
-            
+
         return (*train_test_split(X, y, test_size=validation_split, random_state=42, stratify=y), X.columns.tolist())
 
     def get_raw_training_set(self, data_path):
@@ -721,12 +721,12 @@ class ModelManager:
              # Strategic Fallback: Return empty tensors for uncalibrated state
              import pandas as pd
              return pd.DataFrame(), pd.Series()
-            
+
         ap = os.path.abspath(data_path)
         if self.cached_train_df is None or self._cached_data_path != ap:
              self.cached_train_df = self._read_excel_safe(data_path)
              self._cached_data_path = ap
-             
+
         return self._prepare_df(self.cached_train_df)
 
     # ── Analytics Methods ──────────────────────────────────────────────────────
@@ -1003,13 +1003,13 @@ class ModelManager:
         models = ["Random Forest", "Logistic Regression", "SVM", "XGBoost", "MLP"]
         total = len(models)
         log.info("Initiating model pre-warming for clinical performance...")
-        
+
         for i, name in enumerate(models):
             if status_callback:
                 status_callback(f"Waking up AI Ensemble ({i+1}/{total}): {name}...", "orange")
             # This triggers load_model's internal caching system
             self.load_model(name)
-        
+
         log.info("Model warming complete. Clinical dashboard ready for low-latency operations.")
         if status_callback:
             status_callback("AI Ensemble Ready — Instant Diagnosis Enabled", "#10B981")
@@ -1037,10 +1037,10 @@ class ModelManager:
                 full_input[k] = float(v)
 
         input_df     = pd.DataFrame([full_input])[self.feature_names]
-        
+
         # Apply Clinical Scaling before prediction
         X_scaled, _ = self._prepare_df(input_df, outlier_removal=True, scaling_enabled=True)
-        
+
         prediction   = model.predict(X_scaled)[0]
         probabilities = model.predict_proba(X_scaled)[0]
 
@@ -1112,7 +1112,7 @@ class ModelManager:
 
                         pred = model.predict(X_test)[0]
                         prob = model.predict_proba(X_test)[0]
-                        
+
                         all_preds.append(int(pred))
                         all_probs.append(prob)
                     else:
@@ -1120,10 +1120,10 @@ class ModelManager:
                         X_test = X_input[self.feature_names]
                         pred = model.predict(X_test)
                         prob = model.predict_proba(X_test)
-                        
+
                         all_preds.append(pred)
                         all_probs.append(prob)
-                    
+
                     model_names_loaded.append(name)
             except:
                 continue
@@ -1161,17 +1161,17 @@ class ModelManager:
             stacked_preds = np.array(all_preds) # (models, samples)
             final_preds = []
             agreement_levels = []
-            
+
             for i in range(stacked_preds.shape[1]):
                 votes = list(stacked_preds[:, i])
                 win_pred = 1 if votes.count(1) > votes.count(0) else 0
                 final_preds.append(win_pred)
                 agreement_levels.append(votes.count(win_pred) / len(votes))
-            
+
             # Risks = mean across models for each sample
             stacked_probs = np.array([p[:, 1] for p in all_probs]) # (models, samples)
             final_risks = np.mean(stacked_probs, axis=0)
-            
+
             return np.array(final_preds), np.array(agreement_levels), final_risks
 
     def get_model_leaderboard(self, data_path):
@@ -1184,8 +1184,11 @@ class ModelManager:
              return [] # Empty cohort metrics when dataset is missing
 
         from sklearn.metrics import (
-            accuracy_score, f1_score, precision_score,
-            recall_score, confusion_matrix
+            accuracy_score,
+            confusion_matrix,
+            f1_score,
+            precision_score,
+            recall_score,
         )
         from sklearn.model_selection import StratifiedKFold, cross_val_score
 
@@ -1298,7 +1301,7 @@ class ModelManager:
 
     def get_counterfactual_recommendations(self, model_name, inputs, data_path=None):
         """
-        Generate What-If counterfactuals: Determine the minimal biomarker changes 
+        Generate What-If counterfactuals: Determine the minimal biomarker changes
         required to shift a high-risk prediction to a low-risk prediction.
         """
         model = self.load_model(model_name)
@@ -1307,25 +1310,25 @@ class ModelManager:
 
         # Prepare base input
         normalized_inputs = {str(k).lower().strip(): float(v) for k, v in inputs.items()}
-        
+
         full_input = {feat: 0.0 for feat in self.feature_names}
         for k in full_input:
             key_lower = str(k).lower().strip()
             if key_lower in normalized_inputs:
                 full_input[k] = normalized_inputs[key_lower]
-                
+
         base_df = pd.DataFrame([full_input])[self.feature_names]
-        
+
         # Check current prediction
         base_pred = model.predict(base_df)[0]
         base_prob = model.predict_proba(base_df)[0][1]
-        
+
         if base_pred == 0:
             # If healthy, provide a "Safety Buffer" analysis instead of empty results
             # Compare patient biomarkers to the high-risk population mean
             stats = self.get_biomarker_separation_stats(data_path) if data_path else {}
             explanation = self.get_local_explanation(model_name, inputs, data_path)
-            
+
             changes_applied = []
             if explanation and stats:
                 for feat, _ in explanation[:3]:
@@ -1348,32 +1351,32 @@ class ModelManager:
                 "is_healthy": True
             }
 
-            
+
         # If high risk, find top contributing features
         explanation = self.get_local_explanation(model_name, inputs, data_path)
         if not explanation:
             return None
-            
+
         # Try perturbing the top 3 risk drivers
         best_cf_df = base_df.copy()
         changes_applied = []
-        
+
         # Determine direction: we want to lower the probability of class 1.
         # We incrementally reduce the top positive contributors.
         for feat, score in explanation[:3]:
             if score <= 0:
                 continue # Only reduce features that contribute to risk
-                
+
             orig_val = best_cf_df.at[0, feat]
-            
+
             # Iteratively reduce by 10% steps up to 50%
             for step in [0.9, 0.8, 0.7, 0.6, 0.5]:
                 new_val = orig_val * step
                 temp_df = best_cf_df.copy()
                 temp_df.at[0, feat] = new_val
-                
+
                 new_prob = model.predict_proba(temp_df)[0][1]
-                
+
                 # If risk drops significantly or flips, accept this change
                 if new_prob < base_prob - 0.05 or model.predict(temp_df)[0] == 0:
                     best_cf_df = temp_df
@@ -1385,14 +1388,14 @@ class ModelManager:
                         "reduction": (1 - step) * 100
                     })
                     break
-                    
+
             # Stop early if we flipped the prediction
             if model.predict(best_cf_df)[0] == 0:
                 break
-                
+
         final_pred = model.predict(best_cf_df)[0]
         final_prob = model.predict_proba(best_cf_df)[0][1]
-        
+
         return {
             "status": "Actionable" if final_pred == 0 else "High Resistance",
             "message": "Found actionable biomarker targets" if final_pred == 0 else "Note: Significant changes required for this profile.",
@@ -1424,7 +1427,7 @@ class ModelManager:
 
         features = X.columns.tolist()
         corr_matrix = X.corr()
-        
+
         nodes = []
         for feat in features:
             nodes.append({
